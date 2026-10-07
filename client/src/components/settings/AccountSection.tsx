@@ -5,13 +5,14 @@ import { selfPresence } from '../../lib/status'
 import { chat, useChat } from '../../lib/store'
 import { ui } from '../../lib/ui'
 import { Avatar } from '../Avatar'
+import { CodeInput, useCountdown } from '../CodeInput'
 import { Group, Row, SectionHead } from './controls'
 
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : 'Что-то пошло не так')
 
 export function AccountSection() {
   const me = useChat((s) => s.me!)
-  const [editing, setEditing] = useState<'displayName' | 'username' | null>(null)
+  const [editing, setEditing] = useState<'displayName' | 'username' | 'email' | null>(null)
   const [passwordOpen, setPasswordOpen] = useState(false)
 
   return (
@@ -59,11 +60,15 @@ export function AccountSection() {
               </button>
             </Row>
           )}
-          <Row label="Почта" value={<span className="muted">Не привязана — появится вместе со входом по почте</span>}>
-            <button className="btn btn--outline btn--sm" disabled>
-              Скоро
-            </button>
-          </Row>
+          {editing === 'email' ? (
+            <EmailBind onDone={() => setEditing(null)} />
+          ) : (
+            <Row label="Почта" value={me.email ?? <span className="muted">Не привязана — нужна, чтобы входить по почте и восстановить пароль</span>}>
+              <button className={`btn btn--sm ${me.email ? 'btn--outline' : 'btn--primary'}`} onClick={() => setEditing('email')}>
+                {me.email ? 'Изменить' : 'Привязать'}
+              </button>
+            </Row>
+          )}
         </div>
       </div>
 
@@ -143,6 +148,111 @@ function InlineEdit({ field, label, hint, initial, maxLength, onDone }: InlineEd
         />
       )}
       {hint && !error && <span className="muted">{hint}</span>}
+      {error && <span className="form-error">{error}</span>}
+    </form>
+  )
+}
+
+/** Привязать или сменить почту: адрес + пароль → код из письма */
+function EmailBind({ onDone }: { onDone: () => void }) {
+  const me = useChat((s) => s.me!)
+  const [stage, setStage] = useState<'form' | 'code'>('form')
+  const [email, setEmail] = useState(me.email ?? '')
+  const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [resendIn, setResendIn] = useCountdown()
+
+  const send = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api.startEmailBind(email.trim(), password)
+      setResendIn(res.resendIn)
+      setStage('code')
+      setCode('')
+    } catch (err) {
+      setError(errorText(err))
+    }
+    setBusy(false)
+  }
+
+  const verify = async (value = code) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { user } = await api.verifyEmailBind(value)
+      chat.setMe(user)
+      chat.toast({ title: 'Почта привязана', text: `Теперь можно входить через ${user.email}` })
+      onDone()
+    } catch (err) {
+      setError(errorText(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      className="inline-edit"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void (stage === 'form' ? send() : verify())
+      }}
+    >
+      <span className="set-row__label">Почта</span>
+      {stage === 'form' ? (
+        <>
+          <div className="inline-edit__line">
+            <input
+              className="input"
+              type="email"
+              autoComplete="email"
+              placeholder="адрес@почта.ру"
+              value={email}
+              autoFocus
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="inline-edit__line">
+            <input
+              className="input inline-edit__password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Текущий пароль"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button type="button" className="btn btn--ghost btn--sm" onClick={onDone}>
+              Отмена
+            </button>
+            <button type="submit" className="btn btn--primary btn--sm" disabled={!email.trim() || !password || busy}>
+              {busy ? <LoaderCircle size={15} className="spin" /> : null} Отправить код
+            </button>
+          </div>
+          <span className="muted">На новый адрес придёт письмо с кодом — так проверим, что почта твоя.</span>
+        </>
+      ) : (
+        <>
+          <span className="muted">
+            Код отправлен на <b>{email.trim()}</b>. Письмо идёт до минуты — загляни и в «Спам».
+          </span>
+          <CodeInput value={code} onChange={setCode} onComplete={(v) => void verify(v)} autoFocus disabled={busy} />
+          <div className="inline-edit__line">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setStage('form')}>
+              Изменить адрес
+            </button>
+            <button type="button" className="btn btn--ghost btn--sm" disabled={resendIn > 0 || busy} onClick={() => void send()}>
+              {resendIn > 0 ? `Ещё раз через ${resendIn} с` : 'Отправить ещё раз'}
+            </button>
+            <button type="submit" className="btn btn--primary btn--sm" disabled={code.length < 6 || busy}>
+              {busy ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />} Подтвердить
+            </button>
+          </div>
+        </>
+      )}
       {error && <span className="form-error">{error}</span>}
     </form>
   )

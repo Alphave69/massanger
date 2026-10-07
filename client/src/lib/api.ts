@@ -19,6 +19,8 @@ export interface Privacy {
 export interface Me extends User {
   status: Status
   privacy: Privacy
+  /** Подтверждённая почта (у старых аккаунтов может не быть) */
+  email: string | null
 }
 
 /** Служебные сообщения («теперь вы друзья») приходят с таким автором */
@@ -119,13 +121,21 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
 }
 
 type AuthResponse = { token: string; user: Me }
+/** Код отправлен на почту; resendIn — через сколько секунд можно запросить новый */
+type CodeSent = { email: string; resendIn: number }
 type FriendsResponse = { friends: FriendEntry[] }
 
 export const api = {
-  register: (username: string, displayName: string, password: string) =>
-    request<AuthResponse>('/auth/register', { method: 'POST', body: { username, displayName, password } }),
-  login: (username: string, password: string) =>
-    request<AuthResponse>('/auth/login', { method: 'POST', body: { username, password } }),
+  register: (email: string, username: string, displayName: string, password: string) =>
+    request<CodeSent>('/auth/register', { method: 'POST', body: { email, username, displayName, password } }),
+  verifyRegistration: (email: string, code: string) => request<AuthResponse>('/auth/register/verify', { method: 'POST', body: { email, code } }),
+  /** login — логин или почта */
+  login: (login: string, password: string) => request<AuthResponse>('/auth/login', { method: 'POST', body: { username: login, password } }),
+  requestReset: (email: string) => request<CodeSent>('/auth/reset', { method: 'POST', body: { email } }),
+  finishReset: (email: string, code: string, password: string) =>
+    request<AuthResponse>('/auth/reset/verify', { method: 'POST', body: { email, code, password } }),
+  startEmailBind: (email: string, password: string) => request<CodeSent>('/me/email', { method: 'POST', body: { email, password } }),
+  verifyEmailBind: (code: string) => request<{ user: Me }>('/me/email/verify', { method: 'POST', body: { code } }),
   me: () => request<{ user: Me }>('/me'),
   state: () => request<InitialState>('/state'),
   updateMe: (

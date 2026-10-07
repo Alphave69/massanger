@@ -562,3 +562,57 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============ ввод кода из письма ============ */
+
+.code-input {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 4px 0 12px;
+  cursor: text;
+}
+
+.code-input__cell {
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+  font: 700 26px/1 var(--mono);
+  color: var(--text);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s var(--ease-spring);
+}
+
+.code-input__cell.is-filled {
+  border-color: var(--line-3);
+  animation: pop-in 0.3s var(--ease-spring);
+}
+
+.code-input:focus-within .code-input__cell.is-active {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.06),
+    0 0 24px rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+.code-input.is-disabled {
+  opacity: 0.5;
+}
+
+/* Настоящее поле — невидимое поверх клеток: вставка и автоподстановка работают как обычно */
+.code-input__field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  border: 0;
+  font-size: 16px;
+  cursor: text;
+}

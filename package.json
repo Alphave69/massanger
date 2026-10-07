@@ -10,6 +10,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build -w client",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "check-mail": "npm run check-mail -w server --"
   }
 }

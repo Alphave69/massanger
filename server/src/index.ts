@@ -1,3 +1,4 @@
+import './env.js' // первым делом: секреты из server/.env нужны остальным модулям при загрузке
 import { createServer } from 'node:http'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -7,6 +8,8 @@ import express, { type Response } from 'express'
 import { Server } from 'socket.io'
 import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
+import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
+import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
@@ -22,7 +25,7 @@ const fail = (res: Response, code: number, error: string) => void res.status(cod
 // ============ представления данных для клиента ============
 
 /** Себя пользователь видит вместе с выбранным статусом (в т.ч. «невидимка») и настройками приватности */
-const selfUser = (u: store.User) => ({ ...store.publicUser(u), status: u.status, privacy: u.privacy })
+const selfUser = (u: store.User) => ({ ...store.publicUser(u), status: u.status, privacy: u.privacy, email: u.email })
 
 function serializeGuild(guild: store.Guild) {
   return {
@@ -108,27 +111,111 @@ const broadcastPresence = () => io.emit('presence', presenceMap())
 // ============ REST ============
 
 const USERNAME_RE = /^[a-zA-Z0-9_.]{3,32}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const normEmail = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '')
+const validEmail = (email: string) => email.length <= 254 && EMAIL_RE.test(email)
+const BAD_EMAIL = 'Проверь почту — похоже, в адресе опечатка'
 
+/** Проверка нового пароля; возвращает текст ошибки или null */
+function passwordProblem(password: unknown): string | null {
+  if (typeof password !== 'string' || password.length < 6) return 'Пароль должен быть не короче 6 символов'
+  if (tooLong(password)) return 'Пароль слишком длинный — сократи его (русская буква занимает вдвое больше места)'
+  return null
+}
+
+/**
+ * Отправить письмо с кодом. code === null — прошлый код ещё свежий, письмо не шлём.
+ * Если почта не ушла — забываем код и отвечаем понятной ошибкой (false).
+ */
+async function mailCode(res: Response, key: string, email: string, code: string | null, purpose: CodePurpose) {
+  if (code === null) return true
+  try {
+    await sendCode(email, code, purpose)
+    return true
+  } catch (err) {
+    dropCode(key)
+    const why = explainMailError(err)
+    console.error(`  ✖ Письмо на ${email} не ушло: ${why}`)
+    fail(res, 502, `Не получилось отправить письмо: ${why}`)
+    return false
+  }
+}
+
+interface PendingRegistration {
+  email: string
+  username: string
+  displayName: string
+  passwordHash: string
+}
+
+/** Регистрация, шаг 1: проверяем данные и шлём код на почту */
 app.post('/api/auth/register', async (req, res) => {
   const { username, displayName, password } = req.body ?? {}
+  const email = normEmail(req.body?.email)
+  if (!validEmail(email)) return fail(res, 400, BAD_EMAIL)
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) return fail(res, 400, 'Логин: 3–32 символа, латиница, цифры, _ и .')
-  if (typeof password !== 'string' || password.length < 6) return fail(res, 400, 'Пароль должен быть не короче 6 символов')
-  if (tooLong(password)) return fail(res, 400, 'Пароль слишком длинный — сократи его (русская буква занимает вдвое больше места)')
+  const problem = passwordProblem(password)
+  if (problem) return fail(res, 400, problem)
+  if (store.findUserByEmail(email)) return fail(res, 409, 'Эта почта уже привязана к аккаунту — попробуй войти')
   if (store.findUserByName(username)) return fail(res, 409, 'Такой логин уже занят')
 
   const name = typeof displayName === 'string' && displayName.trim() ? displayName.trim().slice(0, 32) : username
-  const user = store.createUser({ username, displayName: name, passwordHash: await hashPassword(password) })
+  const key = `register:${email}`
+  const data: PendingRegistration = { email, username, displayName: name, passwordHash: await hashPassword(password) }
+  const { code, resendIn } = issueCode(key, data)
+  if (!(await mailCode(res, key, email, code, 'register'))) return
+  res.json({ email, resendIn })
+})
+
+/** Регистрация, шаг 2: код из письма верный — создаём аккаунт */
+app.post('/api/auth/register/verify', (req, res) => {
+  const email = normEmail(req.body?.email)
+  const check = checkCode<PendingRegistration>(`register:${email}`, req.body?.code)
+  if (!check.ok) return fail(res, 400, check.error)
+  const d = check.data
+  if (store.findUserByEmail(d.email)) return fail(res, 409, 'Эта почта уже привязана к аккаунту — попробуй войти')
+  if (store.findUserByName(d.username)) return fail(res, 409, 'Пока ты вводил код, этот логин заняли — начни заново с другим')
+
+  const user = store.createUser(d)
   // Сообщаем всем на общем сервере, что пришёл новый человек
   for (const guild of store.guildsOf(user.id)) io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 
+/** Вход по логину или по почте */
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body ?? {}
-  const user = typeof username === 'string' ? store.findUserByName(username) : undefined
+  const id = typeof username === 'string' ? username.trim() : ''
+  const user = id.includes('@') ? store.findUserByEmail(id) : store.findUserByName(id)
   if (!user || typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) {
-    return fail(res, 401, 'Неверный логин или пароль')
+    return fail(res, 401, 'Неверный логин, почта или пароль')
   }
+  res.json({ token: signToken(user), user: selfUser(user) })
+})
+
+/** Забыл пароль, шаг 1: код на почту. Есть ли такой аккаунт — не сообщаем */
+app.post('/api/auth/reset', async (req, res) => {
+  const email = normEmail(req.body?.email)
+  if (!validEmail(email)) return fail(res, 400, BAD_EMAIL)
+  const user = store.findUserByEmail(email)
+  if (!user) return res.json({ email, resendIn: RESEND_AFTER / 1000 })
+  const key = `reset:${email}`
+  const { code, resendIn } = issueCode(key, { userId: user.id })
+  if (!(await mailCode(res, key, email, code, 'reset'))) return
+  res.json({ email, resendIn })
+})
+
+/** Забыл пароль, шаг 2: код + новый пароль → входим, остальные сеансы выкидываем */
+app.post('/api/auth/reset/verify', async (req, res) => {
+  const email = normEmail(req.body?.email)
+  const problem = passwordProblem(req.body?.password)
+  if (problem) return fail(res, 400, problem)
+  const check = checkCode<{ userId: string }>(`reset:${email}`, req.body?.code)
+  if (!check.ok) return fail(res, 400, check.error)
+  const user = store.findUser(check.data.userId)
+  if (!user) return fail(res, 404, 'Аккаунт не найден')
+  store.updateUser(user, { passwordHash: await hashPassword(req.body.password), tokenVersion: user.tokenVersion + 1 })
+  void kickStaleSockets(user)
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 
@@ -220,6 +307,39 @@ app.post('/api/me/logout-all', requireAuth, (req, res) => {
   store.updateUser(user, { tokenVersion: user.tokenVersion + 1 })
   void kickStaleSockets(user)
   res.json({ token: signToken(user) })
+})
+
+/** Привязать / сменить почту, шаг 1: пароль + новый адрес → код на этот адрес */
+app.post('/api/me/email', requireAuth, async (req, res) => {
+  const { user } = req as AuthedRequest
+  const email = normEmail(req.body?.email)
+  if (!validEmail(email)) return fail(res, 400, BAD_EMAIL)
+  if (email === user.email) return fail(res, 400, 'Эта почта уже привязана к тебе')
+  const owner = store.findUserByEmail(email)
+  if (owner && owner.id !== user.id) return fail(res, 409, 'Эта почта уже привязана к другому аккаунту')
+  const password = req.body?.password
+  if (typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) return fail(res, 403, 'Неверный текущий пароль')
+
+  const key = `bind:${user.id}`
+  const wait = cooldownLeft(key)
+  if (wait && pendingData<{ email: string }>(key)?.email !== email) {
+    return fail(res, 429, `Подожди ${wait} с — потом можно отправить код на другой адрес`)
+  }
+  const { code, resendIn } = issueCode(key, { email })
+  if (!(await mailCode(res, key, email, code, 'bind'))) return
+  res.json({ email, resendIn })
+})
+
+/** Привязать почту, шаг 2: код из письма */
+app.post('/api/me/email/verify', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const check = checkCode<{ email: string }>(`bind:${user.id}`, req.body?.code)
+  if (!check.ok) return fail(res, 400, check.error)
+  const owner = store.findUserByEmail(check.data.email)
+  if (owner && owner.id !== user.id) return fail(res, 409, 'Эту почту только что привязали к другому аккаунту')
+  store.updateUser(user, { email: check.data.email })
+  io.to(`user:${user.id}`).emit('me:update', selfUser(user))
+  res.json({ user: selfUser(user) })
 })
 
 // --- серверы ---
@@ -411,4 +531,5 @@ http.on('error', (err: NodeJS.ErrnoException) => {
 http.listen(PORT, () => {
   const url = existsSync(clientDist) ? `http://localhost:${PORT}` : 'http://localhost:5173'
   console.log(`Nuntius запущен → открой ${url}`)
+  void verifyMail().then(({ ok, text }) => console.log(`  ${ok ? '✓' : mailConfigured ? '✖' : '✉'}  Почта: ${text}`))
 })

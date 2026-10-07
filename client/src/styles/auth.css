@@ -359,3 +359,59 @@
     padding: 24px 20px;
   }
 }
+
+/* ============ вход по почте ============ */
+
+.auth-card__subtitle b {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.auth-card__title-icon {
+  margin-right: 10px;
+  vertical-align: -3px;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+}
+
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition:
+    color 0.15s ease,
+    gap 0.2s var(--ease-out);
+}
+
+.auth-back:hover {
+  color: var(--text);
+  gap: 9px;
+}
+
+.auth-forgot,
+.auth-resend {
+  display: block;
+  margin: -4px 0 14px auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: color 0.15s ease;
+}
+
+.auth-forgot:hover,
+.auth-resend:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.auth-resend {
+  margin: 14px auto 6px;
+}
+
+.auth-resend:disabled {
+  font: 500 12px var(--mono);
+  color: var(--text-3);
+}

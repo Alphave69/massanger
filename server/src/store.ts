@@ -22,6 +22,8 @@ export interface User {
   id: string
   username: string
   displayName: string
+  /** Подтверждённая почта (в нижнем регистре) или null у старых аккаунтов */
+  email: string | null
   passwordHash: string
   createdAt: number
   status: Status
@@ -91,6 +93,7 @@ function load(): Data {
       status: u.status ?? 'online',
       customStatus: u.customStatus ?? '',
       bio: u.bio ?? '',
+      email: u.email ?? null,
       privacy: { ...DEFAULT_PRIVACY, ...u.privacy },
       tokenVersion: u.tokenVersion ?? 0,
     })),
@@ -135,7 +138,9 @@ export const findUserByName = (username: string) =>
 
 export const findUser = (userId: string) => data.users.find((u) => u.id === userId)
 
-export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordHash'>): User {
+export const findUserByEmail = (email: string) => data.users.find((u) => u.email === email.trim().toLowerCase())
+
+export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordHash' | 'email'>): User {
   const user: User = {
     ...u,
     id: id(),
@@ -153,7 +158,9 @@ export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordH
   return user
 }
 
-export type UserPatch = Partial<Pick<User, 'username' | 'displayName' | 'status' | 'customStatus' | 'bio' | 'privacy' | 'passwordHash' | 'tokenVersion'>>
+export type UserPatch = Partial<
+  Pick<User, 'username' | 'displayName' | 'email' | 'status' | 'customStatus' | 'bio' | 'privacy' | 'passwordHash' | 'tokenVersion'>
+>
 
 export function updateUser(user: User, patch: UserPatch) {
   Object.assign(user, patch)
