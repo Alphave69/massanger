@@ -93,9 +93,9 @@ export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, sys
   })
 
   /** Убрать человека из группы (исключить или выйти самому) */
-  function remove(group: store.Dm, userId: string, text: string) {
+  function remove(group: store.Dm, userId: string, text: string, reason: 'left' | 'removed') {
     group.memberIds = group.memberIds.filter((id) => id !== userId)
-    voice.kickFrom(userId, [group.id])
+    voice.kickFrom(userId, [group.id], reason)
     io.to(`user:${userId}`).emit('dm:removed', { dmId: group.id })
     if (!group.memberIds.length) {
       voice.closeRoom(group.id)
@@ -116,7 +116,7 @@ export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, sys
     if (group.ownerId !== user.id) return fail(res, 403, 'Исключать может только создатель группы')
     if (targetId === user.id) return fail(res, 400, 'Чтобы уйти самому, нажми «Покинуть группу»')
     if (!group.memberIds.includes(targetId)) return fail(res, 404, 'Такого участника нет')
-    remove(group, targetId, `${nameOf(user.id)} исключил(а) из группы: ${nameOf(targetId)}`)
+    remove(group, targetId, `${nameOf(user.id)} исключил(а) из группы: ${nameOf(targetId)}`, 'removed')
     res.json({ dm: dmView(group, user.id) })
   })
 
@@ -124,7 +124,7 @@ export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, sys
     const group = groupFor(req, res)
     if (!group) return
     const { user } = req as AuthedRequest
-    remove(group, user.id, `${nameOf(user.id)} покинул(а) группу`)
+    remove(group, user.id, `${nameOf(user.id)} покинул(а) группу`, 'left')
     res.json({ ok: true })
   })
 }

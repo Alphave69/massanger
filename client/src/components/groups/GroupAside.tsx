@@ -6,6 +6,7 @@ import { chat, dmTitle, presenceOf, useChat, type DmRef } from '../../lib/store'
 import { ui } from '../../lib/ui'
 import { Avatar } from '../Avatar'
 import { GroupAvatar } from './GroupAvatar'
+import { MEMBERS, plural } from '../../lib/format'
 
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : 'Что-то пошло не так')
 
@@ -66,7 +67,7 @@ export function GroupAside({ dm }: { dm: DmRef }) {
             <Pencil size={13} />
           </button>
         )}
-        <span className="group-head__meta">{dm.memberIds.length} участников</span>
+        <span className="group-head__meta">{plural(dm.memberIds.length, MEMBERS)}</span>
         <div className="group-head__actions">
           <button className="btn btn--outline btn--sm" onClick={() => ui.openGroupModal({ mode: 'add', dmId: dm.id })}>
             <UserPlus size={15} /> Добавить

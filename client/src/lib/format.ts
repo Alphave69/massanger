@@ -44,3 +44,13 @@ export function shadeFor(id: string) {
 }
 
 export const formatSince = (ts: number) => dateFmt.format(ts)
+
+const pluralRules = new Intl.PluralRules('ru')
+
+/** «1 участник», «3 участника», «5 участников» — forms: [один, несколько, много] */
+export function plural(n: number, [one, few, many]: [string, string, string]) {
+  const form = pluralRules.select(n)
+  return `${n} ${form === 'one' ? one : form === 'few' ? few : many}`
+}
+
+export const MEMBERS: [string, string, string] = ['участник', 'участника', 'участников']

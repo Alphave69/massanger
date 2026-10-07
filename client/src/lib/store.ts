@@ -70,6 +70,20 @@ export const useChat = create<ChatState>(() => initial)
 const set = useChat.setState
 const get = useChat.getState
 
+/** Забыть сообщения, «печатает…» и непрочитанное в каналах, которых у нас больше нет */
+function forgetChannels(st: ChatState, ids: string[]): Partial<ChatState> {
+  if (!ids.length) return {}
+  const messages = { ...st.messages }
+  const typing = { ...st.typing }
+  const unread = { ...st.unread }
+  for (const id of ids) {
+    delete messages[id]
+    delete typing[id]
+    delete unread[id]
+  }
+  return { messages, typing, unread }
+}
+
 function withUsers(users: Record<string, User>, list: (User | null | undefined)[]) {
   const next = { ...users }
   for (const u of list) if (u) next[u.id] = u
@@ -191,10 +205,15 @@ export const chat = {
   },
 
   upsertGuild(guild: Guild) {
-    set((st) => ({
-      guilds: st.guilds.some((g) => g.id === guild.id) ? st.guilds.map((g) => (g.id === guild.id ? guild : g)) : [...st.guilds, guild],
-      users: withUsers(st.users, guild.members),
-    }))
+    set((st) => {
+      // Удалённые каналы забываем совсем — иначе их непрочитанные навсегда висели бы в заголовке вкладки
+      const gone = (st.guilds.find((g) => g.id === guild.id)?.channels ?? []).filter((c) => !guild.channels.some((x) => x.id === c.id)).map((c) => c.id)
+      return {
+        guilds: st.guilds.some((g) => g.id === guild.id) ? st.guilds.map((g) => (g.id === guild.id ? guild : g)) : [...st.guilds, guild],
+        users: withUsers(st.users, guild.members),
+        ...forgetChannels(st, gone),
+      }
+    })
   },
 
   setFriends(list: FriendEntry[]) {
@@ -214,6 +233,8 @@ export const chat = {
     set((st) => ({
       dms: st.dms.filter((d) => d.id !== dmId),
       view: st.view.kind === 'dm' && st.view.dmId === dmId ? { kind: 'home', tab: 'online' } : st.view,
+      // Вернут в группу — историю загрузим заново, без «дыры» за время отсутствия
+      ...forgetChannels(st, [dmId]),
     }))
   },
 
@@ -222,11 +243,18 @@ export const chat = {
     set((st) => {
       const guilds = st.guilds.filter((g) => g.id !== guildId)
       const viewing = st.view.kind === 'guild' && st.view.guildId === guildId
+      const channelIds = st.guilds.find((g) => g.id === guildId)?.channels.map((c) => c.id) ?? []
       return {
         guilds,
         view: viewing ? (guilds[0] ? { kind: 'guild', guildId: guilds[0].id } : { kind: 'home', tab: 'online' }) : st.view,
+        ...forgetChannels(st, channelIds),
       }
     })
+  },
+
+  /** Пропущенный звонок — как непрочитанное в переписке */
+  bumpUnread(channelId: string) {
+    set((st) => ({ unread: { ...st.unread, [channelId]: (st.unread[channelId] ?? 0) + 1 } }))
   },
 
   clearMessages() {

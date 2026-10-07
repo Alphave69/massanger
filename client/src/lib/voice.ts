@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client'
 import { useSettings } from './settings'
 import { chat, useChat } from './store'
 import { desktopNotify, tone, toneLoop } from './fx'
+import { ui } from './ui'
 
 /**
  * Голосовой движок.
@@ -164,20 +165,31 @@ registerProcessor('nuntius-gate', NuntiusGate)
 
 async function ensureAudio() {
   if (!ctx) {
-    ctx = new AudioContext()
-    master = ctx.createGain()
-    master.connect(ctx.destination)
-    const url = URL.createObjectURL(new Blob([GATE_WORKLET], { type: 'application/javascript' }))
-    await ctx.audioWorklet.addModule(url)
-    URL.revokeObjectURL(url)
-    inputGain = ctx.createGain()
-    gate = new AudioWorkletNode(ctx, 'nuntius-gate', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
-    outgoing = ctx.createMediaStreamDestination()
-    inputGain.connect(gate).connect(outgoing)
-    gate.port.onmessage = (e) => {
-      selfLevel = e.data
-      const speaking = Boolean(e.data.open && e.data.level > 0.12)
-      if (get().speaking[meId()] !== speaking && get().roomId) set((s) => ({ speaking: { ...s.speaking, [meId()]: speaking } }))
+    // Собираем всё в локальных переменных: если что-то сломается на полпути, в следующий раз начнём с нуля
+    const c = new AudioContext()
+    try {
+      if (!c.audioWorklet) throw new Error('AudioWorklet недоступен (нужен https или localhost)')
+      const url = URL.createObjectURL(new Blob([GATE_WORKLET], { type: 'application/javascript' }))
+      try {
+        await c.audioWorklet.addModule(url)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+      const m = c.createGain()
+      m.connect(c.destination)
+      const input = c.createGain()
+      const g = new AudioWorkletNode(c, 'nuntius-gate', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
+      const out = c.createMediaStreamDestination()
+      input.connect(g).connect(out)
+      g.port.onmessage = (e) => {
+        selfLevel = e.data
+        const speaking = Boolean(e.data.open && e.data.level > 0.12)
+        if (get().speaking[meId()] !== speaking && get().roomId) set((s) => ({ speaking: { ...s.speaking, [meId()]: speaking } }))
+      }
+      ;[ctx, master, inputGain, gate, outgoing] = [c, m, input, g, out]
+    } catch (err) {
+      void c.close().catch(() => {})
+      throw err
     }
   }
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {})
@@ -193,7 +205,7 @@ async function applySink() {
 }
 
 /** Взять микрофон с текущими настройками (при смене устройства/обработки — заново, без переподключения) */
-async function acquireMic() {
+async function acquireMic(quiet = false) {
   if (!ctx || !inputGain) return
   const s = useSettings.getState()
   try {
@@ -214,13 +226,30 @@ async function acquireMic() {
     micStream = stream
     micSource = ctx.createMediaStreamSource(stream)
     micSource.connect(inputGain)
-    set({ noMic: false })
+    // Выдернули гарнитуру — берём микрофон заново (браузер даст тот, что остался)
+    stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+      if (micStream !== stream || !get().roomId) return
+      chat.toast({ title: 'Микрофон отключился', text: 'Переключаемся на другой' })
+      void acquireMic()
+    })
+    if (get().noMic) {
+      set({ noMic: false })
+      sendState({ muted: useSettings.getState().muted })
+    }
   } catch {
-    set({ noMic: true })
-    chat.toast({ title: 'Нет доступа к микрофону', text: 'Ты в голосе, но тебя не слышно. Проверь разрешение и микрофон в настройках' })
+    if (!get().noMic) {
+      set({ noMic: true })
+      sendState({ muted: true })
+    }
+    if (!quiet) chat.toast({ title: 'Нет доступа к микрофону', text: 'Ты в голосе, но тебя не слышно. Проверь разрешение и микрофон в настройках' })
   }
   applyGate()
 }
+
+// Подключили микрофон, пока сидим без него, — пробуем взять
+navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+  if (get().roomId && get().noMic) void acquireMic(true)
+})
 
 function releaseMic() {
   micSource?.disconnect()
@@ -267,6 +296,7 @@ function setPeerState(userId: string, state: RTCPeerConnectionState | null) {
 }
 
 function createPeer(userId: string, joinedAt: number, initiator: boolean): Peer {
+  closePeer(userId)
   const pc = new RTCPeerConnection({ iceServers })
   const peer: Peer = {
     userId,
@@ -303,6 +333,22 @@ function createPeer(userId: string, joinedAt: number, initiator: boolean): Peer 
   }
   if (initiator) addLocalTracks(peer)
   return peer
+}
+
+/**
+ * Убрать камеру/экран из соединения. Transceiver останавливаем, а не просто снимаем дорожку:
+ * тогда его место в SDP переиспользуется и описание соединения не растёт с каждым включением.
+ */
+function dropSenders(peer: Peer, senders: RTCRtpSender[]) {
+  for (const sender of senders) {
+    const transceiver = peer.pc.getTransceivers().find((t) => t.sender === sender)
+    try {
+      if (transceiver?.stop) transceiver.stop()
+      else peer.pc.removeTrack(sender)
+    } catch {
+      // соединение уже закрыто
+    }
+  }
 }
 
 /** Свои дорожки — в соединение: голос всегда, камера и экран — если включены */
@@ -491,42 +537,57 @@ useVoice.subscribe(() => {
 
 // ============ публичные действия ============
 
+/** Номер попытки входа: ответ сервера на устаревшую попытку игнорируем */
+let joinSeq = 0
+
 export async function joinVoice(roomId: string) {
   const st = get()
   if (!socket || (st.roomId === roomId && st.status !== 'idle')) return
   if (st.roomId) leaveVoice(false)
-  const wasEmpty = (st.rooms[roomId]?.length ?? 0) === 0
+  const seq = ++joinSeq
   set({ roomId, status: 'connecting', incoming: st.incoming.filter((c) => c.roomId !== roomId) })
 
   try {
     await ensureAudio()
-  } catch {
+  } catch (err) {
+    console.warn('voice: audio failed', err)
     set({ ...IDLE })
     chat.toast({ title: 'Голос не запустился', text: 'Браузер не дал включить звук. Обнови страницу и попробуй ещё раз' })
     return
   }
   await acquireMic()
-  if (get().roomId !== roomId) return
+  if (get().roomId !== roomId || seq !== joinSeq) return
+  // Нет связи с сервером — зайдём, когда она вернётся (это сделает обработчик переподключения)
+  if (socket.connected) sendJoin(roomId, seq)
+}
 
+/** Связь вернулась: соединения с людьми строим заново, а камеру, экран и микрофон не трогаем */
+function rejoin(roomId: string) {
+  stopLoops()
+  for (const userId of [...peers.keys()]) closePeer(userId)
+  set({ status: 'connecting', speaking: {}, ping: null })
+  sendJoin(roomId, ++joinSeq, true)
+}
+
+function sendJoin(roomId: string, seq: number, again = false) {
   const s = useSettings.getState()
-  socket.timeout(10_000).emit(
+  socket?.timeout(10_000).emit(
     'voice:join',
     { roomId, muted: s.muted || get().noMic, deafened: s.deafened },
-    (err: Error | null, res: { ok?: boolean; error?: string; members?: VoiceMember[]; iceServers?: RTCIceServer[] }) => {
-      if (get().roomId !== roomId) return
+    (err: Error | null, res: { ok?: boolean; error?: string; members?: VoiceMember[]; iceServers?: RTCIceServer[]; ringing?: boolean }) => {
+      if (get().roomId !== roomId || seq !== joinSeq) return
       if (err || !res?.ok) {
         teardown()
         chat.toast({ title: 'Не получилось подключиться', text: res?.error ?? 'Сервер не ответил' })
         return
       }
       iceServers = res.iceServers ?? []
-      const isCall = Boolean(useChat.getState().dms.find((d) => d.id === roomId))
-      set({ status: 'connected', calling: isCall && wasEmpty && !res.members?.length ? roomId : null })
+      set({ status: 'connected', calling: res.ringing ? roomId : null })
       for (const m of res.members ?? []) createPeer(m.userId, m.joinedAt, true)
       const { localCamera, localScreen } = get()
       if (localCamera) sendState({ video: true, cameraStream: localCamera.id })
       if (localScreen) sendState({ screen: true, screenStream: localScreen.id })
-      tone('join')
+      if (!again) tone('join')
       startLoops()
     },
   )
@@ -534,6 +595,7 @@ export async function joinVoice(roomId: string) {
 
 /** Освободить всё: соединения, камеру, экран, микрофон (без сообщения серверу) */
 function teardown() {
+  joinSeq++
   stopLoops()
   for (const userId of [...peers.keys()]) closePeer(userId)
   get().localCamera?.getTracks().forEach((t) => t.stop())
@@ -555,6 +617,12 @@ function sendState(patch: Partial<VoiceMember>) {
 
 export function toggleMute() {
   const s = useSettings.getState()
+  // Сидим без микрофона — кнопка «включить микрофон» пробует взять его снова
+  if (get().noMic && get().roomId) {
+    useSettings.setState({ muted: false, deafened: false })
+    void acquireMic()
+    return
+  }
   if (s.deafened) {
     // как в Discord: включить микрофон при выключенном звуке — значит включить и звук
     useSettings.setState({ deafened: false, muted: false })
@@ -568,27 +636,35 @@ export function toggleDeafen() {
   useSettings.setState({ deafened: !s.deafened })
 }
 
+/** Камера/экран уже включаются (ждём окно разрешения) — второй клик не должен открыть второй поток */
+let cameraBusy = false
+let screenBusy = false
+
 export async function toggleCamera() {
   const { localCamera } = get()
   if (localCamera) {
     localCamera.getTracks().forEach((t) => t.stop())
     for (const peer of peers.values()) {
-      peer.cameraSenders.forEach((sender) => peer.pc.removeTrack(sender))
+      dropSenders(peer, peer.cameraSenders)
       peer.cameraSenders = []
     }
     set({ localCamera: null })
     sendState({ video: false, cameraStream: null })
     return
   }
+  if (cameraBusy) return
+  cameraBusy = true
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } })
-    if (!get().roomId) return stream.getTracks().forEach((t) => t.stop())
+    if (!get().roomId || get().localCamera) return stream.getTracks().forEach((t) => t.stop())
     set({ localCamera: stream })
     sendState({ video: true, cameraStream: stream.id })
     for (const peer of peers.values()) for (const t of stream.getTracks()) peer.cameraSenders.push(peer.pc.addTrack(t, stream))
     stream.getVideoTracks()[0]?.addEventListener('ended', () => get().localCamera === stream && void toggleCamera())
   } catch {
     chat.toast({ title: 'Камера не включилась', text: 'Проверь, что камера подключена и браузеру разрешён доступ' })
+  } finally {
+    cameraBusy = false
   }
 }
 
@@ -597,7 +673,7 @@ export async function toggleScreen() {
   if (localScreen) {
     localScreen.getTracks().forEach((t) => t.stop())
     for (const peer of peers.values()) {
-      peer.screenSenders.forEach((sender) => peer.pc.removeTrack(sender))
+      dropSenders(peer, peer.screenSenders)
       peer.screenSenders = []
     }
     set({ localScreen: null })
@@ -608,9 +684,17 @@ export async function toggleScreen() {
     chat.toast({ title: 'Демонстрация экрана недоступна', text: 'Этот браузер так не умеет — попробуй Chrome или Edge на компьютере' })
     return
   }
+  if (screenBusy) return
+  screenBusy = true
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true })
-    if (!get().roomId) return stream.getTracks().forEach((t) => t.stop())
+    // Звук системы — без звука самого Nuntius: иначе собеседники услышали бы себя с задержкой
+    const options = {
+      video: { frameRate: { ideal: 30 } },
+      audio: { restrictOwnAudio: true, suppressLocalAudioPlayback: false },
+      systemAudio: 'include',
+    } as DisplayMediaStreamOptions
+    const stream = await navigator.mediaDevices.getDisplayMedia(options)
+    if (!get().roomId || get().localScreen) return stream.getTracks().forEach((t) => t.stop())
     set({ localScreen: stream })
     sendState({ screen: true, screenStream: stream.id })
     for (const peer of peers.values()) for (const t of stream.getTracks()) peer.screenSenders.push(peer.pc.addTrack(t, stream))
@@ -618,6 +702,8 @@ export async function toggleScreen() {
     stream.getVideoTracks()[0]?.addEventListener('ended', () => get().localScreen === stream && void toggleScreen())
   } catch {
     // пользователь передумал в окне выбора экрана — это не ошибка
+  } finally {
+    screenBusy = false
   }
 }
 
@@ -642,12 +728,23 @@ function saveVolumes() {
   }
 }
 
+/** Системные уведомления о входящих звонках — закрываем, когда звонок уже не актуален */
+const ringNotes = new Map<string, Notification>()
+
+function closeRingNote(roomId: string) {
+  ringNotes.get(roomId)?.close()
+  ringNotes.delete(roomId)
+}
+
 export function acceptCall(roomId: string) {
+  closeRingNote(roomId)
+  ui.closeOverlays()
   chat.setView({ kind: 'dm', dmId: roomId })
   void joinVoice(roomId)
 }
 
 export function declineCall(roomId: string) {
+  closeRingNote(roomId)
   socket?.emit('call:decline', { roomId })
   set((s) => ({ incoming: s.incoming.filter((c) => c.roomId !== roomId) }))
 }
@@ -670,12 +767,9 @@ export function attachVoice(s: Socket) {
   let connectedBefore = false
 
   s.on('connect', () => {
-    // Связь восстановилась, а мы были в голосе — заходим обратно
+    // Связь восстановилась (или впервые появилась, пока мы входили) — заходим в голос заново
     const roomId = get().roomId
-    if (connectedBefore && roomId) {
-      teardown()
-      void joinVoice(roomId)
-    }
+    if (roomId && (connectedBefore || get().status === 'connecting')) rejoin(roomId)
     connectedBefore = true
   })
 
@@ -704,7 +798,10 @@ export function attachVoice(s: Socket) {
   s.on('voice:signal', onSignal)
 
   s.on('voice:kicked', ({ reason }: { reason: string }) => {
+    const wasIn = get().roomId
     teardown()
+    // Ушёл сам (вышел с сервера, удалил канал) — говорить «тебя отключили» незачем
+    if (reason === 'left' || !wasIn) return
     const text =
       reason === 'moved' ? 'Ты подключился к голосу в другой вкладке' : reason === 'deleted' ? 'Канал или группу удалили' : 'Тебя убрали с сервера или из группы'
     chat.toast({ title: 'Голос отключён', text })
@@ -715,11 +812,21 @@ export function attachVoice(s: Socket) {
     set((st) => ({ incoming: [...st.incoming.filter((c) => c.roomId !== roomId), { roomId, from }] }))
     const caller = useChat.getState().users[from]
     if (useChat.getState().me?.status !== 'dnd') {
-      desktopNotify(caller?.displayName ?? 'Звонок', 'звонит тебе в Nuntius', () => acceptCall(roomId))
+      closeRingNote(roomId)
+      const note = desktopNotify(caller?.displayName ?? 'Звонок', 'звонит тебе в Nuntius', () => {
+        // Пока уведомление висело, звонок мог закончиться — тогда просто открываем переписку
+        if (get().incoming.some((c) => c.roomId === roomId)) acceptCall(roomId)
+        else {
+          ui.closeOverlays()
+          chat.setView({ kind: 'dm', dmId: roomId })
+        }
+      })
+      if (note) ringNotes.set(roomId, note)
     }
   })
 
   s.on('call:stop', ({ roomId }: { roomId: string }) => {
+    closeRingNote(roomId)
     set((st) => ({ incoming: st.incoming.filter((c) => c.roomId !== roomId) }))
   })
 
@@ -732,12 +839,25 @@ export function attachVoice(s: Socket) {
     if (dm?.kind === 'dm' && (get().rooms[roomId]?.length ?? 0) <= 1) window.setTimeout(() => get().roomId === roomId && leaveVoice(), 1200)
   })
 
-  s.on('call:unanswered', ({ roomId }: { roomId: string }) => {
+  s.on('call:unanswered', ({ roomId, declined }: { roomId: string; declined?: boolean }) => {
     if (get().roomId !== roomId) return
     set({ calling: null })
-    chat.toast({ title: 'Никто не ответил', text: 'Можно оставить звонок открытым или положить трубку' })
+    // declined — все отказались: об этом уже сказали тосты «Звонок отклонён»
+    if (!declined) chat.toast({ title: 'Никто не ответил', text: 'Можно оставить звонок открытым или положить трубку' })
   })
 }
+
+// Сервер, группа или канал пропали из списка — забываем, кто там сидел (иначе при возвращении покажем старое)
+useChat.subscribe((s, prev) => {
+  if (s.guilds === prev.guilds && s.dms === prev.dms) return
+  const known = new Set([...s.guilds.flatMap((g) => g.channels.map((c) => c.id)), ...s.dms.map((d) => d.id)])
+  const { rooms, roomId } = get()
+  const stale = Object.keys(rooms).filter((id) => !known.has(id) && id !== roomId)
+  if (!stale.length) return
+  const next = { ...rooms }
+  for (const id of stale) delete next[id]
+  set({ rooms: next })
+})
 
 // Настройки меняются — движок подстраивается на лету (подписка одна на всё время работы вкладки)
 useSettings.subscribe((s, prev) => {
@@ -760,9 +880,13 @@ useSettings.subscribe((s, prev) => {
   updateRingtone()
 })
 
-// «Нажми и говори»: клавиша из настроек (работает, пока окно Nuntius активно)
+/** Человек печатает — буква «м» (V) должна попасть в текст, а не включить микрофон */
+const typingInto = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || target.tagName === 'TEXTAREA' || (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'range' && (target as HTMLInputElement).type !== 'checkbox'))
+
+// «Нажми и говори»: клавиша из настроек (работает, пока окно Nuntius активно и курсор не в поле ввода)
 window.addEventListener('keydown', (e) => {
-  if (e.code !== useSettings.getState().pttKey || e.repeat || useSettings.getState().inputMode !== 'ptt' || !get().roomId) return
+  if (e.code !== useSettings.getState().pttKey || e.repeat || useSettings.getState().inputMode !== 'ptt' || !get().roomId || typingInto(e.target)) return
   pttDown = true
   applyGate()
 })

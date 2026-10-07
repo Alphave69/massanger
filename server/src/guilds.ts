@@ -45,7 +45,7 @@ export function registerGuildRoutes(app: Express, { io, voice, fail, serializeGu
 
   /** Убрать человека с сервера: из голоса, из комнаты сокетов, из списка — и сообщить ему */
   function dropMember(guild: store.Guild, userId: string, reason: 'left' | 'kicked') {
-    voice.kickFrom(userId, voiceIds(guild))
+    voice.kickFrom(userId, voiceIds(guild), reason === 'left' ? 'left' : 'removed')
     store.removeGuildMember(guild, userId)
     io.in(`user:${userId}`).socketsLeave(`guild:${guild.id}`)
     io.to(`user:${userId}`).emit('guild:removed', { guildId: guild.id, reason, name: guild.name })
@@ -67,9 +67,10 @@ export function registerGuildRoutes(app: Express, { io, voice, fail, serializeGu
     const guild = guildFor(req, res, true)
     if (!guild) return
     if (guild.isLobby) return fail(res, 400, 'Общий сервер удалить нельзя — сюда попадают все новые люди')
-    for (const id of voiceIds(guild)) voice.closeRoom(id)
+    const { user } = req as AuthedRequest
+    for (const id of voiceIds(guild)) voice.closeRoom(id, user.id)
     store.deleteGuild(guild)
-    io.to(`guild:${guild.id}`).emit('guild:removed', { guildId: guild.id, reason: 'deleted', name: guild.name })
+    io.to(`guild:${guild.id}`).emit('guild:removed', { guildId: guild.id, reason: 'deleted', name: guild.name, by: user.id })
     io.in(`guild:${guild.id}`).socketsLeave(`guild:${guild.id}`)
     res.json({ ok: true })
   })
@@ -140,7 +141,7 @@ export function registerGuildRoutes(app: Express, { io, voice, fail, serializeGu
     if (channel.type === 'text' && guild.channels.filter((c) => c.type === 'text').length <= 1) {
       return fail(res, 400, 'На сервере должен остаться хотя бы один текстовый канал')
     }
-    if (channel.type === 'voice') voice.closeRoom(channel.id)
+    if (channel.type === 'voice') voice.closeRoom(channel.id, (req as AuthedRequest).user.id)
     store.removeChannel(guild, channel.id)
     emitGuild(guild)
     res.json({ guild: serializeGuild(guild) })

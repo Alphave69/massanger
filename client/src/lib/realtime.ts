@@ -24,7 +24,7 @@ function notify(title: string, text: string, extra: { userId?: string; action?: 
     text,
     action
       ? () => {
-          ui.closeSettings()
+          ui.closeOverlays()
           chat.setView(action)
         }
       : undefined,
@@ -87,9 +87,10 @@ export function connectRealtime(onUnauthorized: () => void) {
   s.on('guild:update', (g: Guild) => chat.upsertGuild(g))
   s.on('dm:update', (dm: DmView) => chat.upsertDm(dm))
   s.on('dm:removed', ({ dmId }: { dmId: string }) => chat.removeDm(dmId))
-  s.on('guild:removed', ({ guildId, reason, name }: { guildId: string; reason: 'deleted' | 'kicked' | 'left'; name: string }) => {
+  s.on('guild:removed', ({ guildId, reason, name, by }: { guildId: string; reason: 'deleted' | 'kicked' | 'left'; name: string; by?: string }) => {
     chat.removeGuild(guildId)
-    if (reason === 'deleted') chat.toast({ title: `«${name}» удалён`, text: 'Владелец удалил сервер' })
+    // Удалил сам — об этом уже сказали настройки сервера
+    if (reason === 'deleted' && by !== useChat.getState().me?.id) chat.toast({ title: `«${name}» удалён`, text: 'Владелец удалил сервер' })
     if (reason === 'kicked') chat.toast({ title: `Тебя убрали с «${name}»`, text: 'Владелец сервера исключил тебя' })
   })
 
@@ -123,6 +124,13 @@ export function connectRealtime(onUnauthorized: () => void) {
         action: { kind: 'dm', dmId: m.channelId },
       })
     }
+  })
+
+  s.on('call:missed', ({ roomId, from }: { roomId: string; from: string }) => {
+    const st = useChat.getState()
+    if (!document.hidden && st.view.kind === 'dm' && st.view.dmId === roomId) return
+    chat.bumpUnread(roomId)
+    notify(st.users[from]?.displayName ?? 'Звонок', 'пропущенный звонок', { userId: from, action: { kind: 'dm', dmId: roomId } })
   })
 
   s.on('typing', ({ channelId, userId }: { channelId: string; userId: string }) => {

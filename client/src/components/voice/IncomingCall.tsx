@@ -14,7 +14,7 @@ export function IncomingCall() {
   if (!call) return null
 
   return (
-    <div className="incoming-call glow" role="alertdialog" aria-label="Входящий звонок">
+    <div className="incoming-call glow zoomed" role="alertdialog" aria-label="Входящий звонок">
       <div className="incoming-call__avatar">
         <span className="incoming-call__wave" />
         <span className="incoming-call__wave incoming-call__wave--2" />

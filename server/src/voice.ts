@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io'
 import * as store from './store.js'
+import { on, reply } from './safe.js'
 
 /**
  * Голос: комнаты, обмен сигналами WebRTC и звонки.
@@ -58,6 +59,38 @@ interface Options {
   canCall: (fromId: string, dm: store.Dm) => boolean
   /** Служебное сообщение в переписку (пропущенный / завершённый звонок) */
   systemMessage: (dm: store.Dm, text: string) => void
+  /** Показать переписку всем её участникам (собеседник мог её ещё не видеть, а ему уже звонят) */
+  announceDm: (dm: store.Dm) => void
+}
+
+type KickReason = 'moved' | 'removed' | 'deleted' | 'left'
+
+/**
+ * Сигнал WebRTC пересобираем из известных полей: всё остальное (и глубоко вложенный мусор,
+ * который может уронить JSON) отбрасываем.
+ */
+function cleanSignal(data: unknown) {
+  if (typeof data !== 'object' || data === null) return null
+  const d = data as Record<string, unknown>
+  if (d.description !== undefined) {
+    const desc = d.description as Record<string, unknown> | null
+    if (typeof desc !== 'object' || desc === null) return null
+    if ((desc.type !== 'offer' && desc.type !== 'answer') || typeof desc.sdp !== 'string' || desc.sdp.length > 200_000) return null
+    return { description: { type: desc.type, sdp: desc.sdp } }
+  }
+  if (d.candidate !== undefined) {
+    const c = d.candidate as Record<string, unknown> | null
+    if (typeof c !== 'object' || c === null || typeof c.candidate !== 'string' || c.candidate.length > 2000) return null
+    return {
+      candidate: {
+        candidate: c.candidate,
+        sdpMid: typeof c.sdpMid === 'string' ? c.sdpMid.slice(0, 64) : null,
+        sdpMLineIndex: Number.isInteger(c.sdpMLineIndex) ? (c.sdpMLineIndex as number) : null,
+        usernameFragment: typeof c.usernameFragment === 'string' ? c.usernameFragment.slice(0, 256) : null,
+      },
+    }
+  }
+  return null
 }
 
 export function createVoice(io: Server, opts: Options) {
@@ -94,25 +127,33 @@ export function createVoice(io: Server, opts: Options) {
 
   // --- звонки в личке / группе ---
 
-  function stopRing(roomId: string, timedOut = false) {
+  /**
+   * Перестать звонить.
+   * timeout — 30 секунд никто не взял; abandoned — звонивший положил трубку раньше.
+   * В обоих случаях, если так никто и не ответил, в переписке остаётся «Пропущенный звонок».
+   */
+  function stopRing(roomId: string, why: 'quiet' | 'timeout' | 'abandoned' = 'quiet') {
     const ring = rings.get(roomId)
     if (!ring) return
     clearTimeout(ring.timer)
     rings.delete(roomId)
     for (const id of ring.waiting) io.to(`user:${id}`).emit('call:stop', { roomId })
-    if (timedOut) {
-      io.to(`voice:${roomId}`).emit('call:unanswered', { roomId })
-      const t = target(roomId)
-      if (t?.kind === 'dm' && !ring.answered) opts.systemMessage(t.dm, `📞 Пропущенный звонок от ${store.findUser(ring.from)?.displayName ?? 'кого-то'}`)
-    }
+    if (why === 'quiet' || ring.answered) return
+    if (why === 'timeout') io.to(`voice:${roomId}`).emit('call:unanswered', { roomId })
+    const t = target(roomId)
+    if (t?.kind !== 'dm') return
+    opts.systemMessage(t.dm, `📞 Пропущенный звонок от ${store.findUser(ring.from)?.displayName ?? 'кого-то'}`)
+    // Тем, кто не ответил, — отдельно: это непрочитанное и повод для уведомления
+    for (const id of ring.waiting) io.to(`user:${id}`).emit('call:missed', { roomId, from: ring.from })
   }
 
   function startRing(roomId: string, dm: store.Dm, from: string) {
     stopRing(roomId)
     const waiting = new Set(dm.memberIds.filter((id) => id !== from))
     if (!waiting.size) return
+    opts.announceDm(dm)
     for (const id of waiting) io.to(`user:${id}`).emit('call:ring', { roomId, from })
-    const timer = setTimeout(() => stopRing(roomId, true), RING_TIMEOUT)
+    const timer = setTimeout(() => stopRing(roomId, 'timeout'), RING_TIMEOUT)
     rings.set(roomId, { timer, waiting, from, answered: false })
   }
 
@@ -125,6 +166,8 @@ export function createVoice(io: Server, opts: Options) {
     if (!ring.waiting.size) {
       clearTimeout(ring.timer)
       rings.delete(roomId)
+      // Все отказались — звонящему больше некого ждать (гудки выключаются)
+      if (!ring.answered) io.to(`voice:${roomId}`).emit('call:unanswered', { roomId, declined: true })
     }
   }
 
@@ -142,7 +185,7 @@ export function createVoice(io: Server, opts: Options) {
     const t = target(roomId)
     if (!room || room.size === 0) {
       rooms.delete(roomId)
-      stopRing(roomId)
+      stopRing(roomId, 'abandoned')
       const started = callStarted.get(roomId)
       callStarted.delete(roomId)
       if (started && t?.kind === 'dm') opts.systemMessage(t.dm, `📞 Звонок завершён · ${formatDuration(Date.now() - started)}`)
@@ -151,7 +194,7 @@ export function createVoice(io: Server, opts: Options) {
   }
 
   /** Выкинуть человека из голоса с сообщением в его вкладку */
-  function kick(userId: string, reason: 'moved' | 'removed' | 'deleted') {
+  function kick(userId: string, reason: KickReason) {
     const member = memberOf(userId)
     if (!member) return
     leave(userId)
@@ -159,14 +202,17 @@ export function createVoice(io: Server, opts: Options) {
   }
 
   function attach(socket: Socket, userId: string) {
-    socket.on('voice:join', (payload: { roomId?: unknown; muted?: unknown; deafened?: unknown }, ack?: (r: unknown) => void) => {
+    on(socket, 'voice:join', (payload: { roomId?: unknown; muted?: unknown; deafened?: unknown }, ack?: unknown) => {
+      const answer = reply(ack)
       const roomId = typeof payload?.roomId === 'string' ? payload.roomId : ''
       const t = roomId ? target(roomId) : undefined
-      if (!t) return ack?.({ error: 'Голосовой канал не найден' })
-      if (t.kind === 'guild' && !t.guild.memberIds.includes(userId)) return ack?.({ error: 'Нет доступа к этому каналу' })
+      if (!t) return answer({ error: 'Голосовой канал не найден' })
+      if (t.kind === 'guild' && !t.guild.memberIds.includes(userId)) return answer({ error: 'Нет доступа к этому каналу' })
       if (t.kind === 'dm') {
-        if (!t.dm.memberIds.includes(userId)) return ack?.({ error: 'Нет доступа к этому звонку' })
-        if (t.dm.kind === 'dm' && !opts.canCall(userId, t.dm)) return ack?.({ error: 'Собеседник принимает звонки только от друзей' })
+        if (!t.dm.memberIds.includes(userId)) return answer({ error: 'Нет доступа к этому звонку' })
+        // Приватность проверяем только у того, кто звонит первым: отвечать на звонок можно всегда
+        const answering = rings.get(roomId)?.waiting.has(userId) || (rooms.get(roomId)?.size ?? 0) > 0
+        if (t.dm.kind === 'dm' && !answering && !opts.canCall(userId, t.dm)) return answer({ error: 'Собеседник принимает звонки только от друзей' })
       }
 
       // Уже в голосе — выходим оттуда (если это была другая вкладка — сообщаем ей)
@@ -200,14 +246,14 @@ export function createVoice(io: Server, opts: Options) {
         else stopRingFor(roomId, userId, true)
       }
       broadcast(roomId, t)
-      ack?.({ ok: true, members: others, iceServers: iceServers() })
+      answer({ ok: true, members: others, iceServers: iceServers(), ringing: rings.has(roomId) && wasEmpty })
     })
 
-    socket.on('voice:leave', () => {
+    on(socket, 'voice:leave', () => {
       if (memberOf(userId)?.socketId === socket.id) leave(userId)
     })
 
-    socket.on('voice:update', (patch: Record<string, unknown>) => {
+    on(socket, 'voice:update', (patch: Record<string, unknown>) => {
       const member = memberOf(userId)
       if (!member || member.socketId !== socket.id || typeof patch !== 'object' || !patch) return
       for (const key of ['muted', 'deafened', 'video', 'screen'] as const) {
@@ -221,24 +267,24 @@ export function createVoice(io: Server, opts: Options) {
     })
 
     // Пересылка offer/answer/ICE — только между участниками одной комнаты
-    socket.on('voice:signal', (payload: { to?: unknown; data?: unknown }) => {
+    on(socket, 'voice:signal', (payload: { to?: unknown; data?: unknown }) => {
       const roomId = userRoom.get(userId)
       const room = roomId ? rooms.get(roomId) : undefined
       if (!room || room.get(userId)?.socketId !== socket.id) return
-      const to = typeof payload?.to === 'string' ? room.get(payload.to) : undefined
-      const data = payload?.data
-      if (!to || typeof data !== 'object' || data === null || JSON.stringify(data).length > 100_000) return
+      const to = typeof payload?.to === 'string' && payload.to !== userId ? room.get(payload.to) : undefined
+      const data = cleanSignal(payload?.data)
+      if (!to || !data) return
       io.to(to.socketId).emit('voice:signal', { from: userId, data })
     })
 
-    socket.on('call:decline', (payload: { roomId?: unknown }) => {
+    on(socket, 'call:decline', (payload: { roomId?: unknown }) => {
       const roomId = typeof payload?.roomId === 'string' ? payload.roomId : ''
       if (!rings.get(roomId)?.waiting.has(userId)) return
-      stopRingFor(roomId, userId, false)
       io.to(`voice:${roomId}`).emit('call:declined', { roomId, userId })
+      stopRingFor(roomId, userId, false)
     })
 
-    socket.on('disconnect', () => {
+    on(socket, 'disconnect', () => {
       if (memberOf(userId)?.socketId === socket.id) leave(userId)
     })
   }
@@ -262,21 +308,28 @@ export function createVoice(io: Server, opts: Options) {
       return [...rings.entries()].filter(([, r]) => r.waiting.has(userId)).map(([roomId, r]) => ({ roomId, from: r.from }))
     },
 
-    /** Канал или группа удалены — всех из комнаты выкидываем */
-    closeRoom(roomId: string) {
-      for (const userId of [...(rooms.get(roomId)?.keys() ?? [])]) kick(userId, 'deleted')
+    /** Канал или группа удалены — всех из комнаты выкидываем (того, кто удалил, — без «тебя выкинули») */
+    closeRoom(roomId: string, by?: string) {
       stopRing(roomId)
+      for (const userId of [...(rooms.get(roomId)?.keys() ?? [])]) kick(userId, userId === by ? 'left' : 'deleted')
     },
 
-    /** Человека убрали с сервера / из группы — если он сидит в одной из этих комнат, выкидываем */
-    kickFrom(userId: string, roomIds: string[]) {
+    /** Человек ушёл сам (left) или его убрали (removed) с сервера / из группы — выкидываем из этих комнат */
+    kickFrom(userId: string, roomIds: string[], reason: 'left' | 'removed') {
       const roomId = userRoom.get(userId)
-      if (roomId && roomIds.includes(roomId)) kick(userId, 'removed')
+      if (roomId && roomIds.includes(roomId)) kick(userId, reason)
       for (const id of roomIds) stopRingFor(id, userId, false)
     },
 
     /** Состав комнаты поменялся «снаружи» (переименовали группу и т.п.) — разослать заново */
     refresh: (roomId: string) => broadcast(roomId),
+
+    /** Человек только что вступил на сервер — рассказать ему, кто уже сидит в голосовых каналах */
+    sendRooms(userId: string, roomIds: string[]) {
+      for (const roomId of roomIds) {
+        if (rooms.get(roomId)?.size) io.to(`user:${userId}`).emit('voice:room', { roomId, members: publicMembers(roomId) })
+      }
+    },
   }
 }
 

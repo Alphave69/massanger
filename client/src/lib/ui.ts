@@ -51,6 +51,8 @@ export const ui = {
   openServerSettings: (guildId: string, section: ServerSection = 'overview') =>
     useUi.setState({ serverSettings: { guildId, section }, profile: null, statusMenuOpen: false }),
   closeServerSettings: () => useUi.setState({ serverSettings: null }),
+  /** Переходим куда-то из уведомления или звонка — полноэкранные настройки не должны закрывать новый экран */
+  closeOverlays: () => useUi.setState({ settings: null, serverSettings: null, profile: null }),
   openChannelModal: (modal: ChannelModal) => useUi.setState({ channelModal: modal }),
   closeChannelModal: () => useUi.setState({ channelModal: null }),
   openGroupModal: (modal: GroupModal) => useUi.setState({ groupModal: modal }),

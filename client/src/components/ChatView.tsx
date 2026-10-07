@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEv
 import { useShallow } from 'zustand/react/shallow'
 import { ArrowUp, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
 import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
-import { formatDay, formatStamp, formatTime, sameDay } from '../lib/format'
+import { formatDay, formatStamp, formatTime, MEMBERS, plural, sameDay } from '../lib/format'
 import { sendMessage, sendTyping } from '../lib/realtime'
 import { STATUS_LABEL } from '../lib/status'
 import { activeChannelId, chat, dmTitle, presenceOf, useChat } from '../lib/store'
@@ -88,7 +88,7 @@ export function ChatView() {
           <div className="main__title">
             <GroupAvatar memberIds={group.memberIds} size={30} />
             <h2 className="truncate">{groupTitle}</h2>
-            <span className="main__sub">{group.memberIds.length} участников</span>
+            <span className="main__sub">{plural(group.memberIds.length, MEMBERS)}</span>
           </div>
         ) : dmUser ? (
           <button className="main__title main__title--user" onClick={(e) => ui.showProfile(dmUser.id, e.currentTarget)}>
@@ -245,7 +245,7 @@ function CallBanner({ members, onJoin }: { members: VoiceMember[]; onJoin: () =>
         {members.slice(0, 4).map((m) => users[m.userId] && <Avatar key={m.userId} user={users[m.userId]} size={26} />)}
       </div>
       <span className="call-banner__text">
-        <b>Идёт звонок</b> · {members.length} {members.length === 1 ? 'участник' : 'участника'}
+        <b>Идёт звонок</b> · {plural(members.length, MEMBERS)}
       </span>
       <button className="btn btn--primary btn--sm" onClick={onJoin}>
         <Phone size={15} /> Присоединиться

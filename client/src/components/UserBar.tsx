@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Headphones, HeadphoneOff, LogOut, Mic, MicOff, Pencil, Settings as SettingsIcon, X } from 'lucide-react'
 import { api, ApiError, type Status } from '../lib/api'
 import { STATUS_LABEL, STATUS_OPTIONS, selfPresence } from '../lib/status'
-import { setSetting, useSettings } from '../lib/settings'
+import { useSettings } from '../lib/settings'
+import { toggleDeafen, toggleMute, useVoice } from '../lib/voice'
 import { chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { Avatar } from './Avatar'
@@ -14,6 +15,9 @@ export function UserBar({ onLogout }: { onLogout: () => void }) {
   const open = useUi((s) => s.statusMenuOpen)
   const muted = useSettings((s) => s.muted)
   const deafened = useSettings((s) => s.deafened)
+  const noMic = useVoice((s) => s.noMic && s.roomId !== null)
+  // Как в голосовой панели: при выключенном звуке микрофон тоже выключен
+  const micOff = muted || deafened || noMic
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,16 +46,16 @@ export function UserBar({ onLogout }: { onLogout: () => void }) {
       </button>
       <div className="userbar__actions">
         <button
-          className={`icon-btn${muted ? ' is-on' : ''}`}
-          onClick={() => setSetting('muted', !muted)}
-          data-tip={muted ? 'Включить микрофон' : 'Выключить микрофон'}
-          aria-pressed={muted}
+          className={`icon-btn${micOff ? ' is-on' : ''}`}
+          onClick={toggleMute}
+          data-tip={micOff ? 'Включить микрофон' : 'Выключить микрофон'}
+          aria-pressed={micOff}
         >
-          {muted ? <MicOff size={17} /> : <Mic size={17} />}
+          {micOff ? <MicOff size={17} /> : <Mic size={17} />}
         </button>
         <button
           className={`icon-btn${deafened ? ' is-on' : ''}`}
-          onClick={() => setSetting('deafened', !deafened)}
+          onClick={toggleDeafen}
           data-tip={deafened ? 'Включить звук' : 'Выключить звук'}
           aria-pressed={deafened}
         >

@@ -18,7 +18,7 @@ export function Toasts() {
             className={`toast glow${t.action ? ' toast--action' : ''}`}
             onClick={() => {
               if (t.action) {
-                ui.closeSettings()
+                ui.closeOverlays()
                 chat.setView(t.action)
               }
               chat.dismissToast(t.id)

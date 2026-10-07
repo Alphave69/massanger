@@ -106,12 +106,15 @@ export function Shell({ onLogout }: Props) {
 
       {!connected && <div className="conn-banner">Переподключаемся к серверу…</div>}
       <Modals />
-      <ChannelModal />
       <GroupModal />
       <ProfileCard />
     </div>
     <Settings onLogout={onLogout} />
     <ServerSettings />
+    {/* окно канала открывается и из настроек сервера — поэтому снаружи «затемнённой» оболочки и поверх настроек */}
+    <div className="modal-layer zoomed">
+      <ChannelModal />
+    </div>
     <IncomingCall />
     {/* уведомления — поверх всего, в том числе поверх настроек */}
     <Toasts />

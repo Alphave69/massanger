@@ -59,9 +59,9 @@ export async function blip(force = false) {
 }
 
 /** Уведомление Windows/macOS, когда вкладка свёрнута */
-export function desktopNotify(title: string, body: string, onClick?: () => void) {
-  if (!useSettings.getState().desktop || !document.hidden) return
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+export function desktopNotify(title: string, body: string, onClick?: () => void): Notification | null {
+  if (!useSettings.getState().desktop || !document.hidden) return null
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return null
   try {
     const n = new Notification(title, { body, icon: '/favicon.svg', silent: true })
     n.onclick = () => {
@@ -69,8 +69,10 @@ export function desktopNotify(title: string, body: string, onClick?: () => void)
       onClick?.()
       n.close()
     }
+    return n
   } catch {
     // некоторые браузеры не дают создавать уведомления напрямую — пропускаем
+    return null
   }
 }
 
@@ -142,7 +144,12 @@ export async function tone(kind: ToneKind) {
   if (s.deafened) return
   try {
     const ctx = await soundContext()
-    if (ctx.state !== 'running') await ctx.resume().catch(() => {})
+    // Как и у blip: пока браузер держит звук на паузе, гудки не копим — иначе потом заиграли бы все разом
+    const running = () => ctx.state === 'running'
+    if (!running()) {
+      void ctx.resume().catch(() => {})
+      if (!running()) return
+    }
     const volume = (kind === 'ring' || kind === 'ringback' ? 0.07 : 0.05) * (s.outputVolume / 100)
     const start = ctx.currentTime + 0.01
     for (const [freq, at, dur] of TONES[kind]) {

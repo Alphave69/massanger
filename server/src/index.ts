@@ -11,6 +11,7 @@ import * as store from './store.js'
 import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 import { createVoice } from './voice.js'
+import { on, reply } from './safe.js'
 import { registerGuildRoutes } from './guilds.js'
 import { registerGroupRoutes } from './groups.js'
 
@@ -109,6 +110,9 @@ const voice = createVoice(io, {
     return Boolean(other && canWriteDm(fromId, other, dm.id))
   },
   systemMessage,
+  announceDm: (dm) => {
+    for (const id of dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(dm, id))
+  },
 })
 
 /** bcrypt учитывает только первые 72 байта (русская буква — 2 байта): длиннее не пускаем, чтобы пароль не обрезался молча */
@@ -394,6 +398,10 @@ app.post('/api/guilds/:id/join', requireAuth, (req, res) => {
   if (!guild) return fail(res, 404, 'Сервер не найден — проверь код приглашения')
   io.in(`user:${user.id}`).socketsJoin(`guild:${guild.id}`)
   io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
+  voice.sendRooms(
+    user.id,
+    guild.channels.filter((c) => c.type === 'voice').map((c) => c.id),
+  )
   res.json({ guild: serializeGuild(guild) })
 })
 
@@ -503,18 +511,19 @@ io.on('connection', (socket) => {
   broadcastPresence()
   voice.attach(socket, userId)
 
-  socket.on('message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: (r: unknown) => void) => {
+  on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: unknown) => {
+    const answer = reply(ack)
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const content = typeof payload?.content === 'string' ? payload.content.trim().slice(0, 4000) : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
     if (!content || !access || (access.kind === 'guild' && access.channel.type !== 'text')) {
-      ack?.({ error: 'Не удалось отправить сообщение' })
+      answer({ error: 'Не удалось отправить сообщение' })
       return
     }
     if (access.kind === 'dm' && access.dm.kind === 'dm') {
       const other = otherIn(access.dm, userId)
       if (!other || !canWriteDm(userId, other, access.dm.id)) {
-        ack?.({ error: 'Собеседник принимает сообщения только от друзей' })
+        answer({ error: 'Собеседник принимает сообщения только от друзей' })
         return
       }
     }
@@ -523,10 +532,10 @@ io.on('connection', (socket) => {
     if (access.kind === 'dm') {
       for (const id of access.dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(access.dm, id))
     }
-    ack?.({ message })
+    answer({ message })
   })
 
-  socket.on('typing', (payload: { channelId?: unknown }) => {
+  on(socket, 'typing', (payload: { channelId?: unknown }) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
     if (!access) return
@@ -538,14 +547,14 @@ io.on('connection', (socket) => {
   })
 
   // Клиент сам сообщает, что человек отошёл (нет активности несколько минут)
-  socket.on('presence:idle', (idle: unknown) => {
+  on(socket, 'presence:idle', (idle: unknown) => {
     const was = autoIdle.has(userId)
     if (idle === true) autoIdle.add(userId)
     else autoIdle.delete(userId)
     if (was !== autoIdle.has(userId)) broadcastPresence()
   })
 
-  socket.on('disconnect', () => {
+  on(socket, 'disconnect', () => {
     const left = (socketCount.get(userId) ?? 1) - 1
     if (left <= 0) {
       socketCount.delete(userId)

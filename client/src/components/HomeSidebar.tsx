@@ -7,6 +7,7 @@ import { Avatar } from './Avatar'
 import { GroupAvatar } from './groups/GroupAvatar'
 import { UserBar } from './UserBar'
 import { VoicePanel } from './voice/VoicePanel'
+import { MEMBERS, plural } from '../lib/format'
 
 export function HomeSidebar({ onLogout }: { onLogout: () => void }) {
   const view = useChat((s) => s.view)
@@ -72,7 +73,7 @@ function DmRow({ dm, active, index }: { dm: DmRef; active: boolean; index: numbe
       ? `${typingName} печатает…`
       : 'печатает…'
     : dm.kind === 'group'
-      ? `${dm.memberIds.length} участников`
+      ? plural(dm.memberIds.length, MEMBERS)
       : user
         ? user.customStatus || STATUS_LABEL[status]
         : ''

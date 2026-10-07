@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowDown, ArrowUp, Check, Copy, Crown, Hash, LayoutGrid, LogOut, Pencil, Plus, Trash2, UserMinus, UserPlus, Users, Volume2, X } from 'lucide-react'
 import { api, ApiError, type Channel, type Guild } from '../../lib/api'
-import { initials } from '../../lib/format'
+import { initials, MEMBERS, plural } from '../../lib/format'
 import { chat, useChat } from '../../lib/store'
 import { ui, useUi, type ServerSection } from '../../lib/ui'
 import { Avatar } from '../Avatar'
@@ -17,7 +17,8 @@ export function ServerSettings() {
 
   useEffect(() => {
     if (!state) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && ui.closeServerSettings()
+    // Esc в открытом поверх окне канала закрывает только его
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !useUi.getState().channelModal && ui.closeServerSettings()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [state])
@@ -146,7 +147,7 @@ function Overview({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
           <div>
             <div className="account-card__name">{guild.name}</div>
             <div className="muted">
-              {guild.members.length} участников · {guild.channels.length} каналов
+              {plural(guild.members.length, MEMBERS)} · {plural(guild.channels.length, ['канал', 'канала', 'каналов'])}
             </div>
           </div>
         )}
@@ -255,7 +256,7 @@ function Members({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
   const members = [...guild.members].sort((a, b) => (a.id === guild.ownerId ? -1 : b.id === guild.ownerId ? 1 : a.displayName.localeCompare(b.displayName, 'ru')))
   return (
     <>
-      <SectionHead title="Участники" subtitle={`${guild.members.length} человек на сервере.`} />
+      <SectionHead title="Участники" subtitle={`${plural(guild.members.length, ['человек', 'человека', 'человек'])} на сервере.`} />
       <div className="ch-list">
         {members.map((m) => (
           <div key={m.id} className="ch-item ch-item--member">
