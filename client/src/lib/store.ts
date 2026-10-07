@@ -14,7 +14,12 @@ export interface FriendRef {
 
 export interface DmRef {
   id: string
-  userId: string
+  kind: 'dm' | 'group'
+  name: string
+  ownerId: string | null
+  memberIds: string[]
+  /** Собеседник в личке (у группы — null) */
+  userId: string | null
   lastMessageAt: number
 }
 
@@ -72,7 +77,23 @@ function withUsers(users: Record<string, User>, list: (User | null | undefined)[
 }
 
 const toFriendRef = (f: FriendEntry): FriendRef => ({ userId: f.user.id, state: f.state, since: f.since })
-const toDmRef = (d: DmView): DmRef => ({ id: d.id, userId: d.user!.id, lastMessageAt: d.lastMessageAt })
+const toDmRef = (d: DmView): DmRef => ({
+  id: d.id,
+  kind: d.kind,
+  name: d.name,
+  ownerId: d.ownerId,
+  memberIds: d.members.map((m) => m.id),
+  userId: d.user?.id ?? null,
+  lastMessageAt: d.lastMessageAt,
+})
+
+/** Название переписки: имя собеседника, название группы или имена участников */
+export function dmTitle(st: ChatState, dm: DmRef): string {
+  if (dm.kind === 'dm') return (dm.userId && st.users[dm.userId]?.displayName) || 'Переписка'
+  if (dm.name) return dm.name
+  const names = dm.memberIds.filter((id) => id !== st.me?.id).map((id) => st.users[id]?.displayName ?? '…')
+  return names.length ? names.join(', ') : 'Пустая группа'
+}
 
 // ============ селекторы ============
 
@@ -82,9 +103,9 @@ export function activeChannelId(st: ChatState = get()): string | null {
   if (v.kind === 'guild') {
     const guild = st.guilds.find((g) => g.id === v.guildId)
     if (!guild) return null
-    const remembered = st.channelByGuild[guild.id]
-    const text = guild.channels.filter((c) => c.type === 'text')
-    return (text.find((c) => c.id === remembered) ?? text[0])?.id ?? null
+    // Открыт может быть и голосовой канал (тогда в середине — «сцена» звонка)
+    const remembered = guild.channels.find((c) => c.id === st.channelByGuild[guild.id])
+    return (remembered ?? guild.channels.find((c) => c.type === 'text'))?.id ?? null
   }
   return null
 }
@@ -120,11 +141,11 @@ export const chat = {
         s.user,
         ...s.guilds.flatMap((g) => g.members),
         ...s.friends.map((f) => f.user),
-        ...s.dms.map((d) => d.user),
+        ...s.dms.flatMap((d) => d.members),
       ]),
       guilds: s.guilds,
       friends: s.friends.map(toFriendRef),
-      dms: s.dms.filter((d) => d.user).map(toDmRef),
+      dms: s.dms.filter((d) => d.kind === 'group' || d.user).map(toDmRef),
       presence: s.presence,
       view: keepView ? st.view : s.guilds[0] ? { kind: 'guild', guildId: s.guilds[0].id } : { kind: 'home', tab: 'online' },
       ready: true,
@@ -181,11 +202,31 @@ export const chat = {
   },
 
   upsertDm(dm: DmView) {
-    if (!dm.user) return
+    if (dm.kind === 'dm' && !dm.user) return
     set((st) => ({
       dms: [toDmRef(dm), ...st.dms.filter((d) => d.id !== dm.id)],
-      users: withUsers(st.users, [dm.user]),
+      users: withUsers(st.users, dm.members),
     }))
+  },
+
+  /** Нас убрали из группы (или мы вышли) */
+  removeDm(dmId: string) {
+    set((st) => ({
+      dms: st.dms.filter((d) => d.id !== dmId),
+      view: st.view.kind === 'dm' && st.view.dmId === dmId ? { kind: 'home', tab: 'online' } : st.view,
+    }))
+  },
+
+  /** Сервер удалили или нас с него убрали */
+  removeGuild(guildId: string) {
+    set((st) => {
+      const guilds = st.guilds.filter((g) => g.id !== guildId)
+      const viewing = st.view.kind === 'guild' && st.view.guildId === guildId
+      return {
+        guilds,
+        view: viewing ? (guilds[0] ? { kind: 'guild', guildId: guilds[0].id } : { kind: 'home', tab: 'online' }) : st.view,
+      }
+    })
   },
 
   clearMessages() {

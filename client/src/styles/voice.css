@@ -1,0 +1,1297 @@
+/* =====================================================================
+   Голос, звонки, группы, управление сервером
+   ===================================================================== */
+
+/* ============ каналы в боковой панели ============ */
+
+.channel {
+  padding: 0 6px 0 12px;
+  cursor: pointer;
+}
+
+.channel__main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  font: inherit;
+}
+
+.channel__gear {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: inherit;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.channel:hover .channel__gear,
+.channel.is-active .channel__gear,
+.channel__gear:focus-visible {
+  opacity: 0.7;
+}
+
+.channel__gear:hover {
+  opacity: 1 !important;
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.channel__count {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  font: 600 10px/1 var(--mono);
+  color: inherit;
+  opacity: 0.8;
+}
+
+.channel--voice.is-here:not(.is-active) {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+
+.chgroup__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chgroup__head .side__label {
+  flex: 1;
+  width: auto;
+}
+
+.chgroup__add {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-3);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.3s var(--ease-spring);
+}
+
+.chgroup__add:hover {
+  color: var(--text);
+  background: var(--hover);
+  transform: rotate(90deg);
+}
+
+.menu__sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line);
+}
+
+.menu__item--danger {
+  color: var(--text-2);
+}
+
+/* Кто сидит в голосовом канале */
+.voice-users {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 6px 26px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.voice-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 4px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+  animation: rise-in 0.3s var(--ease-out) both;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.voice-user:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.voice-user .avatar {
+  border-radius: 50%;
+  transition: box-shadow 0.15s ease;
+}
+
+.voice-user.is-speaking {
+  color: var(--text);
+}
+
+.voice-user.is-speaking .avatar {
+  box-shadow:
+    0 0 0 2px var(--panel-solid),
+    0 0 0 3.5px #fff,
+    0 0 12px rgba(255, 255, 255, 0.7);
+}
+
+.voice-user__icons {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  color: var(--text-3);
+}
+
+/* ============ «Голос подключён» над своей панелью ============ */
+
+.voice-panel {
+  flex: none;
+  margin: 0 8px;
+  padding: 10px 10px 8px;
+  border-radius: 18px 18px 6px 6px;
+  border: 1px solid var(--line-2);
+  border-bottom: 0;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.1), transparent 60%),
+    rgba(255, 255, 255, 0.03);
+  animation: rise-in 0.35s var(--ease-out);
+}
+
+.voice-panel + .userbar {
+  margin-top: 0;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.voice-panel__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice-panel__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.voice-panel__text b {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.voice-panel--connecting .voice-panel__text b {
+  animation: live 1.2s ease-in-out infinite;
+}
+
+.voice-panel__where {
+  font: 11px var(--mono);
+  color: var(--text-3);
+  text-align: left;
+}
+
+.voice-panel__where:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.voice-panel__leave:hover {
+  background: var(--text);
+  color: var(--black);
+}
+
+.voice-panel__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.voice-panel__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.25s ease;
+}
+
+.voice-panel__btn:hover {
+  color: var(--text);
+  border-color: var(--line-3);
+}
+
+.voice-panel__btn.is-on {
+  background: var(--text);
+  color: var(--black);
+  border-color: var(--text);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+}
+
+/* Индикатор связи: три полоски */
+.signal {
+  flex: none;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.signal i {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--text-3);
+}
+
+.signal i:nth-child(1) {
+  height: 5px;
+}
+.signal i:nth-child(2) {
+  height: 9px;
+}
+.signal i:nth-child(3) {
+  height: 13px;
+}
+
+.signal--good i,
+.signal--ok i:nth-child(-n + 2),
+.signal--bad i:nth-child(1) {
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+}
+
+/* ============ сцена звонка ============ */
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stage--channel {
+  flex: 1;
+  padding: 16px;
+}
+
+.stage--call {
+  flex: none;
+  height: clamp(220px, 38vh, 420px);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%);
+  animation: rise-in 0.4s var(--ease-out);
+}
+
+.stage__status {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  z-index: 2;
+  translate: -50% 0;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: rgba(0, 0, 0, 0.7);
+  font: 600 11px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  animation: live 1.4s ease-in-out infinite;
+}
+
+.stage__tiles {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stage__grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-content: center;
+  overflow-y: auto;
+}
+
+/* Плитки — как экран: 16:9, по центру сцены */
+.stage__grid .tile,
+.stage__strip .tile {
+  aspect-ratio: 16 / 9;
+}
+
+.stage__grid--1 {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+}
+
+.stage__grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 520px));
+  justify-content: center;
+}
+
+.stage--call .stage__grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 260px));
+  justify-content: center;
+}
+
+.stage--call .stage__grid .tile {
+  max-height: 100%;
+}
+
+.stage.has-focus .stage__tiles > .tile {
+  flex: 1;
+  min-height: 0;
+}
+
+.stage__strip {
+  flex: none;
+  height: 110px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.stage__strip .tile {
+  flex: none;
+  width: auto;
+  height: 100%;
+}
+
+.stage--call.has-focus .stage__strip {
+  height: 80px;
+}
+
+
+
+/* Плитка участника */
+.tile {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line-2);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), transparent 65%),
+    #070707;
+  animation: pop-in 0.4s var(--ease-spring);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.tile.is-speaking {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 30px rgba(255, 255, 255, 0.35);
+}
+
+.tile__face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.tile.is-speaking .tile__face .avatar {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.15);
+  animation: speak-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes speak-pulse {
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(255, 255, 255, 0.22),
+      0 0 30px rgba(255, 255, 255, 0.35);
+  }
+}
+
+.tile__wait {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.tile__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.tile__video.is-mirrored {
+  transform: scaleX(-1);
+}
+
+.tile__video.is-contain {
+  object-fit: contain;
+}
+
+.tile__label {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tile__tag {
+  font: 10px var(--mono);
+  color: var(--text-3);
+}
+
+.tile__state {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.72);
+  font: 10.5px var(--mono);
+  color: var(--text-2);
+  animation: live 1.4s ease-in-out infinite;
+}
+
+.tile__tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.tile:hover .tile__tools,
+.tile__tools:focus-within {
+  opacity: 1;
+}
+
+.tile__tool {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.72);
+  color: var(--text-2);
+}
+
+.tile__tool:hover {
+  background: var(--text);
+  color: var(--black);
+}
+
+.tile__tools [data-tip]::before {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+/* Громкость человека для себя */
+.volume-menu {
+  position: relative;
+}
+
+.volume-menu__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: 220px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line-2);
+  background: #050505;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+  animation: menu-in 0.2s var(--ease-out);
+}
+
+.volume-menu__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.volume-menu__row b {
+  font: 600 12px var(--mono);
+}
+
+.volume-menu__mute {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.volume-menu__mute:hover,
+.volume-menu__mute.is-on {
+  background: var(--text);
+  color: var(--black);
+  border-color: var(--text);
+}
+
+/* Лобби голосового канала (ещё не зашли) */
+.stage--lobby {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.stage__lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: rise-in 0.5s var(--ease-out);
+}
+
+.stage__avatars {
+  display: flex;
+  margin-bottom: 18px;
+}
+
+.stage__avatars .avatar + .avatar {
+  margin-left: -14px;
+}
+
+.stage__avatars .avatar {
+  box-shadow: 0 0 0 4px var(--panel-solid);
+  border-radius: 50%;
+}
+
+.stage__lobby h3 {
+  margin: 0 0 6px;
+  font: 700 24px/1.2 var(--display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.stage__lobby p {
+  margin: 0 0 22px;
+  color: var(--text-2);
+}
+
+.stage__lobby-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Кнопки звонка */
+.vc {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.vc--compact {
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.vc__btn {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s var(--ease-spring);
+}
+
+.vc--compact .vc__btn {
+  width: 40px;
+  height: 40px;
+}
+
+.vc__btn:hover {
+  border-color: var(--line-3);
+  transform: translateY(-2px);
+}
+
+.vc__btn:active {
+  transform: scale(0.92);
+}
+
+.vc__btn.is-off {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-2);
+}
+
+.vc__btn.is-on {
+  background: var(--text);
+  color: var(--black);
+  border-color: var(--text);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
+}
+
+.vc__btn--leave {
+  width: 64px;
+  border-radius: 24px;
+  background: var(--text);
+  color: var(--black);
+  border-color: var(--text);
+}
+
+.vc--compact .vc__btn--leave {
+  width: 56px;
+}
+
+.vc__btn--leave:hover {
+  box-shadow: var(--glow-strong);
+}
+
+/* ============ плашка «идёт звонок» и входящий звонок ============ */
+
+.call-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 16px 0;
+  padding: 8px 8px 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-3);
+  background: rgba(255, 255, 255, 0.05);
+  animation: rise-in 0.35s var(--ease-out);
+}
+
+.call-banner__pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+  animation: live 1.2s ease-in-out infinite;
+}
+
+.call-banner__avatars {
+  display: flex;
+}
+
+.call-banner__avatars .avatar + .avatar {
+  margin-left: -8px;
+}
+
+.call-banner__text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.call-banner__text b {
+  color: var(--text);
+}
+
+.dm-row__call {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  animation: live 1.6s ease-in-out infinite;
+}
+
+.incoming-call {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  z-index: 450;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 16px 16px 16px 20px;
+  border-radius: 24px;
+  border: 1px solid var(--line-3);
+  background: rgba(4, 4, 4, 0.94);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.8),
+    0 0 60px rgba(255, 255, 255, 0.12);
+  animation: call-in 0.55s var(--ease-spring);
+}
+
+@keyframes call-in {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.92);
+  }
+}
+
+.incoming-call__avatar {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.incoming-call__wave {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  animation: call-wave 1.6s ease-out infinite;
+}
+
+.incoming-call__wave--2 {
+  animation-delay: 0.8s;
+}
+
+@keyframes call-wave {
+  from {
+    opacity: 0.8;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.incoming-call__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.incoming-call__label {
+  font: 500 10.5px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  animation: live 1.4s ease-in-out infinite;
+}
+
+.incoming-call__text b {
+  font: 700 18px/1.2 var(--display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.incoming-call__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.call-btn {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition:
+    transform 0.25s var(--ease-spring),
+    box-shadow 0.25s ease;
+}
+
+.call-btn:hover {
+  transform: scale(1.08);
+}
+
+.call-btn--decline {
+  border: 1px dashed var(--line-3);
+  color: var(--text-2);
+}
+
+.call-btn--accept {
+  background: #fff;
+  color: #000;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.55);
+  animation: ring-shake 1.2s ease-in-out infinite;
+}
+
+@keyframes ring-shake {
+  0%,
+  60%,
+  100% {
+    rotate: 0deg;
+  }
+  10%,
+  30%,
+  50% {
+    rotate: -12deg;
+  }
+  20%,
+  40% {
+    rotate: 12deg;
+  }
+}
+
+/* ============ группы ============ */
+
+.group-avatar {
+  position: relative;
+  flex: none;
+  display: inline-block;
+}
+
+.group-avatar__a,
+.group-avatar__b {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.group-avatar__a {
+  top: 0;
+  left: 0;
+}
+
+.group-avatar__b {
+  right: 0;
+  bottom: 0;
+  box-shadow: 0 0 0 2px var(--panel-solid);
+}
+
+.group-avatar__count {
+  width: 62%;
+  height: 62%;
+  display: grid;
+  place-items: center;
+  background: var(--text);
+  color: var(--black);
+  font: 700 11px var(--mono);
+}
+
+.aside--group {
+  padding: 16px 10px 12px;
+}
+
+.group-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.group-head__name {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 17px/1.2 var(--display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.group-head__name svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.group-head__input {
+  height: 38px;
+  text-align: center;
+}
+
+.group-head__meta {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.group-head__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.member__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.member__kick {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--text-3);
+  opacity: 0;
+}
+
+.member:hover .member__kick {
+  opacity: 1;
+}
+
+.member__kick:hover {
+  background: var(--text);
+  color: var(--black);
+}
+
+/* Выбор друзей */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.picker__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 44px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-3);
+}
+
+.picker__search:focus-within {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.picker__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+}
+
+.picker__count {
+  font: 600 11px var(--mono);
+}
+
+.picker__list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.picker__empty {
+  padding: 16px 4px;
+  text-align: center;
+}
+
+.picker__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.picker__item:hover {
+  background: var(--hover);
+}
+
+.picker__name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.picker__name b {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.picker__name span {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.picker__check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1.5px solid var(--line-3);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.picker__item.is-on .picker__check {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+
+/* ============ каналы: создание и настройки ============ */
+
+.modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.type-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.type-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-2);
+  text-align: left;
+  color: var(--text-2);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.25s ease;
+}
+
+.type-card span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.type-card b {
+  color: var(--text);
+}
+
+.type-card span span {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.type-card:hover {
+  border-color: var(--line-3);
+}
+
+.type-card.is-active {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.channel-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.channel-input svg {
+  position: absolute;
+  left: 14px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.channel-input .input {
+  width: 100%;
+  padding-left: 38px;
+}
+
+.modal__actions--split {
+  justify-content: space-between;
+}
+
+/* ============ настройки сервера ============ */
+
+.server-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.server-badge__icon,
+.server-overview__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--text);
+  color: var(--black);
+  font-weight: 700;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.35);
+}
+
+.server-badge__icon {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.server-overview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid var(--line-2);
+  background: rgba(6, 6, 6, 0.9);
+}
+
+.server-overview__icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 26px;
+  font-size: 28px;
+}
+
+.server-overview__form {
+  flex: 1;
+  min-width: 0;
+}
+
+.server-overview__form .set-group__title {
+  margin-bottom: 10px;
+}
+
+.ch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-1);
+}
+
+.ch-item > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.ch-item > .truncate {
+  flex: 1;
+}
+
+.ch-item__tools {
+  display: flex;
+  gap: 2px;
+}
+
+.ch-item__tools .icon-btn:disabled {
+  opacity: 0.25;
+}
+
+.ch-item--member {
+  padding-left: 8px;
+}
+
+.ch-item__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ch-item__who b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.ch-item__who span {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.ch-list__add {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .incoming-call {
+    top: 12px;
+  }
+}

@@ -1,24 +1,38 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ArrowUp, PanelRight, Users } from 'lucide-react'
-import { api, SYSTEM_AUTHOR, type Message, type User } from '../lib/api'
+import { ArrowUp, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
+import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
 import { formatDay, formatStamp, formatTime, sameDay } from '../lib/format'
 import { sendMessage, sendTyping } from '../lib/realtime'
 import { STATUS_LABEL } from '../lib/status'
-import { activeChannelId, chat, presenceOf, useChat } from '../lib/store'
+import { activeChannelId, chat, dmTitle, presenceOf, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
+import { joinVoice, toggleCamera, useVoice } from '../lib/voice'
 import { Avatar } from './Avatar'
+import { GroupAvatar } from './groups/GroupAvatar'
+import { VoiceStage } from './voice/VoiceStage'
 
 const GROUP_WINDOW = 7 * 60 * 1000
 const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неизвестный', customStatus: '', bio: '', createdAt: 0 }
+const NO_MEMBERS: VoiceMember[] = []
+
+/** Позвонить в личку/группу (или зайти в уже идущий звонок), по желанию — сразу с камерой */
+async function startCall(roomId: string, video: boolean) {
+  await joinVoice(roomId)
+  if (video && !useVoice.getState().localCamera) void toggleCamera()
+}
 
 export function ChatView() {
   const view = useChat((s) => s.view)
   const channelId = useChat((s) => activeChannelId(s))
   const guild = useChat((s) => (s.view.kind === 'guild' ? s.guilds.find((g) => g.id === (s.view as { guildId: string }).guildId) : undefined))
   const dm = useChat((s) => (s.view.kind === 'dm' ? s.dms.find((d) => d.id === (s.view as { dmId: string }).dmId) : undefined))
-  const dmUser = useChat((s) => (dm ? s.users[dm.userId] : undefined))
-  const dmStatus = useChat((s) => (dm ? presenceOf(s, dm.userId) : 'offline'))
+  const dmUser = useChat((s) => (dm?.userId ? s.users[dm.userId] : undefined))
+  const dmStatus = useChat((s) => (dm?.userId ? presenceOf(s, dm.userId) : 'offline'))
+  const group = dm?.kind === 'group' ? dm : undefined
+  const groupTitle = useChat((s) => (group ? dmTitle(s, group) : ''))
+  const callMembers = useVoice((s) => (dm ? (s.rooms[dm.id] ?? NO_MEMBERS) : NO_MEMBERS))
+  const inCall = useVoice((s) => Boolean(dm) && s.roomId === dm?.id)
   const messages = useChat((s) => (channelId ? s.messages[channelId] : undefined))
   const users = useChat((s) => s.users)
   const meId = useChat((s) => s.me!.id)
@@ -59,18 +73,24 @@ export function ChatView() {
     if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
   }
 
-  if (!channelId || (view.kind === 'guild' && !channel) || (view.kind === 'dm' && !dmUser)) {
+  if (!channelId || (view.kind === 'guild' && !channel) || (view.kind === 'dm' && !dmUser && !group)) {
     return <section className="main panel" />
   }
 
-  const placeholder = dmUser ? `Написать @${dmUser.username}` : `Написать в #${channel!.name}`
+  const placeholder = group ? `Написать в «${groupTitle}»` : dmUser ? `Написать @${dmUser.username}` : `Написать в #${channel!.name}`
   const typingNames = typingIds.filter((id) => id !== meId).map((id) => users[id]?.displayName ?? '…')
   const groups = groupMessages(messages ?? [])
 
   return (
     <section className="main panel glow chat">
       <header className="main__head">
-        {dmUser ? (
+        {group ? (
+          <div className="main__title">
+            <GroupAvatar memberIds={group.memberIds} size={30} />
+            <h2 className="truncate">{groupTitle}</h2>
+            <span className="main__sub">{group.memberIds.length} участников</span>
+          </div>
+        ) : dmUser ? (
           <button className="main__title main__title--user" onClick={(e) => ui.showProfile(dmUser.id, e.currentTarget)}>
             <Avatar user={dmUser} size={30} status={dmStatus} />
             <h2>{dmUser.displayName}</h2>
@@ -84,16 +104,42 @@ export function ChatView() {
           </div>
         )}
         <div className="main__actions">
+          {dm && !inCall && (
+            <>
+              <button className="icon-btn" onClick={() => void startCall(dm.id, false)} data-tip={callMembers.length ? 'Присоединиться к звонку' : 'Голосовой звонок'}>
+                <Phone size={19} />
+              </button>
+              <button className="icon-btn" onClick={() => void startCall(dm.id, true)} data-tip="Видеозвонок">
+                <Video size={19} />
+              </button>
+            </>
+          )}
+          {group && (
+            <button className="icon-btn" onClick={() => ui.openGroupModal({ mode: 'add', dmId: group.id })} data-tip="Добавить друзей">
+              <UserPlus size={19} />
+            </button>
+          )}
           <button className={`icon-btn${asideOpen ? ' is-active' : ''}`} onClick={ui.toggleAside} data-tip={dmUser ? 'Профиль' : 'Участники'}>
             {dmUser ? <PanelRight size={19} /> : <Users size={19} />}
           </button>
         </div>
       </header>
 
+      {dm && inCall && <VoiceStage roomId={dm.id} variant="call" />}
+      {dm && !inCall && callMembers.length > 0 && <CallBanner members={callMembers} onJoin={() => void startCall(dm.id, false)} />}
+
       <div className="main__scroll chat__scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="chat__spacer" />
 
-        {dmUser ? (
+        {group ? (
+          <div className="welcome" key={channelId}>
+            <GroupAvatar memberIds={group.memberIds} size={84} />
+            <h3>{groupTitle}</h3>
+            <p>
+              Это начало группы <b>{groupTitle}</b>. Здесь можно переписываться и созваниваться всем вместе.
+            </p>
+          </div>
+        ) : dmUser ? (
           <div className="welcome" key={channelId}>
             <Avatar user={dmUser} size={84} status={dmStatus} ring />
             <h3>{dmUser.displayName}</h3>
@@ -186,6 +232,25 @@ export function ChatView() {
         )}
       </div>
     </section>
+  )
+}
+
+/** Плашка «идёт звонок» — если звонят без нас */
+function CallBanner({ members, onJoin }: { members: VoiceMember[]; onJoin: () => void }) {
+  const users = useChat((s) => s.users)
+  return (
+    <div className="call-banner">
+      <span className="call-banner__pulse" />
+      <div className="call-banner__avatars">
+        {members.slice(0, 4).map((m) => users[m.userId] && <Avatar key={m.userId} user={users[m.userId]} size={26} />)}
+      </div>
+      <span className="call-banner__text">
+        <b>Идёт звонок</b> · {members.length} {members.length === 1 ? 'участник' : 'участника'}
+      </span>
+      <button className="btn btn--primary btn--sm" onClick={onJoin}>
+        <Phone size={15} /> Присоединиться
+      </button>
+    </div>
   )
 }
 

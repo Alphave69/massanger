@@ -47,6 +47,8 @@ export interface Guild {
   channels: Channel[]
   memberIds: string[]
   createdAt: number
+  /** Общий сервер, куда попадают все новые люди: его нельзя удалить */
+  isLobby?: boolean
 }
 
 /** Связь между двумя людьми: заявка в друзья или уже дружба */
@@ -58,13 +60,20 @@ export interface Relation {
   createdAt: number
 }
 
-/** Личная переписка двух людей */
+/** Личная переписка двух людей (dm) или группа из нескольких (group) */
 export interface Dm {
   id: string
-  memberIds: [string, string]
+  kind: 'dm' | 'group'
+  memberIds: string[]
+  /** Название группы ('' — показываем имена участников) */
+  name: string
+  /** Создатель группы (у лички — null) */
+  ownerId: string | null
   createdAt: number
   lastMessageAt: number
 }
+
+export const GROUP_LIMIT = 10
 
 export interface Message {
   id: string
@@ -98,14 +107,26 @@ function load(): Data {
       tokenVersion: u.tokenVersion ?? 0,
     })),
     // общий сервер переименован вместе с приложением
-    guilds: (raw.guilds ?? []).map((g, i) => (i === 0 && g.name === 'Massanger' ? { ...g, name: 'Nuntius' } : g)),
+    guilds: migrateGuilds(raw.guilds ?? []),
     relations: raw.relations ?? [],
-    dms: raw.dms ?? [],
+    dms: (raw.dms ?? []).map((d) => ({ ...d, kind: d.kind ?? 'dm', name: d.name ?? '', ownerId: d.ownerId ?? null })),
     messages: raw.messages ?? [],
   }
 }
 
+function migrateGuilds(guilds: Guild[]): Guild[] {
+  // общий сервер переименован вместе с приложением и помечен флагом (раньше им был просто первый)
+  const hasLobby = guilds.some((g) => g.isLobby)
+  return guilds.map((g, i) => {
+    const lobby = g.isLobby || (!hasLobby && i === 0)
+    return { ...g, isLobby: lobby || undefined, name: lobby && g.name === 'Massanger' ? 'Nuntius' : g.name }
+  })
+}
+
 const data = load()
+
+/** Сохранить изменения, сделанные прямо в объектах (переименования и т.п.) */
+export const persist = () => save()
 
 let saveTimer: NodeJS.Timeout | null = null
 function save() {
@@ -178,15 +199,17 @@ function defaultChannels(): Channel[] {
 }
 
 function ensureLobby(ownerId: string): Guild {
-  let lobby = data.guilds[0]
+  let lobby = data.guilds.find((g) => g.isLobby)
   if (!lobby) {
-    lobby = { id: id(), name: 'Nuntius', ownerId, channels: defaultChannels(), memberIds: [], createdAt: Date.now() }
+    lobby = { id: id(), name: 'Nuntius', ownerId, channels: defaultChannels(), memberIds: [], createdAt: Date.now(), isLobby: true }
     data.guilds.push(lobby)
   }
   return lobby
 }
 
 export const findGuild = (guildId: string) => data.guilds.find((g) => g.id === guildId)
+
+export const allGuilds = () => data.guilds
 
 export const guildsOf = (userId: string) => data.guilds.filter((g) => g.memberIds.includes(userId))
 
@@ -205,6 +228,32 @@ export function joinGuild(guildId: string, userId: string): Guild | undefined {
     save()
   }
   return guild
+}
+
+/** Удалить сервер вместе с сообщениями его каналов */
+export function deleteGuild(guild: Guild) {
+  const channelIds = new Set(guild.channels.map((c) => c.id))
+  data.guilds = data.guilds.filter((g) => g !== guild)
+  data.messages = data.messages.filter((m) => !channelIds.has(m.channelId))
+  save()
+}
+
+export function addChannel(guild: Guild, name: string, type: Channel['type']): Channel {
+  const channel: Channel = { id: id(), name, type }
+  guild.channels.push(channel)
+  save()
+  return channel
+}
+
+export function removeChannel(guild: Guild, channelId: string) {
+  guild.channels = guild.channels.filter((c) => c.id !== channelId)
+  data.messages = data.messages.filter((m) => m.channelId !== channelId)
+  save()
+}
+
+export function removeGuildMember(guild: Guild, userId: string) {
+  guild.memberIds = guild.memberIds.filter((id) => id !== userId)
+  save()
 }
 
 export const shareGuild = (a: string, b: string) =>
@@ -243,13 +292,28 @@ export const findDm = (dmId: string) => data.dms.find((d) => d.id === dmId)
 export const dmsOf = (userId: string) => data.dms.filter((d) => d.memberIds.includes(userId))
 
 export function openDm(a: string, b: string): Dm {
-  let dm = data.dms.find((d) => d.memberIds.includes(a) && d.memberIds.includes(b))
+  let dm = data.dms.find((d) => d.kind === 'dm' && d.memberIds.includes(a) && d.memberIds.includes(b))
   if (!dm) {
-    dm = { id: id(), memberIds: [a, b], createdAt: Date.now(), lastMessageAt: 0 }
+    dm = { id: id(), kind: 'dm', memberIds: [a, b], name: '', ownerId: null, createdAt: Date.now(), lastMessageAt: 0 }
     data.dms.push(dm)
     save()
   }
   return dm
+}
+
+export function createGroup(ownerId: string, memberIds: string[], name: string): Dm {
+  const now = Date.now()
+  const group: Dm = { id: id(), kind: 'group', memberIds: [ownerId, ...memberIds], name, ownerId, createdAt: now, lastMessageAt: now }
+  data.dms.push(group)
+  save()
+  return group
+}
+
+/** Удалить переписку целиком (группа опустела) */
+export function deleteDm(dm: Dm) {
+  data.dms = data.dms.filter((d) => d !== dm)
+  data.messages = data.messages.filter((m) => m.channelId !== dm.id)
+  save()
 }
 
 // --- каналы: общий доступ к серверным каналам и личкам ---

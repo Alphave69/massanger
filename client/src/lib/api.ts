@@ -23,6 +23,17 @@ export interface Me extends User {
   email: string | null
 }
 
+export interface VoiceMember {
+  userId: string
+  muted: boolean
+  deafened: boolean
+  video: boolean
+  screen: boolean
+  cameraStream: string | null
+  screenStream: string | null
+  joinedAt: number
+}
+
 /** Служебные сообщения («теперь вы друзья») приходят с таким автором */
 export const SYSTEM_AUTHOR = 'system'
 
@@ -36,6 +47,8 @@ export interface Guild {
   id: string
   name: string
   ownerId: string
+  /** Общий сервер для всех — его нельзя удалить */
+  isLobby: boolean
   channels: Channel[]
   members: User[]
 }
@@ -50,9 +63,17 @@ export interface FriendEntry {
 
 export interface DmView {
   id: string
+  kind: 'dm' | 'group'
+  /** Название группы ('' — показываем имена участников) */
+  name: string
+  ownerId: string | null
+  members: User[]
+  /** Собеседник в личке (у группы — null) */
   user: User | null
   lastMessageAt: number
 }
+
+export const GROUP_LIMIT = 10
 
 export interface Message {
   id: string
@@ -68,6 +89,8 @@ export interface InitialState {
   friends: FriendEntry[]
   dms: DmView[]
   presence: Record<string, Presence>
+  voice: Record<string, VoiceMember[]>
+  rings: { roomId: string; from: string }[]
 }
 
 const TOKEN_KEY = 'nuntius.token'
@@ -146,6 +169,21 @@ export const api = {
   logoutAll: () => request<{ token: string }>('/me/logout-all', { method: 'POST' }),
 
   createGuild: (name: string) => request<{ guild: Guild }>('/guilds', { method: 'POST', body: { name } }),
+  renameGuild: (id: string, name: string) => request<{ guild: Guild }>(`/guilds/${id}`, { method: 'PATCH', body: { name } }),
+  deleteGuild: (id: string) => request<{ ok: true }>(`/guilds/${id}`, { method: 'DELETE' }),
+  leaveGuild: (id: string) => request<{ ok: true }>(`/guilds/${id}/leave`, { method: 'POST' }),
+  kickMember: (id: string, userId: string) => request<{ guild: Guild }>(`/guilds/${id}/members/${userId}`, { method: 'DELETE' }),
+  createChannel: (id: string, name: string, type: Channel['type']) =>
+    request<{ guild: Guild; channel: Channel }>(`/guilds/${id}/channels`, { method: 'POST', body: { name, type } }),
+  updateChannel: (id: string, channelId: string, patch: { name?: string; move?: -1 | 1 }) =>
+    request<{ guild: Guild }>(`/guilds/${id}/channels/${channelId}`, { method: 'PATCH', body: patch }),
+  deleteChannel: (id: string, channelId: string) => request<{ guild: Guild }>(`/guilds/${id}/channels/${channelId}`, { method: 'DELETE' }),
+
+  createGroup: (userIds: string[], name: string) => request<{ dm: DmView }>('/groups', { method: 'POST', body: { userIds, name } }),
+  renameGroup: (id: string, name: string) => request<{ dm: DmView }>(`/groups/${id}`, { method: 'PATCH', body: { name } }),
+  addToGroup: (id: string, userIds: string[]) => request<{ dm: DmView }>(`/groups/${id}/members`, { method: 'POST', body: { userIds } }),
+  removeFromGroup: (id: string, userId: string) => request<{ dm: DmView }>(`/groups/${id}/members/${userId}`, { method: 'DELETE' }),
+  leaveGroup: (id: string) => request<{ ok: true }>(`/groups/${id}/leave`, { method: 'POST' }),
   joinGuild: (code: string) => request<{ guild: Guild }>(`/guilds/${encodeURIComponent(code)}/join`, { method: 'POST' }),
 
   addFriend: (username: string) =>

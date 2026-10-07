@@ -15,6 +15,7 @@ import './styles/global.css'
 import './styles/auth.css'
 import './styles/app.css'
 import './styles/settings.css'
+import './styles/voice.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

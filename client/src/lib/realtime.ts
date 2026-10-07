@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client'
 import { api, getToken, SYSTEM_AUTHOR, type DmView, type FriendEntry, type Guild, type Me, type Message, type Presence, type User } from './api'
-import { chat, isDmChannel, useChat, type View } from './store'
+import { chat, dmTitle, isDmChannel, useChat, type View } from './store'
+import { attachVoice, initVoice } from './voice'
 import { blip, desktopNotify, pulseSphere } from './fx'
 import { useSettings } from './settings'
 import { ui } from './ui'
@@ -30,7 +31,7 @@ function notify(title: string, text: string, extra: { userId?: string; action?: 
   )
 }
 
-const dmWith = (userId: string) => useChat.getState().dms.find((d) => d.userId === userId)?.id
+const dmWith = (userId: string) => useChat.getState().dms.find((d) => d.kind === 'dm' && d.userId === userId)?.id
 
 export function connectRealtime(onUnauthorized: () => void) {
   socket?.disconnect()
@@ -43,6 +44,7 @@ export function connectRealtime(onUnauthorized: () => void) {
     },
   })
   socket = s
+  attachVoice(s)
 
   let connectedBefore = false
   s.on('connect', () => {
@@ -53,6 +55,7 @@ export function connectRealtime(onUnauthorized: () => void) {
         .state()
         .then((state) => {
           chat.init(state)
+          initVoice(state.voice, state.rings)
           chat.clearMessages()
         })
         .catch(() => {})
@@ -83,6 +86,12 @@ export function connectRealtime(onUnauthorized: () => void) {
   s.on('me:update', (me: Me) => chat.setMe(me))
   s.on('guild:update', (g: Guild) => chat.upsertGuild(g))
   s.on('dm:update', (dm: DmView) => chat.upsertDm(dm))
+  s.on('dm:removed', ({ dmId }: { dmId: string }) => chat.removeDm(dmId))
+  s.on('guild:removed', ({ guildId, reason, name }: { guildId: string; reason: 'deleted' | 'kicked' | 'left'; name: string }) => {
+    chat.removeGuild(guildId)
+    if (reason === 'deleted') chat.toast({ title: `«${name}» удалён`, text: 'Владелец удалил сервер' })
+    if (reason === 'kicked') chat.toast({ title: `Тебя убрали с «${name}»`, text: 'Владелец сервера исключил тебя' })
+  })
 
   s.on('friends:update', (list: FriendEntry[]) => {
     const before = new Map(useChat.getState().friends.map((f) => [f.userId, f.state]))
@@ -107,7 +116,9 @@ export function connectRealtime(onUnauthorized: () => void) {
     const st = useChat.getState()
     if (!mine && !isActive && m.authorId !== SYSTEM_AUTHOR && isDmChannel(st, m.channelId)) {
       const author = st.users[m.authorId]
-      notify(author?.displayName ?? 'Новое сообщение', m.content.slice(0, 120), {
+      const dm = st.dms.find((d) => d.id === m.channelId)
+      const title = dm?.kind === 'group' ? `${dmTitle(st, dm)} · ${author?.displayName ?? '…'}` : (author?.displayName ?? 'Новое сообщение')
+      notify(title, m.content.slice(0, 120), {
         userId: m.authorId,
         action: { kind: 'dm', dmId: m.channelId },
       })

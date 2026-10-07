@@ -10,6 +10,9 @@ import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, typ
 import * as store from './store.js'
 import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
+import { createVoice } from './voice.js'
+import { registerGuildRoutes } from './guilds.js'
+import { registerGroupRoutes } from './groups.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
@@ -32,6 +35,7 @@ function serializeGuild(guild: store.Guild) {
     id: guild.id,
     name: guild.name,
     ownerId: guild.ownerId,
+    isLobby: Boolean(guild.isLobby),
     channels: guild.channels,
     members: guild.memberIds.map(store.findUser).filter((u) => u !== undefined).map(store.publicUser),
   }
@@ -47,8 +51,26 @@ function friendEntries(userId: string) {
 }
 
 function dmView(dm: store.Dm, userId: string) {
-  const other = store.findUser(dm.memberIds.find((id) => id !== userId) ?? userId)
-  return { id: dm.id, user: other ? store.publicUser(other) : null, lastMessageAt: dm.lastMessageAt }
+  const members = dm.memberIds.map(store.findUser).filter((u) => u !== undefined).map(store.publicUser)
+  return {
+    id: dm.id,
+    kind: dm.kind,
+    name: dm.name,
+    ownerId: dm.ownerId,
+    members,
+    // у лички — собеседник (для группы null)
+    user: dm.kind === 'dm' ? (members.find((m) => m.id !== userId) ?? null) : null,
+    lastMessageAt: dm.lastMessageAt,
+  }
+}
+
+/** Служебное сообщение в личку/группу («создал группу», «пропущенный звонок» …) */
+function systemMessage(dm: store.Dm, text: string) {
+  const message = store.addMessage(dm.id, store.SYSTEM_AUTHOR, text)
+  for (const id of dm.memberIds) {
+    io.to(`user:${id}`).emit('message:new', message)
+    io.to(`user:${id}`).emit('dm:update', dmView(dm, id))
+  }
 }
 
 const dmsFor = (userId: string) => store.dmsOf(userId).map((dm) => dmView(dm, userId))
@@ -77,6 +99,17 @@ const canWriteDm = (fromId: string, to: store.User, dmId?: string) =>
   (to.privacy.dms === 'servers' && store.shareGuild(fromId, to.id)) ||
   // сам начал переписку — значит, ответить ему можно
   (dmId !== undefined && store.hasWritten(dmId, to.id))
+
+/** Собеседник в 1:1 личке */
+const otherIn = (dm: store.Dm, userId: string) => store.findUser(dm.memberIds.find((id) => id !== userId) ?? '')
+
+const voice = createVoice(io, {
+  canCall: (fromId, dm) => {
+    const other = otherIn(dm, fromId)
+    return Boolean(other && canWriteDm(fromId, other, dm.id))
+  },
+  systemMessage,
+})
 
 /** bcrypt учитывает только первые 72 байта (русская буква — 2 байта): длиннее не пускаем, чтобы пароль не обрезался молча */
 const tooLong = (password: string) => Buffer.byteLength(password, 'utf8') > 72
@@ -232,6 +265,8 @@ app.get('/api/state', requireAuth, (req, res) => {
     friends: friendEntries(user.id),
     dms: dmsFor(user.id),
     presence: presenceMap(),
+    voice: voice.visibleTo(user.id),
+    rings: voice.ringsFor(user.id),
   })
 })
 
@@ -436,6 +471,9 @@ app.get('/api/channels/:id/messages', requireAuth, (req, res) => {
   res.json({ messages: store.messagesIn(channelId) })
 })
 
+registerGuildRoutes(app, { io, voice, fail, serializeGuild })
+registerGroupRoutes(app, { io, voice, fail, dmView, systemMessage })
+
 // В продакшене отдаём собранный клиент с того же порта
 const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../client/dist')
 if (existsSync(clientDist)) {
@@ -463,6 +501,7 @@ io.on('connection', (socket) => {
 
   socketCount.set(userId, (socketCount.get(userId) ?? 0) + 1)
   broadcastPresence()
+  voice.attach(socket, userId)
 
   socket.on('message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: (r: unknown) => void) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
@@ -472,8 +511,8 @@ io.on('connection', (socket) => {
       ack?.({ error: 'Не удалось отправить сообщение' })
       return
     }
-    if (access.kind === 'dm') {
-      const other = store.findUser(access.dm.memberIds.find((id) => id !== userId) ?? '')
+    if (access.kind === 'dm' && access.dm.kind === 'dm') {
+      const other = otherIn(access.dm, userId)
       if (!other || !canWriteDm(userId, other, access.dm.id)) {
         ack?.({ error: 'Собеседник принимает сообщения только от друзей' })
         return
@@ -491,8 +530,8 @@ io.on('connection', (socket) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
     if (!access) return
-    if (access.kind === 'dm') {
-      const other = store.findUser(access.dm.memberIds.find((id) => id !== userId) ?? '')
+    if (access.kind === 'dm' && access.dm.kind === 'dm') {
+      const other = otherIn(access.dm, userId)
       if (!other || !canWriteDm(userId, other, access.dm.id)) return
     }
     socket.to(roomsFor(access)).emit('typing', { channelId, userId })

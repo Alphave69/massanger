@@ -108,3 +108,63 @@ export function startGlowTracking() {
     cancelAnimationFrame(raf)
   }
 }
+
+// ============ звуки голоса и звонков ============
+
+export type ToneKind = 'join' | 'leave' | 'join-other' | 'leave-other' | 'mute' | 'unmute' | 'ring' | 'ringback'
+
+/** Ноты: [частота, начало (с), длительность (с)] — короткие мягкие синусы, без файлов */
+const TONES: Record<ToneKind, [number, number, number][]> = {
+  join: [
+    [523, 0, 0.12],
+    [784, 0.09, 0.18],
+  ],
+  leave: [
+    [784, 0, 0.12],
+    [523, 0.09, 0.2],
+  ],
+  'join-other': [[880, 0, 0.12]],
+  'leave-other': [[440, 0, 0.14]],
+  mute: [[330, 0, 0.07]],
+  unmute: [[660, 0, 0.07]],
+  ring: [
+    [740, 0, 0.18],
+    [988, 0.2, 0.18],
+    [740, 0.45, 0.18],
+    [988, 0.65, 0.22],
+  ],
+  ringback: [[440, 0, 0.9]],
+}
+
+/** Сыграть звук голоса/звонка (при «выключенном звуке» молчим) */
+export async function tone(kind: ToneKind) {
+  const s = useSettings.getState()
+  if (s.deafened) return
+  try {
+    const ctx = await soundContext()
+    if (ctx.state !== 'running') await ctx.resume().catch(() => {})
+    const volume = (kind === 'ring' || kind === 'ringback' ? 0.07 : 0.05) * (s.outputVolume / 100)
+    const start = ctx.currentTime + 0.01
+    for (const [freq, at, dur] of TONES[kind]) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, start + at)
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + at + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + at + dur)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start + at)
+      osc.stop(start + at + dur + 0.02)
+    }
+  } catch {
+    // звук недоступен — не страшно
+  }
+}
+
+/** Повторять звук, пока не остановят (рингтон, гудки). Возвращает «стоп» */
+export function toneLoop(kind: ToneKind, every: number) {
+  void tone(kind)
+  const timer = window.setInterval(() => void tone(kind), every)
+  return () => window.clearInterval(timer)
+}

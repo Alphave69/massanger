@@ -1,9 +1,12 @@
-import { Users } from 'lucide-react'
-import { STATUS_LABEL } from '../lib/status'
-import { chat, presenceOf, useChat, type DmRef } from '../lib/store'
-import { isOnline } from '../lib/status'
+import { Phone, Plus, Users } from 'lucide-react'
+import { STATUS_LABEL, isOnline } from '../lib/status'
+import { chat, dmTitle, presenceOf, useChat, type DmRef } from '../lib/store'
+import { ui } from '../lib/ui'
+import { useVoice } from '../lib/voice'
 import { Avatar } from './Avatar'
+import { GroupAvatar } from './groups/GroupAvatar'
 import { UserBar } from './UserBar'
+import { VoicePanel } from './voice/VoicePanel'
 
 export function HomeSidebar({ onLogout }: { onLogout: () => void }) {
   const view = useChat((s) => s.view)
@@ -32,27 +35,47 @@ export function HomeSidebar({ onLogout }: { onLogout: () => void }) {
           {requests > 0 && <span className="count-badge">{requests}</span>}
         </button>
 
-        <div className="side__label">
-          <span>Личные сообщения</span>
+        <div className="chgroup__head">
+          <div className="side__label">
+            <span>Личные сообщения</span>
+          </div>
+          <button className="chgroup__add" onClick={() => ui.openGroupModal({ mode: 'create' })} data-tip="Создать группу" aria-label="Создать группу">
+            <Plus size={15} />
+          </button>
         </div>
 
-        {sorted.length === 0 && <p className="side__empty">Здесь появятся переписки. Открой друга и нажми «Написать» ✦</p>}
+        {sorted.length === 0 && <p className="side__empty">Здесь появятся переписки и группы. Открой друга и нажми «Написать» ✦</p>}
         {sorted.map((d, i) => (
           <DmRow key={d.id} dm={d} active={view.kind === 'dm' && view.dmId === d.id} index={i} />
         ))}
       </div>
 
+      <VoicePanel />
       <UserBar onLogout={onLogout} />
     </aside>
   )
 }
 
 function DmRow({ dm, active, index }: { dm: DmRef; active: boolean; index: number }) {
-  const user = useChat((s) => s.users[dm.userId])
-  const status = useChat((s) => presenceOf(s, dm.userId))
+  const title = useChat((s) => dmTitle(s, dm))
+  const user = useChat((s) => (dm.userId ? s.users[dm.userId] : undefined))
+  const status = useChat((s) => (dm.userId ? presenceOf(s, dm.userId) : 'offline'))
   const unread = useChat((s) => s.unread[dm.id] ?? 0)
-  const typing = useChat((s) => Boolean(s.typing[dm.id]?.[dm.userId]))
-  if (!user) return null
+  const typingName = useChat((s) => {
+    const who = Object.keys(s.typing[dm.id] ?? {})[0]
+    return who ? (s.users[who]?.displayName ?? '…') : null
+  })
+  const inCall = useVoice((s) => (s.rooms[dm.id]?.length ?? 0) > 0)
+
+  const sub = typingName
+    ? dm.kind === 'group'
+      ? `${typingName} печатает…`
+      : 'печатает…'
+    : dm.kind === 'group'
+      ? `${dm.memberIds.length} участников`
+      : user
+        ? user.customStatus || STATUS_LABEL[status]
+        : ''
 
   return (
     <button
@@ -60,13 +83,16 @@ function DmRow({ dm, active, index }: { dm: DmRef; active: boolean; index: numbe
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={() => chat.setView({ kind: 'dm', dmId: dm.id })}
     >
-      <Avatar user={user} size={34} status={status} />
+      {dm.kind === 'group' ? <GroupAvatar memberIds={dm.memberIds} size={34} /> : user && <Avatar user={user} size={34} status={status} />}
       <span className="dm-row__text">
-        <span className="dm-row__name truncate">{user.displayName}</span>
-        <span className={`dm-row__sub truncate${typing ? ' is-typing' : ''}`}>
-          {typing ? 'печатает…' : user.customStatus || STATUS_LABEL[status]}
-        </span>
+        <span className="dm-row__name truncate">{title}</span>
+        <span className={`dm-row__sub truncate${typingName ? ' is-typing' : ''}`}>{sub}</span>
       </span>
+      {inCall && (
+        <span className="dm-row__call" data-tip="Идёт звонок">
+          <Phone size={13} />
+        </span>
+      )}
       {unread > 0 && <span className="count-badge">{unread}</span>}
     </button>
   )
