@@ -162,6 +162,16 @@ io.on('connection', (socket) => {
   })
 })
 
+http.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n  ✖ Порт ${PORT} уже занят — похоже, Massanger уже запущен в другом окне.`)
+    console.error('    Закрой все чёрные окна (cmd, Git Bash) и запусти start.bat снова.\n')
+  } else {
+    console.error(err)
+  }
+  process.exit(1)
+})
+
 http.listen(PORT, () => {
   const url = existsSync(clientDist) ? `http://localhost:${PORT}` : 'http://localhost:5173'
   console.log(`Massanger запущен → открой ${url}`)
