@@ -10,7 +10,7 @@ const supportsDesktop = typeof Notification !== 'undefined'
 export function NotificationsSection() {
   const s = useSettings()
   const dnd = useChat((st) => st.me?.status === 'dnd')
-  const [permission, setPermission] = useState(supportsDesktop ? Notification.permission : 'denied')
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(supportsDesktop ? Notification.permission : 'unsupported')
 
   const toggleDesktop = async (on: boolean) => {
     if (!on) return setSetting('desktop', false)
@@ -45,6 +45,7 @@ export function NotificationsSection() {
           disabled={!supportsDesktop}
           onChange={(v) => void toggleDesktop(v)}
         />
+        {permission === 'unsupported' && <p className="muted">Этот браузер не поддерживает системные уведомления.</p>}
         {permission === 'denied' && (
           <p className="muted">
             Браузер запретил уведомления для этого сайта. Разреши их: значок слева от адреса → «Уведомления» → «Разрешить», потом включи

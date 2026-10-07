@@ -24,7 +24,6 @@ async function soundContext() {
       // устройство пропало — играем в устройство по умолчанию
     }
   }
-  if (audio.state === 'suspended') await audio.resume().catch(() => {})
   return audio
 }
 
@@ -34,6 +33,13 @@ export async function blip(force = false) {
   if ((!s.sounds || s.deafened) && !force) return
   try {
     const ctx = await soundContext()
+    // Пока пользователь ни разу не кликнул, браузер держит звук на паузе — такие сигналы не копим, а пропускаем
+    const running = () => ctx.state === 'running' // функция: состояние меняется после resume()
+    if (!running()) {
+      if (force) await ctx.resume().catch(() => {})
+      else void ctx.resume().catch(() => {})
+      if (!running()) return
+    }
     const now = ctx.currentTime
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()

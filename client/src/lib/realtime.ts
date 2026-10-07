@@ -3,6 +3,7 @@ import { api, getToken, SYSTEM_AUTHOR, type DmView, type FriendEntry, type Guild
 import { chat, isDmChannel, useChat, type View } from './store'
 import { blip, desktopNotify, pulseSphere } from './fx'
 import { useSettings } from './settings'
+import { ui } from './ui'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -17,7 +18,16 @@ function notify(title: string, text: string, extra: { userId?: string; action?: 
   void blip()
   if (useSettings.getState().toasts) chat.toast({ title, text, userId: extra.userId, action: extra.action })
   const action = extra.action
-  desktopNotify(title, text, action ? () => chat.setView(action) : undefined)
+  desktopNotify(
+    title,
+    text,
+    action
+      ? () => {
+          ui.closeSettings()
+          chat.setView(action)
+        }
+      : undefined,
+  )
 }
 
 const dmWith = (userId: string) => useChat.getState().dms.find((d) => d.userId === userId)?.id

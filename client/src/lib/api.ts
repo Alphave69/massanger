@@ -128,7 +128,9 @@ export const api = {
     request<AuthResponse>('/auth/login', { method: 'POST', body: { username, password } }),
   me: () => request<{ user: Me }>('/me'),
   state: () => request<InitialState>('/state'),
-  updateMe: (patch: Partial<Pick<Me, 'displayName' | 'username' | 'customStatus' | 'bio' | 'status'>> & { privacy?: Partial<Privacy> }) =>
+  updateMe: (
+    patch: Partial<Pick<Me, 'displayName' | 'username' | 'customStatus' | 'bio' | 'status'>> & { privacy?: Partial<Privacy>; password?: string },
+  ) =>
     request<{ user: Me }>('/me', { method: 'PATCH', body: patch }),
   changePassword: (current: string, next: string) => request<{ token: string }>('/me/password', { method: 'POST', body: { current, next } }),
   logoutAll: () => request<{ token: string }>('/me/logout-all', { method: 'POST' }),

@@ -261,6 +261,9 @@ export function channelAccess(channelId: string, userId: string): ChannelAccess 
 
 // --- messages ---
 
+/** Писал ли человек в этот канал хоть раз */
+export const hasWritten = (channelId: string, userId: string) => data.messages.some((m) => m.channelId === channelId && m.authorId === userId)
+
 export function messagesIn(channelId: string, limit = 150): Message[] {
   return data.messages.filter((m) => m.channelId === channelId).slice(-limit)
 }

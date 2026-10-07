@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { chat, useChat } from '../lib/store'
-import { useUi } from '../lib/ui'
+import { ui, useUi } from '../lib/ui'
 import { Dock } from './Dock'
 import { HomeSidebar } from './HomeSidebar'
 import { GuildSidebar } from './GuildSidebar'
@@ -41,6 +41,7 @@ export function Shell({ onLogout }: Props) {
       alive = false
       stop()
       chat.reset()
+      ui.reset() // иначе после выхода и нового входа сразу открылись бы настройки
     }
   }, [onLogout])
 
@@ -67,7 +68,7 @@ export function Shell({ onLogout }: Props) {
 
   return (
     <>
-    <div className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}`} aria-hidden={settingsOpen}>
+    <div className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}`} aria-hidden={settingsOpen} inert={settingsOpen}>
       <Dock />
       {view.kind === 'guild' ? <GuildSidebar guildId={view.guildId} onLogout={onLogout} /> : <HomeSidebar onLogout={onLogout} />}
       {view.kind === 'home' ? <FriendsPage tab={view.tab} /> : <ChatView />}
@@ -78,11 +79,12 @@ export function Shell({ onLogout }: Props) {
       )}
 
       {!connected && <div className="conn-banner">Переподключаемся к серверу…</div>}
-      <Toasts />
       <Modals />
       <ProfileCard />
     </div>
     <Settings onLogout={onLogout} />
+    {/* уведомления — поверх всего, в том числе поверх настроек */}
+    <Toasts />
     </>
   )
 }

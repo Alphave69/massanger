@@ -558,7 +558,7 @@ p.muted {
   display: flex;
   align-items: flex-end;
   gap: 16px;
-  margin-top: -44px;
+  margin-top: -40px;
   padding: 0 20px;
 }
 
@@ -571,7 +571,11 @@ p.muted {
 .account-card__who {
   flex: 1;
   min-width: 0;
-  padding-bottom: 8px;
+}
+
+.inline-edit__password {
+  height: 40px;
+  max-width: 260px;
 }
 
 .account-card__name {

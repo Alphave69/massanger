@@ -35,4 +35,5 @@ export const ui = {
   hideProfile: () => useUi.setState({ profile: null }),
   openSettings: (section: SettingsSection = 'account') => useUi.setState({ settings: section, statusMenuOpen: false, profile: null }),
   closeSettings: () => useUi.setState({ settings: null }),
+  reset: () => useUi.setState({ modal: null, profile: null, statusMenuOpen: false, settings: null }),
 }

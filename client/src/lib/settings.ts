@@ -90,7 +90,8 @@ export const uiZoom = () => useSettings.getState().uiScale
 /** Сохраняем и сразу применяем к странице: CSS-переменные и классы на <html> */
 function apply(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s))
+    const json = JSON.stringify(s)
+    if (localStorage.getItem(KEY) !== json) localStorage.setItem(KEY, json)
   } catch {
     // нет доступа к хранилищу — настройки проживут до перезагрузки
   }
@@ -104,6 +105,16 @@ function apply(s: Settings) {
 
 apply(useSettings.getState())
 useSettings.subscribe(apply)
+
+// Настройки, изменённые в другой вкладке, подхватываем здесь — чтобы вкладки не затирали друг друга
+window.addEventListener('storage', (e) => {
+  if (e.key !== KEY || !e.newValue) return
+  try {
+    useSettings.setState({ ...DEFAULT_SETTINGS, ...JSON.parse(e.newValue) })
+  } catch {
+    // битое значение — игнорируем
+  }
+})
 
 /** Красивое имя клавиши для «нажми и говори» */
 export function keyLabel(code: string) {

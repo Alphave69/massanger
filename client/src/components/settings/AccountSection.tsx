@@ -95,7 +95,9 @@ interface InlineEditProps {
 /** Поле, которое редактируется прямо в строке */
 function InlineEdit({ field, label, hint, initial, maxLength, onDone }: InlineEditProps) {
   const [value, setValue] = useState(initial)
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const needsPassword = field === 'username'
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
@@ -103,10 +105,12 @@ function InlineEdit({ field, label, hint, initial, maxLength, onDone }: InlineEd
     const v = value.trim()
     if (!v || busy) return
     if (v === initial) return onDone()
+    if (needsPassword && !password) return setError('Введи текущий пароль — без него логин не сменить')
     setBusy(true)
     setError(null)
     try {
-      chat.setMe((await api.updateMe({ [field]: v } as Partial<Pick<Me, typeof field>>)).user)
+      const patch = { [field]: v, ...(needsPassword ? { password } : {}) } as Partial<Pick<Me, typeof field>> & { password?: string }
+      chat.setMe((await api.updateMe(patch)).user)
       chat.toast({ title: 'Сохранено', text: `${label}: ${field === 'username' ? '@' : ''}${v}` })
       onDone()
     } catch (err) {
@@ -128,6 +132,16 @@ function InlineEdit({ field, label, hint, initial, maxLength, onDone }: InlineEd
           {busy ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />} Сохранить
         </button>
       </div>
+      {needsPassword && (
+        <input
+          className="input inline-edit__password"
+          type="password"
+          autoComplete="current-password"
+          placeholder="Текущий пароль"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      )}
       {hint && !error && <span className="muted">{hint}</span>}
       {error && <span className="form-error">{error}</span>}
     </form>

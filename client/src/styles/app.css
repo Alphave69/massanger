@@ -1840,7 +1840,7 @@
   position: fixed;
   right: 20px;
   bottom: 20px;
-  z-index: 200;
+  z-index: 400;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

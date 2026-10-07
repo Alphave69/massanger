@@ -1,4 +1,5 @@
 import { chat, useChat } from '../lib/store'
+import { ui } from '../lib/ui'
 import { Avatar } from './Avatar'
 import { MiniSphere } from './MiniSphere'
 
@@ -8,7 +9,7 @@ export function Toasts() {
   const users = useChat((s) => s.users)
 
   return (
-    <div className="toasts" aria-live="polite">
+    <div className="toasts zoomed" aria-live="polite">
       {toasts.map((t) => {
         const user = t.userId ? users[t.userId] : undefined
         return (
@@ -16,7 +17,10 @@ export function Toasts() {
             key={t.id}
             className={`toast glow${t.action ? ' toast--action' : ''}`}
             onClick={() => {
-              if (t.action) chat.setView(t.action)
+              if (t.action) {
+                ui.closeSettings()
+                chat.setView(t.action)
+              }
               chat.dismissToast(t.id)
             }}
           >

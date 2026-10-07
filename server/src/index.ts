@@ -69,8 +69,14 @@ function befriend(a: string, b: string) {
 }
 
 /** Может ли `fromId` писать в личку человеку `to` с учётом его настроек приватности */
-const canWriteDm = (fromId: string, to: store.User) =>
-  store.areFriends(fromId, to.id) || (to.privacy.dms === 'servers' && store.shareGuild(fromId, to.id))
+const canWriteDm = (fromId: string, to: store.User, dmId?: string) =>
+  store.areFriends(fromId, to.id) ||
+  (to.privacy.dms === 'servers' && store.shareGuild(fromId, to.id)) ||
+  // сам начал переписку — значит, ответить ему можно
+  (dmId !== undefined && store.hasWritten(dmId, to.id))
+
+/** bcrypt учитывает только первые 72 байта (русская буква — 2 байта): длиннее не пускаем, чтобы пароль не обрезался молча */
+const tooLong = (password: string) => Buffer.byteLength(password, 'utf8') > 72
 
 /** После смены пароля / «выйти везде» отключаем сокеты, вошедшие со старым токеном */
 async function kickStaleSockets(user: store.User) {
@@ -107,7 +113,7 @@ app.post('/api/auth/register', async (req, res) => {
   const { username, displayName, password } = req.body ?? {}
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) return fail(res, 400, 'Логин: 3–32 символа, латиница, цифры, _ и .')
   if (typeof password !== 'string' || password.length < 6) return fail(res, 400, 'Пароль должен быть не короче 6 символов')
-  if (password.length > 72) return fail(res, 400, 'Пароль слишком длинный — максимум 72 символа')
+  if (tooLong(password)) return fail(res, 400, 'Пароль слишком длинный — сократи его (русская буква занимает вдвое больше места)')
   if (store.findUserByName(username)) return fail(res, 409, 'Такой логин уже занят')
 
   const name = typeof displayName === 'string' && displayName.trim() ? displayName.trim().slice(0, 32) : username
@@ -142,7 +148,7 @@ app.get('/api/state', requireAuth, (req, res) => {
   })
 })
 
-app.patch('/api/me', requireAuth, (req, res) => {
+app.patch('/api/me', requireAuth, async (req, res) => {
   const { user } = req as AuthedRequest
   const { displayName, customStatus, status, username, bio, privacy } = req.body ?? {}
   const patch: store.UserPatch = {}
@@ -151,6 +157,11 @@ app.patch('/api/me', requireAuth, (req, res) => {
     if (typeof username !== 'string' || !USERNAME_RE.test(username)) return fail(res, 400, 'Логин: 3–32 символа, латиница, цифры, _ и .')
     const taken = store.findUserByName(username)
     if (taken && taken.id !== user.id) return fail(res, 409, 'Такой логин уже занят')
+    // Логин — то, чем входят: менять только с паролем, иначе чужой оставленный сеанс может «увести» аккаунт
+    const password = req.body?.password
+    if (username !== user.username && (typeof password !== 'string' || !(await checkPassword(password, user.passwordHash)))) {
+      return fail(res, 403, 'Чтобы сменить логин, введи верный текущий пароль')
+    }
     patch.username = username
   }
   if (bio !== undefined) {
@@ -196,7 +207,7 @@ app.post('/api/me/password', requireAuth, async (req, res) => {
   const { current, next } = req.body ?? {}
   if (typeof current !== 'string' || !(await checkPassword(current, user.passwordHash))) return fail(res, 403, 'Текущий пароль введён неверно')
   if (typeof next !== 'string' || next.length < 6) return fail(res, 400, 'Новый пароль должен быть не короче 6 символов')
-  if (next.length > 72) return fail(res, 400, 'Пароль слишком длинный — максимум 72 символа')
+  if (tooLong(next)) return fail(res, 400, 'Пароль слишком длинный — сократи его (русская буква занимает вдвое больше места)')
   if (next === current) return fail(res, 400, 'Новый пароль совпадает со старым')
   store.updateUser(user, { passwordHash: await hashPassword(next), tokenVersion: user.tokenVersion + 1 })
   void kickStaleSockets(user)
@@ -343,7 +354,7 @@ io.on('connection', (socket) => {
     }
     if (access.kind === 'dm') {
       const other = store.findUser(access.dm.memberIds.find((id) => id !== userId) ?? '')
-      if (!other || !canWriteDm(userId, other)) {
+      if (!other || !canWriteDm(userId, other, access.dm.id)) {
         ack?.({ error: 'Собеседник принимает сообщения только от друзей' })
         return
       }
@@ -359,7 +370,12 @@ io.on('connection', (socket) => {
   socket.on('typing', (payload: { channelId?: unknown }) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
-    if (access) socket.to(roomsFor(access)).emit('typing', { channelId, userId })
+    if (!access) return
+    if (access.kind === 'dm') {
+      const other = store.findUser(access.dm.memberIds.find((id) => id !== userId) ?? '')
+      if (!other || !canWriteDm(userId, other, access.dm.id)) return
+    }
+    socket.to(roomsFor(access)).emit('typing', { channelId, userId })
   })
 
   // Клиент сам сообщает, что человек отошёл (нет активности несколько минут)

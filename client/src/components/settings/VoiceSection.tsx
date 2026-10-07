@@ -41,12 +41,17 @@ export function VoiceSection() {
     }
   }
 
-  const deviceOptions = (list: MediaDeviceInfo[], fallback: string) => [
-    { value: '', label: 'По умолчанию (системное)' },
-    ...list
-      .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
-      .map((d, i) => ({ value: d.deviceId, label: d.label || `${fallback} ${i + 1}` })),
-  ]
+  const deviceOptions = (list: MediaDeviceInfo[], fallback: string, current: string) => {
+    const options = [
+      { value: '', label: 'По умолчанию (системное)' },
+      ...list
+        .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+        .map((d, i) => ({ value: d.deviceId, label: d.label || `${fallback} ${i + 1}` })),
+    ]
+    // Выбранное устройство отключили — показываем это, а не делаем вид, что стоит «по умолчанию»
+    if (current && !options.some((o) => o.value === current)) options.push({ value: current, label: 'Отключённое устройство' })
+    return options
+  }
 
   return (
     <>
@@ -71,13 +76,13 @@ export function VoiceSection() {
               <Select
                 label="Микрофон"
                 value={s.inputDeviceId}
-                options={deviceOptions(inputs, 'Микрофон')}
+                options={deviceOptions(inputs, 'Микрофон', s.inputDeviceId)}
                 onChange={(v) => setSetting('inputDeviceId', v)}
               />
               <Select
                 label="Динамики / наушники"
                 value={s.outputDeviceId}
-                options={deviceOptions(outputs, 'Устройство вывода')}
+                options={deviceOptions(outputs, 'Устройство вывода', s.outputDeviceId)}
                 disabled={!canPickOutput}
                 onChange={(v) => setSetting('outputDeviceId', v)}
               />
@@ -147,13 +152,14 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
-            deviceId: s.inputDeviceId ? { exact: s.inputDeviceId } : undefined,
+            deviceId: s.inputDeviceId ? { ideal: s.inputDeviceId } : undefined,
             noiseSuppression: s.noiseSuppression,
             echoCancellation: s.echoCancellation,
             autoGainControl: s.autoGain,
           },
         })
       } catch {
+        if (cancelled) return
         onError('Не получилось включить микрофон. Проверь, что он подключён и браузеру разрешён доступ.')
         setTesting(false)
         return
@@ -165,6 +171,8 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
       onError(null)
       ctx = new AudioContext()
       if (s.outputDeviceId && (ctx as SinkCapable).setSinkId) await (ctx as SinkCapable).setSinkId!(s.outputDeviceId).catch(() => {})
+      // Пока ждали устройство вывода, проверку могли остановить — тогда всё уже закрыто
+      if (cancelled) return
       const source = ctx.createMediaStreamSource(stream)
       const inGain = ctx.createGain()
       const analyser = ctx.createAnalyser()
@@ -176,6 +184,7 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
       const buf = new Float32Array(analyser.fftSize)
       let shown = 0
       const tick = () => {
+        if (cancelled) return
         inGain.gain.value = live.current.inputVolume / 100
         outGain.gain.value = live.current.outputVolume / 100
         analyser.getFloatTimeDomainData(buf)
