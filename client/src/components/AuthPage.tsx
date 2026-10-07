@@ -1,24 +1,23 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, LoaderCircle } from 'lucide-react'
-import { api, ApiError, type User } from '../lib/api'
-import { ParticleSphere } from './ParticleSphere'
-import { Logo } from './Logo'
+import { api, ApiError, type Me } from '../lib/api'
+import { MiniSphere } from './MiniSphere'
 
 interface Props {
-  onAuth: (token: string, user: User) => void
+  onAuth: (token: string, user: Me) => void
+  leaving: boolean
 }
 
 type Mode = 'login' | 'register'
 
-export function AuthPage({ onAuth }: Props) {
+export function AuthPage({ onAuth, leaving }: Props) {
   const [mode, setMode] = useState<Mode>('register')
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const formRef = useRef<HTMLFormElement>(null)
   const [busy, setBusy] = useState(false)
-  const [leaving, setLeaving] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const switchMode = (next: Mode) => {
     setMode(next)
@@ -32,11 +31,10 @@ export function AuthPage({ onAuth }: Props) {
     setError(null)
     try {
       const res = mode === 'register' ? await api.register(username, displayName, password) : await api.login(username, password)
-      // Даём странице красиво «уйти» перед входом
-      setLeaving(true)
-      setTimeout(() => onAuth(res.token, res.user), 450)
+      onAuth(res.token, res.user)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Что-то пошло не так')
+      setBusy(false)
       // перезапускаем анимацию «тряски» карточки
       const form = formRef.current
       if (form) {
@@ -44,25 +42,22 @@ export function AuthPage({ onAuth }: Props) {
         void form.offsetWidth
         form.classList.add('auth-card--shake')
       }
-      setBusy(false)
     }
   }
 
   return (
     <div className={`auth${leaving ? ' auth--leaving' : ''}`}>
-      <ParticleSphere className="auth__sphere" />
-      <div className="auth__vignette" />
-
-      <div className="auth__tagline">
+      <div className="auth__tagline" aria-hidden="true">
         <span>твой сервер.</span>
         <span>твои люди.</span>
+        <span className="auth__tagline-meta">// nuntius · v0.2</span>
       </div>
 
       <main className="auth__panel">
-        <form ref={formRef} className="auth-card" onSubmit={submit} noValidate>
+        <form ref={formRef} className="auth-card glow" onSubmit={submit} noValidate>
           <div className="auth-card__brand">
-            <Logo size={34} />
-            <span className="auth-card__wordmark">Massanger</span>
+            <MiniSphere size={34} dots={70} />
+            <span className="auth-card__wordmark">Nuntius</span>
           </div>
 
           <div className="auth-tabs" role="tablist">
@@ -135,7 +130,7 @@ interface FieldProps {
 
 function Field({ label, value, onChange, type = 'text', autoComplete, autoFocus, tabIndex }: FieldProps) {
   return (
-    <label className={`field${value ? ' field--filled' : ''}`}>
+    <label className="field">
       <input
         type={type}
         value={value}

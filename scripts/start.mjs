@@ -11,7 +11,7 @@ const say = (text = '') => console.log(text)
 const run = (cmd) => spawnSync(cmd, { shell: true, stdio: 'inherit' }).status
 
 say()
-say('  ●  Massanger')
+say('  ●  Nuntius')
 say()
 
 const [major, minor] = process.versions.node.split('.').map(Number)
@@ -45,6 +45,6 @@ say()
 const code = spawnSync(process.execPath, ['scripts/dev.mjs'], { stdio: 'inherit' }).status ?? 0
 if (code !== 0) {
   say()
-  say('  ✖ Massanger остановился с ошибкой. Пришли скриншот этого окна.')
+  say('  ✖ Nuntius остановился с ошибкой. Пришли скриншот этого окна.')
 }
 process.exit(code)

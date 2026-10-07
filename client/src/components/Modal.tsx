@@ -17,7 +17,7 @@ export function Modal({ title, subtitle, onClose, children }: Props) {
 
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal glow" role="dialog" aria-modal="true" aria-label={title}>
         <button className="modal__close icon-btn" onClick={onClose} aria-label="Закрыть">
           <X size={20} />
         </button>

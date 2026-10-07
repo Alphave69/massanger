@@ -1,33 +1,38 @@
 .auth {
-  position: relative;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(ellipse at 34% 50%, #111 0%, #000 60%);
-  transition:
-    opacity 0.45s ease,
-    transform 0.45s var(--ease-out),
-    filter 0.45s ease;
 }
 
-.auth--leaving {
-  opacity: 0;
-  transform: scale(1.04);
-  filter: blur(6px);
-}
-
-.auth__sphere {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.auth__vignette {
-  position: absolute;
+/* затемнение по краям, чтобы сфера «светилась» из темноты */
+.auth::before {
+  content: '';
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.7) 100%);
+  background: radial-gradient(ellipse at 34% 50%, transparent 40%, rgba(0, 0, 0, 0.65) 100%);
+}
+
+.auth--leaving .auth-card {
+  animation: card-out 0.6s var(--ease-out) forwards;
+}
+
+.auth--leaving .auth__tagline {
+  animation: tagline-out 0.5s var(--ease-out) forwards;
+}
+
+@keyframes card-out {
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+    filter: blur(8px);
+  }
+}
+
+@keyframes tagline-out {
+  to {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
 }
 
 .auth__tagline {
@@ -36,13 +41,14 @@
   bottom: 44px;
   display: flex;
   flex-direction: column;
-  font-family: var(--font-display);
-  font-size: clamp(22px, 2.6vw, 38px);
+  font-family: var(--display);
+  font-size: clamp(22px, 2.6vw, 40px);
   font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--text-0);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--text);
   pointer-events: none;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
 }
 
 .auth__tagline span {
@@ -54,7 +60,20 @@
 }
 .auth__tagline span:nth-child(2) {
   animation-delay: 0.75s;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.7);
+  text-shadow: none;
+}
+
+.auth__tagline .auth__tagline-meta {
+  margin-top: 14px;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--text-3);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+  animation-delay: 0.9s;
 }
 
 .auth__panel {
@@ -62,7 +81,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(520px, 46vw);
+  width: min(540px, 46vw);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -70,16 +89,20 @@
 }
 
 .auth-card {
+  position: relative;
   pointer-events: auto;
   width: 100%;
   max-width: 400px;
   padding: 32px;
-  border-radius: 22px;
-  background: rgba(10, 10, 10, 0.72);
-  border: 1px solid var(--line-strong);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  border-radius: 26px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid var(--line-2);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, 0.8),
+    0 0 60px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   animation: card-in 0.9s 0.2s var(--ease-out) both;
 }
 
@@ -87,6 +110,7 @@
   from {
     opacity: 0;
     transform: translateY(24px) scale(0.98);
+    filter: blur(6px);
   }
 }
 
@@ -94,38 +118,19 @@
   animation: shake 0.45s var(--ease-out);
 }
 
-@keyframes shake {
-  20% {
-    transform: translateX(-8px);
-  }
-  40% {
-    transform: translateX(7px);
-  }
-  60% {
-    transform: translateX(-4px);
-  }
-  80% {
-    transform: translateX(2px);
-  }
-}
-
 .auth-card__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 26px;
-  color: var(--text-0);
-}
-
-.auth-card__brand .logo {
-  animation: spin 14s linear infinite;
+  color: var(--text);
 }
 
 .auth-card__wordmark {
-  font-family: var(--font-display);
+  font-family: var(--display);
   font-weight: 700;
   font-size: 20px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 /* Переключатель вход/регистрация с «ползунком» */
@@ -134,9 +139,9 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 4px;
-  margin-bottom: 24px;
-  border-radius: 12px;
-  background: var(--bg-3);
+  margin-bottom: 26px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
 }
 
@@ -146,31 +151,33 @@
   bottom: 4px;
   left: 4px;
   width: calc(50% - 4px);
-  border-radius: 9px;
-  background: var(--text-0);
+  border-radius: 10px;
+  background: var(--text);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
   transition: transform 0.45s var(--ease-spring);
 }
 
 .auth-tabs button {
   position: relative;
-  height: 34px;
+  height: 36px;
   font-size: 14px;
   font-weight: 600;
+  text-align: center;
   color: var(--text-2);
   transition: color 0.3s ease;
 }
 
 .auth-tabs button[aria-selected='true'] {
-  color: var(--bg-0);
+  color: var(--black);
 }
 
 .auth-card__title {
   margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-size: 24px;
+  font-family: var(--display);
+  font-size: 25px;
   font-weight: 700;
-  color: var(--text-0);
-  letter-spacing: -0.02em;
+  color: var(--text);
+  letter-spacing: -0.03em;
   animation: rise-in 0.5s var(--ease-out);
 }
 
@@ -180,7 +187,7 @@
   font-size: 14px;
 }
 
-/* Поле с «плавающей» подписью и линией, которая рисуется при фокусе */
+/* Поле с «плавающей» подписью и светящейся линией при фокусе */
 .field {
   position: relative;
   display: block;
@@ -189,33 +196,37 @@
 
 .field input {
   width: 100%;
-  height: 54px;
-  padding: 20px 14px 6px;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--line);
-  background: var(--bg-3);
+  height: 56px;
+  padding: 20px 15px 6px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
   outline: none;
-  color: var(--text-0);
+  color: var(--text);
   transition:
     border-color 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.2s ease,
+    box-shadow 0.25s ease;
 }
 
 .field input:hover {
-  border-color: var(--line-strong);
+  border-color: var(--line-3);
 }
 
 .field input:focus {
-  background: var(--bg-2);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.06),
+    0 0 28px rgba(255, 255, 255, 0.14);
 }
 
 .field__label {
   position: absolute;
-  left: 15px;
-  top: 17px;
+  left: 16px;
+  top: 18px;
   font-size: 15px;
-  color: var(--text-2);
+  color: var(--text-3);
   pointer-events: none;
   transform-origin: left top;
   transition:
@@ -225,18 +236,22 @@
 
 .field input:focus + .field__label,
 .field input:not(:placeholder-shown) + .field__label {
-  transform: translateY(-10px) scale(0.75);
-  color: var(--text-1);
+  transform: translateY(-10px) scale(0.74);
+  color: var(--text-2);
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .field__line {
   position: absolute;
-  left: 12px;
-  right: 12px;
+  left: 14px;
+  right: 14px;
   bottom: 0;
   height: 2px;
   border-radius: 2px;
-  background: var(--text-0);
+  background: var(--text);
+  box-shadow: 0 0 12px #fff;
   transform: scaleX(0);
   transition: transform 0.4s var(--ease-out);
 }
@@ -265,11 +280,10 @@
 }
 
 .auth-card__error {
-  min-height: 0;
   max-height: 0;
   overflow: hidden;
   font-size: 13px;
-  color: var(--text-0);
+  color: var(--text);
   opacity: 0;
   transition:
     max-height 0.3s var(--ease-out),
@@ -282,12 +296,13 @@
   opacity: 1;
   margin: 2px 0 12px;
   padding-left: 10px;
-  border-left: 2px solid var(--text-0);
+  border-left: 2px solid var(--text);
+  box-shadow: -6px 0 12px -6px rgba(255, 255, 255, 0.7);
 }
 
 .auth-card__submit {
   width: 100%;
-  height: 48px;
+  height: 50px;
   margin-top: 6px;
   font-size: 15px;
 }
@@ -300,7 +315,7 @@
 }
 
 .auth-card__switch button {
-  color: var(--text-0);
+  color: var(--text);
   font-weight: 600;
   background-image: linear-gradient(currentColor, currentColor);
   background-size: 0% 1px;
@@ -322,11 +337,10 @@
   .auth {
     min-height: 100%;
     height: auto;
-    background: radial-gradient(ellipse at 50% 22%, #111 0%, #000 55%);
   }
 
-  .auth__sphere {
-    position: fixed;
+  .auth::before {
+    background: radial-gradient(ellipse at 50% 22%, transparent 30%, rgba(0, 0, 0, 0.6) 100%);
   }
 
   .auth__tagline {

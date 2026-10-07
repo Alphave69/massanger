@@ -1,50 +1,54 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, getToken, setToken, type User } from './lib/api'
+import { api, getToken, setToken, type Me } from './lib/api'
+import { startGlowTracking } from './lib/fx'
 import { AuthPage } from './components/AuthPage'
-import { AppShell } from './components/AppShell'
-import { Logo } from './components/Logo'
+import { Shell } from './components/Shell'
+import { ParticleSphere } from './components/ParticleSphere'
+import { MiniSphere } from './components/MiniSphere'
+
+type Phase = 'checking' | 'auth' | 'leaving' | 'app'
 
 export function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [checking, setChecking] = useState(() => getToken() !== null)
+  const [phase, setPhase] = useState<Phase>(() => (getToken() ? 'checking' : 'auth'))
+
+  useEffect(() => startGlowTracking(), [])
 
   useEffect(() => {
-    if (!checking) return
+    if (phase !== 'checking') return
     api
       .me()
-      .then(({ user }) => setUser(user))
-      .catch(() => setToken(null))
-      .finally(() => setChecking(false))
-  }, [checking])
+      .then(() => setPhase('app'))
+      .catch(() => {
+        setToken(null)
+        setPhase('auth')
+      })
+  }, [phase])
+
+  const onAuth = useCallback((token: string, _user: Me) => {
+    setToken(token)
+    // Сначала форма растворяется, а сфера укатывается вправо — потом появляется приложение
+    setPhase('leaving')
+    window.setTimeout(() => setPhase('app'), 650)
+  }, [])
 
   const logout = useCallback(() => {
     setToken(null)
-    setUser(null)
+    setPhase('auth')
   }, [])
 
-  if (checking) {
-    return (
-      <div className="splash">
-        <Logo size={56} spinning />
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <AuthPage
-        onAuth={(token, user) => {
-          setToken(token)
-          setUser(user)
-        }}
-      />
-    )
-  }
+  const sphereMode = phase === 'auth' ? 'hero' : 'ambient'
 
   return (
-    <AppShell
-      user={user}
-      onLogout={logout}
-    />
+    <>
+      <div className="backdrop" aria-hidden="true" />
+      <ParticleSphere mode={sphereMode} className="bg-sphere" />
+      {phase === 'checking' && (
+        <div className="splash">
+          <MiniSphere size={72} dots={140} />
+        </div>
+      )}
+      {(phase === 'auth' || phase === 'leaving') && <AuthPage onAuth={onAuth} leaving={phase === 'leaving'} />}
+      {phase === 'app' && <Shell onLogout={logout} />}
+    </>
   )
 }

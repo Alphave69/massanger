@@ -28,13 +28,13 @@ export function initials(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
 
-// Детерминированный оттенок серого для аватарки
+// Детерминированный оттенок серого для аватарки — контрастные пары
 const SHADES = [
-  { bg: '#ffffff', fg: '#000000' },
-  { bg: '#d6d6d6', fg: '#000000' },
-  { bg: '#9a9a9a', fg: '#000000' },
-  { bg: '#5c5c5c', fg: '#ffffff' },
-  { bg: '#2e2e2e', fg: '#ffffff' },
+  { bg: '#ffffff', fg: '#000000', dark: false },
+  { bg: '#d4d4d4', fg: '#000000', dark: false },
+  { bg: '#9c9c9c', fg: '#000000', dark: false },
+  { bg: '#3a3a3a', fg: '#ffffff', dark: true },
+  { bg: '#000000', fg: '#ffffff', dark: true },
 ]
 
 export function shadeFor(id: string) {
@@ -42,3 +42,5 @@ export function shadeFor(id: string) {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
   return SHADES[Math.abs(h) % SHADES.length]
 }
+
+export const formatSince = (ts: number) => dateFmt.format(ts)

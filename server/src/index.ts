@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import cors from 'cors'
-import express from 'express'
+import express, { type Response } from 'express'
 import { Server } from 'socket.io'
 import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
@@ -17,10 +17,12 @@ app.use(express.json())
 const http = createServer(app)
 const io = new Server(http, { cors: { origin: '*' } })
 
-// --- presence ---
+const fail = (res: Response, code: number, error: string) => void res.status(code).json({ error })
 
-const onlineSockets = new Map<string, number>()
-const onlineIds = () => [...onlineSockets.keys()]
+// ============ представления данных для клиента ============
+
+/** Себя пользователь видит вместе с выбранным статусом (в т.ч. «невидимка») */
+const selfUser = (u: store.User) => ({ ...store.publicUser(u), status: u.status })
 
 function serializeGuild(guild: store.Guild) {
   return {
@@ -32,56 +34,120 @@ function serializeGuild(guild: store.Guild) {
   }
 }
 
-// --- REST ---
+function friendEntries(userId: string) {
+  return store.relationsOf(userId).flatMap((r) => {
+    const other = store.findUser(r.from === userId ? r.to : r.from)
+    if (!other) return []
+    const state = r.state === 'friends' ? 'friends' : r.from === userId ? 'outgoing' : 'incoming'
+    return [{ user: store.publicUser(other), state, since: r.createdAt }]
+  })
+}
+
+function dmView(dm: store.Dm, userId: string) {
+  const other = store.findUser(dm.memberIds.find((id) => id !== userId) ?? userId)
+  return { id: dm.id, user: other ? store.publicUser(other) : null, lastMessageAt: dm.lastMessageAt }
+}
+
+const dmsFor = (userId: string) => store.dmsOf(userId).map((dm) => dmView(dm, userId))
+
+const emitFriends = (...userIds: string[]) => {
+  for (const id of userIds) io.to(`user:${id}`).emit('friends:update', friendEntries(id))
+}
+
+/** Комнаты, куда уходят события канала: серверный канал — всем участникам сервера, личка — двоим */
+const roomsFor = (access: store.ChannelAccess) =>
+  access.kind === 'guild' ? [`guild:${access.guild.id}`] : access.dm.memberIds.map((id) => `user:${id}`)
+
+// ============ присутствие и статусы ============
+
+const socketCount = new Map<string, number>()
+const autoIdle = new Set<string>() // кто давно не трогал мышь/клавиатуру
+
+function presenceMap() {
+  const out: Record<string, store.Status> = {}
+  for (const userId of socketCount.keys()) {
+    const u = store.findUser(userId)
+    if (!u || u.status === 'invisible') continue // невидимку остальные видят «не в сети»
+    out[userId] = u.status === 'online' && autoIdle.has(userId) ? 'idle' : u.status
+  }
+  return out
+}
+
+const broadcastPresence = () => io.emit('presence', presenceMap())
+
+// ============ REST ============
 
 const USERNAME_RE = /^[a-zA-Z0-9_.]{3,32}$/
 
 app.post('/api/auth/register', async (req, res) => {
   const { username, displayName, password } = req.body ?? {}
-  if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
-    res.status(400).json({ error: 'Логин: 3–32 символа, латиница, цифры, _ и .' })
-    return
-  }
-  if (typeof password !== 'string' || password.length < 6) {
-    res.status(400).json({ error: 'Пароль должен быть не короче 6 символов' })
-    return
-  }
-  if (store.findUserByName(username)) {
-    res.status(409).json({ error: 'Такой логин уже занят' })
-    return
-  }
+  if (typeof username !== 'string' || !USERNAME_RE.test(username)) return fail(res, 400, 'Логин: 3–32 символа, латиница, цифры, _ и .')
+  if (typeof password !== 'string' || password.length < 6) return fail(res, 400, 'Пароль должен быть не короче 6 символов')
+  if (store.findUserByName(username)) return fail(res, 409, 'Такой логин уже занят')
+
   const name = typeof displayName === 'string' && displayName.trim() ? displayName.trim().slice(0, 32) : username
   const user = store.createUser({ username, displayName: name, passwordHash: await hashPassword(password) })
   // Сообщаем всем на общем сервере, что пришёл новый человек
   for (const guild of store.guildsOf(user.id)) io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
-  res.json({ token: signToken(user), user: store.publicUser(user) })
+  res.json({ token: signToken(user), user: selfUser(user) })
 })
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body ?? {}
   const user = typeof username === 'string' ? store.findUserByName(username) : undefined
   if (!user || typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) {
-    res.status(401).json({ error: 'Неверный логин или пароль' })
-    return
+    return fail(res, 401, 'Неверный логин или пароль')
   }
-  res.json({ token: signToken(user), user: store.publicUser(user) })
+  res.json({ token: signToken(user), user: selfUser(user) })
 })
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: store.publicUser((req as AuthedRequest).user) })
+  res.json({ user: selfUser((req as AuthedRequest).user) })
 })
 
-app.get('/api/guilds', requireAuth, (req, res) => {
-  res.json({ guilds: store.guildsOf((req as AuthedRequest).user.id).map(serializeGuild), online: onlineIds() })
+/** Всё, что нужно клиенту при старте, одним запросом */
+app.get('/api/state', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  res.json({
+    user: selfUser(user),
+    guilds: store.guildsOf(user.id).map(serializeGuild),
+    friends: friendEntries(user.id),
+    dms: dmsFor(user.id),
+    presence: presenceMap(),
+  })
 })
+
+app.patch('/api/me', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const { displayName, customStatus, status } = req.body ?? {}
+  const patch: Parameters<typeof store.updateUser>[1] = {}
+
+  if (displayName !== undefined) {
+    if (typeof displayName !== 'string' || !displayName.trim()) return fail(res, 400, 'Имя не может быть пустым')
+    patch.displayName = displayName.trim().slice(0, 32)
+  }
+  if (customStatus !== undefined) {
+    if (typeof customStatus !== 'string') return fail(res, 400, 'Неверный статус')
+    patch.customStatus = customStatus.trim().slice(0, 64)
+  }
+  if (status !== undefined) {
+    if (!store.STATUSES.includes(status)) return fail(res, 400, 'Неизвестный статус')
+    patch.status = status
+  }
+
+  store.updateUser(user, patch)
+  io.emit('user:update', store.publicUser(user))
+  io.to(`user:${user.id}`).emit('me:update', selfUser(user))
+  if (patch.status) broadcastPresence()
+  res.json({ user: selfUser(user) })
+})
+
+// --- серверы ---
 
 app.post('/api/guilds', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
   const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 48) : ''
-  if (!name) {
-    res.status(400).json({ error: 'Укажи название сервера' })
-    return
-  }
+  if (!name) return fail(res, 400, 'Укажи название сервера')
   const guild = store.createGuild(name, user.id)
   io.in(`user:${user.id}`).socketsJoin(`guild:${guild.id}`)
   res.json({ guild: serializeGuild(guild) })
@@ -90,23 +156,74 @@ app.post('/api/guilds', requireAuth, (req, res) => {
 app.post('/api/guilds/:id/join', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
   const guild = store.joinGuild(String(req.params.id), user.id)
-  if (!guild) {
-    res.status(404).json({ error: 'Сервер не найден — проверь код приглашения' })
-    return
-  }
+  if (!guild) return fail(res, 404, 'Сервер не найден — проверь код приглашения')
   io.in(`user:${user.id}`).socketsJoin(`guild:${guild.id}`)
   io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
   res.json({ guild: serializeGuild(guild) })
 })
 
+// --- друзья ---
+
+app.post('/api/friends', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim().replace(/^@/, '') : ''
+  const target = username ? store.findUserByName(username) : undefined
+  if (!target) return fail(res, 404, `Пользователь «${username}» не найден — проверь логин`)
+  if (target.id === user.id) return fail(res, 400, 'Себя добавить не получится 🙂')
+
+  const existing = store.relationBetween(user.id, target.id)
+  if (existing?.state === 'friends') return fail(res, 409, `Вы с ${target.displayName} уже друзья`)
+  if (existing?.from === user.id) return fail(res, 409, 'Заявка уже отправлена — ждём ответа')
+
+  // Если он уже звал нас в друзья — просто принимаем
+  if (existing) store.acceptRelation(existing)
+  else store.addRelation(user.id, target.id)
+
+  emitFriends(user.id, target.id)
+  res.json({ friends: friendEntries(user.id), accepted: Boolean(existing) })
+})
+
+app.post('/api/friends/:userId/accept', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const otherId = String(req.params.userId)
+  const relation = store.relationBetween(user.id, otherId)
+  if (!relation || relation.state !== 'pending' || relation.to !== user.id) return fail(res, 404, 'Заявка не найдена')
+  store.acceptRelation(relation)
+  emitFriends(user.id, otherId)
+  res.json({ friends: friendEntries(user.id) })
+})
+
+/** Отклонить / отменить заявку или удалить из друзей */
+app.delete('/api/friends/:userId', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const otherId = String(req.params.userId)
+  const relation = store.relationBetween(user.id, otherId)
+  if (relation) {
+    store.removeRelation(relation)
+    emitFriends(user.id, otherId)
+  }
+  res.json({ friends: friendEntries(user.id) })
+})
+
+// --- личные сообщения ---
+
+app.post('/api/dms', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const target = typeof req.body?.userId === 'string' ? store.findUser(req.body.userId) : undefined
+  if (!target || target.id === user.id) return fail(res, 404, 'Пользователь не найден')
+  if (!store.areFriends(user.id, target.id) && !store.shareGuild(user.id, target.id)) {
+    return fail(res, 403, 'Писать можно друзьям и людям с общих серверов')
+  }
+  const dm = store.openDm(user.id, target.id)
+  io.to(`user:${user.id}`).emit('dm:update', dmView(dm, user.id))
+  res.json({ dm: dmView(dm, user.id) })
+})
+
 app.get('/api/channels/:id/messages', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
-  const found = store.findChannel(String(req.params.id))
-  if (!found || !found.guild.memberIds.includes(user.id)) {
-    res.status(404).json({ error: 'Канал не найден' })
-    return
-  }
-  res.json({ messages: store.messagesIn(found.channel.id) })
+  const channelId = String(req.params.id)
+  if (!store.channelAccess(channelId, user.id)) return fail(res, 404, 'Канал не найден')
+  res.json({ messages: store.messagesIn(channelId) })
 })
 
 // В продакшене отдаём собранный клиент с того же порта
@@ -119,7 +236,7 @@ if (existsSync(clientDist)) {
   app.get('/', (_req, res) => res.redirect('http://localhost:5173'))
 }
 
-// --- realtime ---
+// ============ realtime ============
 
 io.use((socket, next) => {
   const user = userFromToken(socket.handshake.auth?.token)
@@ -133,38 +250,54 @@ io.on('connection', (socket) => {
   socket.join(`user:${userId}`)
   for (const guild of store.guildsOf(userId)) socket.join(`guild:${guild.id}`)
 
-  onlineSockets.set(userId, (onlineSockets.get(userId) ?? 0) + 1)
-  io.emit('presence', onlineIds())
+  socketCount.set(userId, (socketCount.get(userId) ?? 0) + 1)
+  broadcastPresence()
 
   socket.on('message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: (r: unknown) => void) => {
+    const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const content = typeof payload?.content === 'string' ? payload.content.trim().slice(0, 4000) : ''
-    const found = typeof payload?.channelId === 'string' ? store.findChannel(payload.channelId) : undefined
-    if (!content || !found || found.channel.type !== 'text' || !found.guild.memberIds.includes(userId)) {
+    const access = channelId ? store.channelAccess(channelId, userId) : undefined
+    if (!content || !access || (access.kind === 'guild' && access.channel.type !== 'text')) {
       ack?.({ error: 'Не удалось отправить сообщение' })
       return
     }
-    const message = store.addMessage(found.channel.id, userId, content)
-    io.to(`guild:${found.guild.id}`).emit('message:new', message)
+    const message = store.addMessage(channelId, userId, content)
+    io.to(roomsFor(access)).emit('message:new', message)
+    if (access.kind === 'dm') {
+      for (const id of access.dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(access.dm, id))
+    }
     ack?.({ message })
   })
 
   socket.on('typing', (payload: { channelId?: unknown }) => {
-    const found = typeof payload?.channelId === 'string' ? store.findChannel(payload.channelId) : undefined
-    if (!found || !found.guild.memberIds.includes(userId)) return
-    socket.to(`guild:${found.guild.id}`).emit('typing', { channelId: found.channel.id, userId })
+    const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
+    const access = channelId ? store.channelAccess(channelId, userId) : undefined
+    if (access) socket.to(roomsFor(access)).emit('typing', { channelId, userId })
+  })
+
+  // Клиент сам сообщает, что человек отошёл (нет активности несколько минут)
+  socket.on('presence:idle', (idle: unknown) => {
+    const was = autoIdle.has(userId)
+    if (idle === true) autoIdle.add(userId)
+    else autoIdle.delete(userId)
+    if (was !== autoIdle.has(userId)) broadcastPresence()
   })
 
   socket.on('disconnect', () => {
-    const left = (onlineSockets.get(userId) ?? 1) - 1
-    if (left <= 0) onlineSockets.delete(userId)
-    else onlineSockets.set(userId, left)
-    io.emit('presence', onlineIds())
+    const left = (socketCount.get(userId) ?? 1) - 1
+    if (left <= 0) {
+      socketCount.delete(userId)
+      autoIdle.delete(userId)
+    } else {
+      socketCount.set(userId, left)
+    }
+    broadcastPresence()
   })
 })
 
 http.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`\n  ✖ Порт ${PORT} уже занят — похоже, Massanger уже запущен в другом окне.`)
+    console.error(`\n  ✖ Порт ${PORT} уже занят — похоже, Nuntius уже запущен в другом окне.`)
     console.error('    Закрой все чёрные окна (cmd, Git Bash) и запусти start.bat снова.\n')
   } else {
     console.error(err)
@@ -174,5 +307,5 @@ http.on('error', (err: NodeJS.ErrnoException) => {
 
 http.listen(PORT, () => {
   const url = existsSync(clientDist) ? `http://localhost:${PORT}` : 'http://localhost:5173'
-  console.log(`Massanger запущен → открой ${url}`)
+  console.log(`Nuntius запущен → открой ${url}`)
 })

@@ -1,26 +1,39 @@
+/* =====================================================================
+   Nuntius — монохром: чистый чёрный, белый, свечение.
+   ===================================================================== */
+
 :root {
-  --bg-0: #000000; /* полоса серверов */
-  --bg-1: #0a0a0a; /* сайдбары */
-  --bg-2: #101010; /* чат */
-  --bg-3: #181818; /* hover */
-  --bg-4: #222222; /* active / поля ввода */
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --black: #000;
+  --panel: rgba(5, 5, 5, 0.6);
+  --panel-solid: #060606;
+  --raise: #101010;
+  --raise-2: #1a1a1a;
+  --hover: rgba(255, 255, 255, 0.07);
+  --bubble: #121212;
 
-  --text-0: #ffffff;
-  --text-1: #d9d9d9;
-  --text-2: #8c8c8c;
-  --text-3: #5a5a5a;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-2: rgba(255, 255, 255, 0.18);
+  --line-3: rgba(255, 255, 255, 0.34);
 
-  --radius-s: 6px;
-  --radius-m: 10px;
-  --radius-l: 16px;
+  --text: #ffffff;
+  --text-1: #e6e6e6;
+  --text-2: #b0b0b0;
+  --text-3: #6e6e6e;
+
+  --glow: 0 0 22px rgba(255, 255, 255, 0.35);
+  --glow-strong: 0 0 0 1px #fff, 0 0 24px rgba(255, 255, 255, 0.5), 0 0 64px rgba(255, 255, 255, 0.18);
+
+  --r-s: 8px;
+  --r-m: 12px;
+  --r-l: 16px;
+  --r-xl: 22px;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Unbounded', var(--font);
+  --display: 'Unbounded', var(--font);
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   color-scheme: dark;
 }
@@ -39,7 +52,7 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg-0);
+  background: var(--black);
   color: var(--text-1);
   font-family: var(--font);
   font-size: 15px;
@@ -60,6 +73,7 @@ button {
   background: none;
   border: 0;
   padding: 0;
+  text-align: inherit;
 }
 
 button:disabled {
@@ -67,13 +81,13 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--text-0);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--text-0);
-  color: var(--bg-0);
+  background: var(--text);
+  color: var(--black);
 }
 
 ::-webkit-scrollbar {
@@ -81,13 +95,13 @@ button:disabled {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-4);
+  background: rgba(255, 255, 255, 0.14);
   border: 3px solid transparent;
   border-radius: 99px;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #333;
+  background-color: rgba(255, 255, 255, 0.3);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -99,6 +113,394 @@ button:disabled {
   white-space: nowrap;
   min-width: 0;
 }
+
+.label {
+  font: 500 10.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+
+/* ============ фон: точечная сетка + «фонарик» за курсором ============ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(700px circle at var(--gx, -999px) var(--gy, -999px), rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.5px) 0 0 / 26px 26px;
+}
+
+.backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(rgba(255, 255, 255, 0.45) 1px, transparent 1.6px) 0 0 / 26px 26px;
+  -webkit-mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
+  mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
+}
+
+.bg-sphere {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
+}
+
+#root > .splash,
+#root > .auth {
+  position: relative;
+  z-index: 1;
+}
+
+#root > .shell {
+  z-index: 1;
+}
+
+.splash {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  animation: fade-in 0.5s ease;
+}
+
+/* ============ рамка, подсвечивающаяся у курсора ============ */
+/* Координаты --mx/--my выставляет startGlowTracking() */
+
+.glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(280px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.75), transparent 55%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* ============ кнопки ============ */
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: var(--r-m);
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 0.2s var(--ease-out),
+    background-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.3s ease,
+    opacity 0.2s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+}
+
+/* Белая со свечением; при наведении — блик пробегает по кнопке */
+.btn--primary {
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+}
+
+.btn--primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 30%, rgba(0, 0, 0, 0.14) 45%, transparent 60%);
+  transform: translateX(-100%);
+}
+
+.btn--primary:hover:not(:disabled) {
+  box-shadow: var(--glow-strong);
+}
+
+.btn--primary:hover:not(:disabled)::before {
+  transform: translateX(100%);
+  transition: transform 0.7s var(--ease-out);
+}
+
+.btn--outline {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+
+.btn--outline:hover {
+  box-shadow:
+    inset 0 0 0 1px var(--text),
+    0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.btn--ghost {
+  color: var(--text-2);
+}
+
+.btn--ghost:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.btn__arrow {
+  transition: transform 0.3s var(--ease-out);
+}
+
+.btn:hover .btn__arrow {
+  transform: translateX(4px);
+}
+
+.icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--text-2);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-btn:active {
+  transform: scale(0.9);
+}
+
+.icon-btn.is-active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Включённый «запрет» (микрофон выключен и т.п.) — инверсия со свечением */
+.icon-btn.is-on {
+  background: var(--text);
+  color: var(--black);
+  box-shadow: var(--glow);
+}
+
+.round-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.25s ease,
+    transform 0.15s ease,
+    width 0.3s var(--ease-out);
+}
+
+.round-btn:hover {
+  color: var(--text);
+  border-color: var(--line-3);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+}
+
+.round-btn:active {
+  transform: scale(0.92);
+}
+
+.round-btn--solid,
+.round-btn--confirm {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--black);
+}
+
+.round-btn--solid:hover,
+.round-btn--confirm:hover {
+  color: var(--black);
+  box-shadow: var(--glow-strong);
+}
+
+.round-btn--confirm {
+  width: 76px;
+}
+
+.round-btn__text {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.count-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--text);
+  color: var(--black);
+  font: 700 11px/1 var(--mono);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  animation: pop-in 0.4s var(--ease-spring);
+}
+
+.input {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.input:focus {
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.06),
+    0 0 24px rgba(255, 255, 255, 0.12);
+}
+
+/* ============ аватары и статусы ============ */
+
+.avatar {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.avatar__face {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.avatar__face--dark {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.avatar__badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--panel-solid);
+  color: var(--text);
+}
+
+.avatar__badge--offline {
+  color: var(--text-3);
+}
+
+.avatar__badge--online .status-icon {
+  filter: drop-shadow(0 0 3px #fff);
+}
+
+.avatar--ring {
+  box-shadow:
+    0 0 0 3px var(--panel-solid),
+    0 0 0 4px var(--line-3);
+}
+
+.avatar--ring.is-online {
+  box-shadow:
+    0 0 0 3px var(--panel-solid),
+    0 0 0 4px #fff,
+    0 0 34px rgba(255, 255, 255, 0.45);
+  animation: ring-glow 3.2s ease-in-out infinite;
+}
+
+@keyframes ring-glow {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--panel-solid),
+      0 0 0 4px #fff,
+      0 0 54px rgba(255, 255, 255, 0.7);
+  }
+}
+
+.status-icon {
+  display: block;
+  flex: none;
+}
+
+/* ============ подсказки по data-tip ============ */
+
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::before {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  translate: -50% 4px;
+  padding: 6px 10px;
+  border-radius: var(--r-s);
+  background: var(--text);
+  color: var(--black);
+  font: 600 12.5px/1.2 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 50;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.35);
+  transition:
+    opacity 0.15s ease,
+    translate 0.2s var(--ease-out);
+}
+
+[data-tip]:hover::before {
+  opacity: 1;
+  translate: -50% 0;
+  transition-delay: 0.2s;
+}
+
+/* ============ общие анимации ============ */
 
 .spin {
   animation: spin 0.8s linear infinite;
@@ -126,177 +528,29 @@ button:disabled {
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: scale(0.6);
+    transform: scale(0.5);
   }
 }
 
-/* --- логотип --- */
-
-.logo circle {
-  fill: currentColor;
-  transform-box: fill-box;
-  transform-origin: center;
+@keyframes shake {
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(7px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
 }
 
-.logo--spin {
-  color: var(--text-0);
-  animation: spin 3.2s linear infinite;
-}
-
-.logo--spin circle {
-  animation: dot-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
+@keyframes float {
   50% {
-    transform: scale(0.4);
-    opacity: 0.4;
+    transform: translateY(-6px);
   }
-}
-
-.splash {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  animation: fade-in 0.4s ease;
-}
-
-/* --- кнопки --- */
-
-.btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 42px;
-  padding: 0 18px;
-  border-radius: var(--radius-m);
-  font-weight: 600;
-  font-size: 14px;
-  overflow: hidden;
-  isolation: isolate;
-  transition:
-    transform 0.2s var(--ease-out),
-    background-color 0.25s ease,
-    color 0.25s ease,
-    opacity 0.2s ease;
-}
-
-.btn:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-}
-
-/* Белая кнопка; при наведении снизу «заливается» чёрным */
-.btn--primary {
-  background: var(--text-0);
-  color: var(--bg-0);
-  box-shadow: inset 0 0 0 1px var(--text-0);
-}
-
-.btn--primary::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--bg-0);
-  transform: translateY(101%);
-  transition: transform 0.35s var(--ease-out);
-}
-
-.btn--primary:hover:not(:disabled) {
-  color: var(--text-0);
-}
-
-.btn--primary:hover:not(:disabled)::before {
-  transform: translateY(0);
-}
-
-.btn--ghost {
-  color: var(--text-1);
-}
-
-.btn--ghost:hover {
-  background: var(--bg-3);
-  color: var(--text-0);
-}
-
-.btn__arrow {
-  transition: transform 0.3s var(--ease-out);
-}
-
-.btn:hover .btn__arrow {
-  transform: translateX(4px);
-}
-
-.icon-btn {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-s);
-  color: var(--text-2);
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    transform 0.15s ease;
-}
-
-.icon-btn:hover {
-  background: var(--bg-4);
-  color: var(--text-0);
-}
-
-.icon-btn:active {
-  transform: scale(0.9);
-}
-
-.icon-btn.is-active {
-  color: var(--text-0);
-}
-
-/* Включённый «запрет» (микрофон выключен и т.п.) — инверсия */
-.icon-btn.is-on {
-  background: var(--text-0);
-  color: var(--bg-0);
-}
-
-/* --- подсказки по data-tip --- */
-
-[data-tip] {
-  position: relative;
-}
-
-[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  translate: -50% 4px;
-  padding: 6px 10px;
-  border-radius: var(--radius-s);
-  background: var(--text-0);
-  color: var(--bg-0);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  z-index: 50;
-  transition:
-    opacity 0.15s ease,
-    translate 0.2s var(--ease-out);
-}
-
-[data-tip]:hover::after {
-  opacity: 1;
-  translate: -50% 0;
-  transition-delay: 0.25s;
 }
 
 @media (prefers-reduced-motion: reduce) {

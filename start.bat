@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-title Massanger
+title Nuntius
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
