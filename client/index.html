@@ -5,16 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap"
-      rel="stylesheet"
-    />
     <title>Massanger</title>
+    <style>
+      html, body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+      .boot { height: 100vh; display: grid; place-items: center; color: #777; font-size: 14px; }
+      .boot-error { position: fixed; inset: auto 16px 16px; z-index: 9999; padding: 14px 16px; border-radius: 10px;
+        background: #fff; color: #000; font: 13px/1.4 monospace; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot">Загрузка Massanger…</div></div>
+    <script>
+      // Если что-то сломается — показываем ошибку прямо на странице, а не белый/чёрный экран
+      (function () {
+        function show(text) {
+          var box = document.querySelector('.boot-error')
+          if (!box) {
+            box = document.createElement('div')
+            box.className = 'boot-error'
+            document.body.appendChild(box)
+            box.textContent = 'Ошибка — пришли этот текст разработчику:\n'
+          }
+          box.textContent += '\n' + text
+        }
+        window.addEventListener('error', function (e) { show(e.message + (e.filename ? '  (' + e.filename + ':' + e.lineno + ')' : '')) })
+        window.addEventListener('unhandledrejection', function (e) { show(String(e.reason && (e.reason.stack || e.reason.message) || e.reason)) })
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

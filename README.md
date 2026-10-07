@@ -15,18 +15,22 @@
 
 | Часть  | Технологии                                       |
 | ------ | ------------------------------------------------ |
-| client | React 19, TypeScript, Vite, lucide-react         |
+| client | React 19, TypeScript, Vite, lucide-react, шрифты локально (без Google Fonts) |
 | server | Node.js, Express 5, Socket.IO, JWT, bcrypt       |
 | данные | JSON-файл `server/data/db.json` (позже — БД)     |
 
 ## Запуск
+
+**Windows, проще всего:** дважды кликнуть `start.bat` в папке проекта. Он сам поставит зависимости, запустит сервер и откроет браузер. Окно не закрывать, пока пользуешься.
+
+**Вручную (любая ОС):**
 
 ```bash
 npm install
 npm run dev
 ```
 
-Открыть http://localhost:5173 — клиент (Vite) проксирует `/api` и сокеты на сервер `:3001`.
+Браузер откроется сам на http://localhost:5173 — клиент (Vite) проксирует `/api` и сокеты на сервер `:3001`.
 
 Продакшен (один порт):
 

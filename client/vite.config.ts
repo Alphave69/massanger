@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    open: !process.env.CI, // сам открывает браузер при запуске
     proxy: {
       '/api': 'http://localhost:3001',
       '/socket.io': { target: 'http://localhost:3001', ws: true },

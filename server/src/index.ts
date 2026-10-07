@@ -114,6 +114,9 @@ const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../clien
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist))
   app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile(resolve(clientDist, 'index.html')))
+} else {
+  // В режиме разработки интерфейс отдаёт Vite — перекидываем туда
+  app.get('/', (_req, res) => res.redirect('http://localhost:5173'))
 }
 
 // --- realtime ---
@@ -160,5 +163,6 @@ io.on('connection', (socket) => {
 })
 
 http.listen(PORT, () => {
-  console.log(`Massanger server → http://localhost:${PORT}`)
+  const url = existsSync(clientDist) ? `http://localhost:${PORT}` : 'http://localhost:5173'
+  console.log(`Massanger запущен → открой ${url}`)
 })
