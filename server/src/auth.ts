@@ -8,13 +8,16 @@ const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me'
 export const hashPassword = (password: string) => bcrypt.hash(password, 10)
 export const checkPassword = (password: string, hash: string) => bcrypt.compare(password, hash)
 
-export const signToken = (user: User) => jwt.sign({ sub: user.id }, SECRET, { expiresIn: '30d' })
+/** В токене — версия: после смены пароля или «выйти везде» старые токены не принимаются */
+export const signToken = (user: User) => jwt.sign({ sub: user.id, v: user.tokenVersion }, SECRET, { expiresIn: '30d' })
 
 export function userFromToken(token: string | undefined): User | undefined {
   if (!token) return undefined
   try {
-    const { sub } = jwt.verify(token, SECRET) as { sub: string }
-    return findUser(sub)
+    const { sub, v } = jwt.verify(token, SECRET) as { sub: string; v?: number }
+    const user = findUser(sub)
+    if (!user || (v ?? 0) !== user.tokenVersion) return undefined
+    return user
   } catch {
     return undefined
   }

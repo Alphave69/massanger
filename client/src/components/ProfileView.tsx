@@ -3,6 +3,7 @@ import { acceptFriend, openDmWith, removeFriend, sendFriendRequest } from '../li
 import { formatSince } from '../lib/format'
 import { STATUS_LABEL } from '../lib/status'
 import { chat, presenceOf, useChat } from '../lib/store'
+import { ui } from '../lib/ui'
 import { Avatar } from './Avatar'
 import { StatusIcon } from './StatusIcon'
 
@@ -46,6 +47,12 @@ export function ProfileView({ userId, inDm }: Props) {
         {user.customStatus && <div className="profile__custom">«{user.customStatus}»</div>}
 
         <dl className="profile__facts">
+          {user.bio && (
+            <div>
+              <dt>О себе</dt>
+              <dd className="profile__bio">{user.bio}</dd>
+            </div>
+          )}
           <div>
             <dt>В Nuntius с</dt>
             <dd>{formatSince(user.createdAt)}</dd>
@@ -59,7 +66,13 @@ export function ProfileView({ userId, inDm }: Props) {
         </dl>
 
         {isMe ? (
-          <div className="profile__note">Это ты ✦ Статус меняется внизу слева, по клику на своё имя.</div>
+          <div className="profile__note">
+            Это ты ✦ Статус — по клику на своё имя внизу слева,{' '}
+            <button className="link" onClick={() => ui.openSettings('profile')}>
+              профиль — в настройках
+            </button>
+            .
+          </div>
         ) : (
           <div className="profile__actions">
             {!inDm && (

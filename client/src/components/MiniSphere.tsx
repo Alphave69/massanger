@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { uiZoom } from '../lib/settings'
 
 interface Props {
   size?: number
@@ -17,7 +18,8 @@ export function MiniSphere({ size = 28, dots = 90, color, className }: Props) {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    // учитываем масштаб интерфейса, чтобы точки оставались чёткими
+    const dpr = Math.min((window.devicePixelRatio || 1) * uiZoom(), 3)
     canvas.width = size * dpr
     canvas.height = size * dpr
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)

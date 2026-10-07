@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ArrowUp, PanelRight, Users } from 'lucide-react'
-import { api, type Message, type User } from '../lib/api'
+import { api, SYSTEM_AUTHOR, type Message, type User } from '../lib/api'
 import { formatDay, formatStamp, formatTime, sameDay } from '../lib/format'
 import { sendMessage, sendTyping } from '../lib/realtime'
 import { STATUS_LABEL } from '../lib/status'
@@ -10,7 +10,7 @@ import { ui, useUi } from '../lib/ui'
 import { Avatar } from './Avatar'
 
 const GROUP_WINDOW = 7 * 60 * 1000
-const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неизвестный', customStatus: '', createdAt: 0 }
+const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неизвестный', customStatus: '', bio: '', createdAt: 0 }
 
 export function ChatView() {
   const view = useChat((s) => s.view)
@@ -113,6 +113,23 @@ export function ChatView() {
         {messages === undefined && <MessageSkeleton />}
 
         {groups.map((g) => {
+          if (g.authorId === SYSTEM_AUTHOR) {
+            return (
+              <Fragment key={g.messages[0].id}>
+                {g.newDay && (
+                  <div className="divider">
+                    <span>{formatDay(g.messages[0].createdAt)}</span>
+                  </div>
+                )}
+                {g.messages.map((m) => (
+                  <div key={m.id} className={`sysmsg${known && !known.has(m.id) ? ' sysmsg--fresh' : ''}`}>
+                    <span className="sysmsg__text">{m.content}</span>
+                    <time>{formatTime(m.createdAt)}</time>
+                  </div>
+                ))}
+              </Fragment>
+            )
+          }
           const mine = g.authorId === meId
           const author = users[g.authorId] ?? UNKNOWN
           return (

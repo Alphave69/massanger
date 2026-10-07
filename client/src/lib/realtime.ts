@@ -1,7 +1,8 @@
 import { io, type Socket } from 'socket.io-client'
-import { api, type DmView, type FriendEntry, type Guild, type Me, type Message, type Presence, type User } from './api'
-import { chat, isDmChannel, useChat } from './store'
-import { blip, pulseSphere } from './fx'
+import { api, getToken, SYSTEM_AUTHOR, type DmView, type FriendEntry, type Guild, type Me, type Message, type Presence, type User } from './api'
+import { chat, isDmChannel, useChat, type View } from './store'
+import { blip, desktopNotify, pulseSphere } from './fx'
+import { useSettings } from './settings'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -10,15 +11,27 @@ let socket: Socket | null = null
 
 const quiet = () => useChat.getState().me?.status === 'dnd'
 
-function notify(title: string, text: string, extra: { userId?: string; dmId?: string } = {}) {
+/** Уведомление: звук + всплывашка + системное (если вкладка свёрнута). В «не беспокоить» — тишина. */
+function notify(title: string, text: string, extra: { userId?: string; action?: View } = {}) {
   if (quiet()) return
-  blip()
-  chat.toast({ title, text, userId: extra.userId, action: extra.dmId ? { kind: 'dm', dmId: extra.dmId } : undefined })
+  void blip()
+  if (useSettings.getState().toasts) chat.toast({ title, text, userId: extra.userId, action: extra.action })
+  const action = extra.action
+  desktopNotify(title, text, action ? () => chat.setView(action) : undefined)
 }
 
-export function connectRealtime(token: string, onUnauthorized: () => void) {
+const dmWith = (userId: string) => useChat.getState().dms.find((d) => d.userId === userId)?.id
+
+export function connectRealtime(onUnauthorized: () => void) {
   socket?.disconnect()
-  const s = io({ auth: { token } })
+  // Токен читаем при каждом подключении: после смены пароля он меняется
+  let usedToken: string | null = null
+  const s = io({
+    auth: (cb) => {
+      usedToken = getToken()
+      cb({ token: usedToken })
+    },
+  })
   socket = s
 
   let connectedBefore = false
@@ -36,10 +49,23 @@ export function connectRealtime(token: string, onUnauthorized: () => void) {
     }
     connectedBefore = true
   })
-  s.on('disconnect', () => chat.setConnected(false))
+  s.on('disconnect', (reason) => {
+    chat.setConnected(false)
+    // Сервер отключил сам (сменили пароль / «выйти везде») — переподключаемся уже с новым токеном
+    if (reason === 'io server disconnect') window.setTimeout(() => s.connect(), 800)
+  })
   s.on('connect_error', (err) => {
-    if (err.message === 'unauthorized') onUnauthorized()
-    else chat.setConnected(false)
+    if (err.message !== 'unauthorized') {
+      chat.setConnected(false)
+      return
+    }
+    // Токен в этой вкладке успел обновиться — пробуем ещё раз, а не выкидываем из аккаунта
+    const fresh = getToken()
+    if (fresh && fresh !== usedToken) {
+      window.setTimeout(() => s.connect(), 300)
+      return
+    }
+    onUnauthorized()
   })
 
   s.on('presence', (p: Record<string, Presence>) => chat.setPresence(p))
@@ -53,8 +79,14 @@ export function connectRealtime(token: string, onUnauthorized: () => void) {
     chat.setFriends(list)
     for (const f of list) {
       const was = before.get(f.user.id)
-      if (f.state === 'incoming' && was !== 'incoming') notify(f.user.displayName, 'хочет добавить тебя в друзья', { userId: f.user.id })
-      if (f.state === 'friends' && was === 'outgoing') notify(f.user.displayName, 'принял(а) заявку в друзья', { userId: f.user.id })
+      if (f.state === 'incoming' && was !== 'incoming') {
+        notify(f.user.displayName, 'хочет добавить тебя в друзья', { userId: f.user.id, action: { kind: 'home', tab: 'pending' } })
+      }
+      if (f.state === 'friends' && was === 'outgoing') {
+        // Личка к этому моменту уже создана сервером — по клику сразу в неё
+        const dmId = dmWith(f.user.id)
+        notify(f.user.displayName, 'принял(а) заявку — переписка уже ждёт', { userId: f.user.id, action: dmId ? { kind: 'dm', dmId } : undefined })
+      }
     }
   })
 
@@ -63,9 +95,12 @@ export function connectRealtime(token: string, onUnauthorized: () => void) {
     if (!isNew) return
     if (isActive) pulseSphere(mine ? 1 : 0.6)
     const st = useChat.getState()
-    if (!mine && !isActive && isDmChannel(st, m.channelId)) {
+    if (!mine && !isActive && m.authorId !== SYSTEM_AUTHOR && isDmChannel(st, m.channelId)) {
       const author = st.users[m.authorId]
-      notify(author?.displayName ?? 'Новое сообщение', m.content.slice(0, 120), { userId: m.authorId, dmId: m.channelId })
+      notify(author?.displayName ?? 'Новое сообщение', m.content.slice(0, 120), {
+        userId: m.authorId,
+        action: { kind: 'dm', dmId: m.channelId },
+      })
     }
   })
 

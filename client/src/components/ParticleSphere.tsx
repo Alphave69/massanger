@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useSettings } from '../lib/settings'
 
 /**
  * Вращающаяся сфера из точек — живёт на фоне всего приложения.
@@ -31,14 +32,17 @@ interface Layout {
 
 function layoutFor(mode: SphereMode, w: number, h: number): Layout {
   const wide = w >= 900
+  // В приложении яркость берётся из настроек («Внешний вид»), можно и совсем выключить
+  const { sphere, sphereBrightness } = useSettings.getState()
+  const ambientA = sphere ? sphereBrightness : 0
   if (mode === 'hero') {
     return wide
       ? { cx: w * 0.34, cy: h / 2, r: Math.min(w * 0.22, h * 0.36), a: 1 }
       : { cx: w / 2, cy: Math.min(h * 0.24, 220), r: Math.min(w * 0.36, h * 0.17), a: 1 }
   }
   return wide
-    ? { cx: w * 0.8, cy: h * 0.56, r: Math.min(w * 0.21, h * 0.42), a: 0.5 }
-    : { cx: w * 0.72, cy: h * 0.32, r: Math.min(w * 0.42, h * 0.26), a: 0.35 }
+    ? { cx: w * 0.8, cy: h * 0.56, r: Math.min(w * 0.21, h * 0.42), a: ambientA }
+    : { cx: w * 0.72, cy: h * 0.32, r: Math.min(w * 0.42, h * 0.26), a: ambientA * 0.7 }
 }
 
 export function ParticleSphere({ mode, className }: Props) {
@@ -51,7 +55,8 @@ export function ParticleSphere({ mode, className }: Props) {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
 
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduced = () => prefersReduce || useSettings.getState().reduceMotion
     const count = window.innerWidth < 700 ? 800 : 1600
 
     // --- точки на единичной сфере (спираль Фибоначчи) ---
@@ -104,7 +109,7 @@ export function ParticleSphere({ mode, className }: Props) {
     const cur: Layout = { ...layoutFor(modeRef.current, w, h), a: 0 }
 
     // Появление: точки разбросаны по экрану и слетаются в сферу
-    if (!reduceMotion) {
+    if (!reduced()) {
       for (let i = 0; i < count; i++) {
         const ang = Math.random() * Math.PI * 2
         const d = (0.6 + Math.random()) * Math.max(w, h) * 0.6
@@ -201,6 +206,14 @@ export function ParticleSphere({ mode, className }: Props) {
       cur.a += (target.a - cur.a) * (1 - Math.pow(1 - 0.03, dt))
       // Катится: поворот в плоскости экрана ровно на пройденный путь / радиус
       rotZ += (cur.cx - prevCx) / Math.max(cur.r, 1)
+
+      // Сфера выключена в настройках и уже погасла — не тратим процессор
+      if (target.a === 0 && cur.a < 0.004) {
+        ctx.clearRect(0, 0, w, h)
+        raf = requestAnimationFrame(frame)
+        return
+      }
+      const reduceMotion = reduced()
 
       spin *= Math.pow(0.95, dt)
       rotY += ((reduceMotion ? 0.0008 : hero ? 0.0028 : 0.0016) + spin) * dt

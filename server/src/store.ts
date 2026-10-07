@@ -9,6 +9,15 @@ import { fileURLToPath } from 'node:url'
 export const STATUSES = ['online', 'idle', 'sleep', 'dnd', 'invisible'] as const
 export type Status = (typeof STATUSES)[number]
 
+export interface Privacy {
+  /** Кто может писать в личку: друзья и люди с общих серверов — или только друзья */
+  dms: 'servers' | 'friends'
+  /** Кто может отправлять заявки в друзья */
+  friendRequests: 'everyone' | 'nobody'
+}
+
+export const DEFAULT_PRIVACY: Privacy = { dms: 'servers', friendRequests: 'everyone' }
+
 export interface User {
   id: string
   username: string
@@ -17,6 +26,10 @@ export interface User {
   createdAt: number
   status: Status
   customStatus: string
+  bio: string
+  privacy: Privacy
+  /** Растёт при смене пароля / «выйти везде» — старые токены перестают работать */
+  tokenVersion: number
 }
 
 export interface Channel {
@@ -73,7 +86,14 @@ function load(): Data {
   const raw: Partial<Data> = existsSync(DATA_FILE) ? JSON.parse(readFileSync(DATA_FILE, 'utf8')) : {}
   // Дозаполняем поля, которых не было в старых версиях файла
   return {
-    users: (raw.users ?? []).map((u) => ({ ...u, status: u.status ?? 'online', customStatus: u.customStatus ?? '' })),
+    users: (raw.users ?? []).map((u) => ({
+      ...u,
+      status: u.status ?? 'online',
+      customStatus: u.customStatus ?? '',
+      bio: u.bio ?? '',
+      privacy: { ...DEFAULT_PRIVACY, ...u.privacy },
+      tokenVersion: u.tokenVersion ?? 0,
+    })),
     // общий сервер переименован вместе с приложением
     guilds: (raw.guilds ?? []).map((g, i) => (i === 0 && g.name === 'Massanger' ? { ...g, name: 'Nuntius' } : g)),
     relations: raw.relations ?? [],
@@ -97,7 +117,14 @@ function save() {
 export const id = () => randomUUID()
 
 export function publicUser(u: User) {
-  return { id: u.id, username: u.username, displayName: u.displayName, customStatus: u.customStatus, createdAt: u.createdAt }
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.displayName,
+    customStatus: u.customStatus,
+    bio: u.bio,
+    createdAt: u.createdAt,
+  }
 }
 export type PublicUser = ReturnType<typeof publicUser>
 
@@ -109,7 +136,16 @@ export const findUserByName = (username: string) =>
 export const findUser = (userId: string) => data.users.find((u) => u.id === userId)
 
 export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordHash'>): User {
-  const user: User = { ...u, id: id(), createdAt: Date.now(), status: 'online', customStatus: '' }
+  const user: User = {
+    ...u,
+    id: id(),
+    createdAt: Date.now(),
+    status: 'online',
+    customStatus: '',
+    bio: '',
+    privacy: { ...DEFAULT_PRIVACY },
+    tokenVersion: 0,
+  }
   data.users.push(user)
   // Все новые пользователи сразу попадают на общий сервер
   ensureLobby(user.id).memberIds.push(user.id)
@@ -117,7 +153,9 @@ export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordH
   return user
 }
 
-export function updateUser(user: User, patch: Partial<Pick<User, 'displayName' | 'status' | 'customStatus'>>) {
+export type UserPatch = Partial<Pick<User, 'username' | 'displayName' | 'status' | 'customStatus' | 'bio' | 'privacy' | 'passwordHash' | 'tokenVersion'>>
+
+export function updateUser(user: User, patch: UserPatch) {
   Object.assign(user, patch)
   save()
 }
@@ -226,6 +264,9 @@ export function channelAccess(channelId: string, userId: string): ChannelAccess 
 export function messagesIn(channelId: string, limit = 150): Message[] {
   return data.messages.filter((m) => m.channelId === channelId).slice(-limit)
 }
+
+/** Автор служебных сообщений («теперь вы друзья» и т.п.) */
+export const SYSTEM_AUTHOR = 'system'
 
 export function addMessage(channelId: string, authorId: string, content: string): Message {
   const message: Message = { id: id(), channelId, authorId, content, createdAt: Date.now() }

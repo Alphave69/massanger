@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { uiZoom } from '../lib/settings'
 import { useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { ProfileView } from './ProfileView'
@@ -33,10 +34,15 @@ export function ProfileCard() {
 
   useLayoutEffect(() => {
     if (!profile || !ref.current) return setPos(null)
+    // Карточка живёт внутри масштабированного интерфейса: экранные координаты делим на масштаб
+    const k = uiZoom()
+    const vw = window.innerWidth / k
+    const vh = window.innerHeight / k
+    const anchor = { left: profile.left / k, right: profile.right / k, top: profile.top / k }
     const h = ref.current.offsetHeight
-    const fitsRight = profile.right + GAP + WIDTH < window.innerWidth - GAP
-    const left = fitsRight ? profile.right + GAP : Math.max(GAP, profile.left - GAP - WIDTH)
-    const top = Math.min(Math.max(GAP, profile.top - 40), window.innerHeight - h - GAP)
+    const fitsRight = anchor.right + GAP + WIDTH < vw - GAP
+    const left = fitsRight ? anchor.right + GAP : Math.max(GAP, anchor.left - GAP - WIDTH)
+    const top = Math.min(Math.max(GAP, anchor.top - 40), vh - h - GAP)
     setPos({ left, top })
   }, [profile])
 

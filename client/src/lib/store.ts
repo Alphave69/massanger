@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { DmView, FriendEntry, FriendState, Guild, InitialState, Me, Message, Presence, User } from './api'
+import { SYSTEM_AUTHOR, type DmView, type FriendEntry, type FriendState, type Guild, type InitialState, type Me, type Message, type Presence, type User } from './api'
 import { selfPresence } from './status'
 
 export type FriendsTab = 'online' | 'all' | 'pending' | 'add'
@@ -109,7 +109,11 @@ export const chat = {
 
   init(s: InitialState) {
     const st = get()
-    const keepView = st.view.kind === 'guild' && s.guilds.some((g) => g.id === (st.view as { guildId: string }).guildId)
+    // Повторная загрузка (после обрыва связи) не должна выкидывать с открытого экрана
+    const v = st.view
+    const keepView =
+      st.ready &&
+      (v.kind === 'home' || (v.kind === 'dm' && s.dms.some((d) => d.id === v.dmId)) || (v.kind === 'guild' && s.guilds.some((g) => g.id === v.guildId)))
     set({
       me: s.user,
       users: withUsers(st.users, [
@@ -209,7 +213,8 @@ export const chat = {
 
     set({
       messages: list ? { ...st.messages, [m.channelId]: [...list, m] } : st.messages,
-      unread: !mine && !isActive ? { ...st.unread, [m.channelId]: (st.unread[m.channelId] ?? 0) + 1 } : st.unread,
+      // служебные сообщения («теперь вы друзья») не считаем непрочитанными
+      unread: !mine && !isActive && m.authorId !== SYSTEM_AUTHOR ? { ...st.unread, [m.channelId]: (st.unread[m.channelId] ?? 0) + 1 } : st.unread,
       typing,
     })
     return { isNew: true, isActive, mine }

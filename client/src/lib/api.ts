@@ -7,12 +7,22 @@ export interface User {
   username: string
   displayName: string
   customStatus: string
+  bio: string
   createdAt: number
+}
+
+export interface Privacy {
+  dms: 'servers' | 'friends'
+  friendRequests: 'everyone' | 'nobody'
 }
 
 export interface Me extends User {
   status: Status
+  privacy: Privacy
 }
+
+/** Служебные сообщения («теперь вы друзья») приходят с таким автором */
+export const SYSTEM_AUTHOR = 'system'
 
 export interface Channel {
   id: string
@@ -118,8 +128,10 @@ export const api = {
     request<AuthResponse>('/auth/login', { method: 'POST', body: { username, password } }),
   me: () => request<{ user: Me }>('/me'),
   state: () => request<InitialState>('/state'),
-  updateMe: (patch: Partial<Pick<Me, 'displayName' | 'customStatus' | 'status'>>) =>
+  updateMe: (patch: Partial<Pick<Me, 'displayName' | 'username' | 'customStatus' | 'bio' | 'status'>> & { privacy?: Partial<Privacy> }) =>
     request<{ user: Me }>('/me', { method: 'PATCH', body: patch }),
+  changePassword: (current: string, next: string) => request<{ token: string }>('/me/password', { method: 'POST', body: { current, next } }),
+  logoutAll: () => request<{ token: string }>('/me/logout-all', { method: 'POST' }),
 
   createGuild: (name: string) => request<{ guild: Guild }>('/guilds', { method: 'POST', body: { name } }),
   joinGuild: (code: string) => request<{ guild: Guild }>(`/guilds/${encodeURIComponent(code)}/join`, { method: 'POST' }),

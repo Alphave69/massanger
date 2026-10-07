@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { api, ApiError, getToken } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { chat, useChat } from '../lib/store'
 import { useUi } from '../lib/ui'
@@ -14,6 +14,7 @@ import { Toasts } from './Toasts'
 import { Modals } from './Modals'
 import { ProfileCard } from './ProfileCard'
 import { MiniSphere } from './MiniSphere'
+import { Settings } from './settings/Settings'
 
 interface Props {
   onLogout: () => void
@@ -24,6 +25,7 @@ export function Shell({ onLogout }: Props) {
   const view = useChat((s) => s.view)
   const connected = useChat((s) => s.connected)
   const asideOpen = useUi((s) => s.asideOpen)
+  const settingsOpen = useUi((s) => s.settings !== null)
   const totalUnread = useChat((s) => Object.values(s.unread).reduce((a, b) => a + b, 0))
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export function Shell({ onLogout }: Props) {
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) onLogout()
       })
-    const stop = connectRealtime(getToken() ?? '', onLogout)
+    const stop = connectRealtime(onLogout)
     return () => {
       alive = false
       stop()
@@ -64,7 +66,8 @@ export function Shell({ onLogout }: Props) {
   const hasAside = view.kind !== 'home'
 
   return (
-    <div className={`shell${hasAside && asideOpen ? ' shell--aside' : ''}`}>
+    <>
+    <div className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}`} aria-hidden={settingsOpen}>
       <Dock />
       {view.kind === 'guild' ? <GuildSidebar guildId={view.guildId} onLogout={onLogout} /> : <HomeSidebar onLogout={onLogout} />}
       {view.kind === 'home' ? <FriendsPage tab={view.tab} /> : <ChatView />}
@@ -79,5 +82,7 @@ export function Shell({ onLogout }: Props) {
       <Modals />
       <ProfileCard />
     </div>
+    <Settings onLogout={onLogout} />
+    </>
   )
 }
