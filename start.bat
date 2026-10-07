@@ -10,9 +10,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist node_modules (
-  echo Устанавливаю зависимости, это один раз...
-  call npm install
+echo Проверяю зависимости...
+call npm install --no-audit --no-fund --loglevel=error
+if errorlevel 1 (
+  echo Не получилось установить зависимости. Пришли текст ошибки выше.
+  pause
+  exit /b 1
 )
 
 echo.
