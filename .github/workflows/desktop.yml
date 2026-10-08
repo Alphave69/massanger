@@ -1,5 +1,5 @@
 # Сборка Nuntius для Windows: Actions → «Nuntius для Windows» → Run workflow → вписать адрес сервера.
-# Готовые файлы — внизу страницы запуска, в разделе Artifacts.
+# Готовые файлы — в Releases (ссылку можно кидать друзьям) и внизу страницы запуска, в Artifacts.
 name: Nuntius для Windows
 
 on:
@@ -11,6 +11,9 @@ on:
         default: ''
   push:
     tags: ['desktop-v*']
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -38,3 +41,16 @@ jobs:
           name: Nuntius-Windows
           path: |
             desktop/dist/*.exe
+      - name: Ссылка на скачивание (релиз «Nuntius для Windows»)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: Nuntius для Windows
+          make_latest: true
+          overwrite_files: true
+          body: |
+            **Nuntius-Setup-….exe** — установщик: скачай, запусти, готово.
+            **Nuntius-Portable-….exe** — запускается без установки.
+
+            Если Windows покажет синее окно «Windows защитила ваш компьютер» — нажми «Подробнее» → «Выполнить в любом случае».
+          files: desktop/dist/*.exe
