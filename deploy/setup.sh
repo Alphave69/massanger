@@ -165,6 +165,17 @@ ok "Nuntius запущен и сам поднимется после перез�
 
 say "HTTPS (Caddy)"
 render "$APP/deploy/Caddyfile.template" /etc/caddy/Caddyfile
+# Свой домен вида nuntius.site — www.nuntius.site тоже открывается и ведёт на основной адрес
+case "$DOMAIN" in
+  *.sslip.io | *.duckdns.org | *.*.*) ;;
+  *.*)
+    WWW_BLOCK="
+www.$DOMAIN {
+	redir https://$DOMAIN{uri} permanent
+}"
+    if [ "$DRY" = 1 ]; then echo "  [dry-run] + www.$DOMAIN → $DOMAIN"; else printf '%s\n' "$WWW_BLOCK" >>/etc/caddy/Caddyfile; fi
+    ;;
+esac
 run systemctl enable caddy
 run systemctl reload-or-restart caddy
 ok "Caddy сам получит сертификат для https://$DOMAIN"
