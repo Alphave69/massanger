@@ -93,10 +93,22 @@ fi
 say "Пакеты: Node.js 22, git, Caddy (HTTPS), coturn (голос), ufw (фаервол)"
 export DEBIAN_FRONTEND=noninteractive
 run apt-get update -y
+# coturn и Caddy лежат в разделе universe — на некоторых VPS он выключен
+if ! grep -rqs '^[^#].* universe' /etc/apt/sources.list /etc/apt/sources.list.d/ && ! grep -rqs 'Components:.*universe' /etc/apt/sources.list.d/; then
+  run apt-get install -y software-properties-common
+  run add-apt-repository -y universe
+  run apt-get update -y
+fi
 run apt-get install -y curl ca-certificates gnupg git openssl ufw coturn debian-keyring debian-archive-keyring apt-transport-https
-if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
-  run sh -c 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
-  run apt-get install -y nodejs
+node_ok() { command -v node >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 22 ]; }
+if ! node_ok; then
+  # NodeSource; не открылся — ставим через snap
+  if run sh -c 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs'; then :; fi
+  if [ "$DRY" != 1 ] && ! node_ok; then
+    run snap install node --classic --channel=22
+    hash -r
+  fi
+  [ "$DRY" = 1 ] || node_ok || die "Не получилось поставить Node.js 22 — напиши мне, что выше в выводе"
 fi
 if ! command -v caddy >/dev/null; then
   # официальный репозиторий Caddy; не вышло — берём из Ubuntu
@@ -159,6 +171,11 @@ ok "Caddy сам получит сертификат для https://$DOMAIN"
 
 say "Голос через сложные сети (coturn)"
 render "$APP/deploy/turnserver.conf.template" /etc/turnserver.conf
+# Хостинг выдаёт IP через NAT (адреса нет на сетевой карте) — TURN должен знать внешний адрес
+LOCAL_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' | head -n1)
+if [ -n "$PUBLIC_IP" ] && [ -n "$LOCAL_IP" ] && [ "$PUBLIC_IP" != "$LOCAL_IP" ]; then
+  if [ "$DRY" = 1 ]; then echo "  [dry-run] external-ip=$PUBLIC_IP/$LOCAL_IP"; else echo "external-ip=$PUBLIC_IP/$LOCAL_IP" >>/etc/turnserver.conf; fi
+fi
 [ -f /etc/default/coturn ] && run sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
 run systemctl enable coturn
 run systemctl restart coturn
