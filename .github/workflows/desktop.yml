@@ -34,7 +34,8 @@ jobs:
         shell: bash
         env:
           URL: ${{ inputs.server_url }}
-        run: node -e "require('fs').writeFileSync('nuntius.config.json', JSON.stringify({ url: process.env.URL }, null, 2))"
+        run: |
+          node -e "require('fs').writeFileSync('nuntius.config.json', JSON.stringify({ url: process.env.URL }, null, 2))"
       - run: npx electron-builder --win nsis portable --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
