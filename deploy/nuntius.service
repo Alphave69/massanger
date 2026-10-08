@@ -1,0 +1,23 @@
+[Unit]
+Description=Nuntius — мессенджер
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nuntius
+Group=nuntius
+WorkingDirectory=__APP__/server
+Environment=NODE_ENV=production
+ExecStart=__APP__/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=3
+# Защита: писать можно только в папку с данными
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__APP__/server/data
+
+[Install]
+WantedBy=multi-user.target

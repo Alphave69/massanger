@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <title>Что показать?</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        place-items: stretch;
+        padding: 20px 22px;
+        gap: 14px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      header h1 {
+        margin: 0;
+        flex: 1;
+        font-size: 20px;
+      }
+      .tabs {
+        display: flex;
+        gap: 6px;
+      }
+      .tabs button {
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 10px;
+        background: transparent;
+        color: #aaa;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        font-size: 13.5px;
+      }
+      .tabs button.on {
+        background: #fff;
+        color: #000;
+      }
+      .grid {
+        flex: 1;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 12px;
+        align-content: start;
+        padding: 2px;
+      }
+      .src {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: auto;
+        padding: 8px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        color: #ddd;
+        text-align: left;
+        font-weight: 500;
+      }
+      .src img {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: contain;
+        border-radius: 8px;
+        background: #0a0a0a;
+      }
+      .src span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 13px;
+      }
+      .src.on {
+        border-color: #fff;
+        box-shadow: 0 0 0 2px #fff, 0 0 30px rgba(255, 255, 255, 0.3);
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      label {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #bbb;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      label input {
+        width: 18px;
+        height: 18px;
+        accent-color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Что показать?</h1>
+      <div class="tabs">
+        <button id="t-screen" class="on" type="button">Экраны</button>
+        <button id="t-window" type="button">Окна</button>
+      </div>
+    </header>
+    <div class="grid" id="grid"></div>
+    <footer>
+      <label id="audio-wrap"><input type="checkbox" id="audio" checked /> Со звуком компьютера</label>
+      <button class="ghost" id="cancel" type="button">Отмена</button>
+      <button id="share" type="button" disabled>Поделиться</button>
+    </footer>
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const api = window.nuntiusDesktop
+      let all = []
+      let kind = 'screen'
+      let chosen = null
+      const draw = () => {
+        $('t-screen').classList.toggle('on', kind === 'screen')
+        $('t-window').classList.toggle('on', kind === 'window')
+        $('grid').replaceChildren(
+          ...all
+            .filter((s) => s.kind === kind)
+            .map((s) => {
+              const b = document.createElement('button')
+              b.type = 'button'
+              b.className = 'src' + (s.id === chosen ? ' on' : '')
+              const img = document.createElement('img')
+              img.src = s.thumbnail
+              const name = document.createElement('span')
+              name.textContent = s.name
+              b.append(img, name)
+              b.onclick = () => {
+                chosen = s.id
+                $('share').disabled = false
+                draw()
+              }
+              b.ondblclick = share
+              return b
+            }),
+        )
+      }
+      const share = () => chosen && api.choose({ id: chosen, audio: $('audio').checked })
+      $('t-screen').onclick = () => ((kind = 'screen'), draw())
+      $('t-window').onclick = () => ((kind = 'window'), draw())
+      $('cancel').onclick = () => api.choose(null)
+      $('share').onclick = share
+      addEventListener('keydown', (e) => e.key === 'Escape' && api.choose(null))
+      api.sources().then((res) => {
+        all = res.sources
+        $('audio-wrap').hidden = !res.audio
+        const screens = all.filter((s) => s.kind === 'screen')
+        if (screens.length === 1) {
+          chosen = screens[0].id
+          $('share').disabled = false
+        }
+        draw()
+      })
+    </script>
+  </body>
+</html>

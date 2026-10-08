@@ -1,0 +1,40 @@
+# Сборка Nuntius для Windows: Actions → «Nuntius для Windows» → Run workflow → вписать адрес сервера.
+# Готовые файлы — внизу страницы запуска, в разделе Artifacts.
+name: Nuntius для Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: 'Адрес сервера (https://…), который будет зашит в приложение'
+        required: false
+        default: ''
+  push:
+    tags: ['desktop-v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Адрес сервера
+        if: ${{ inputs.server_url != '' }}
+        shell: bash
+        env:
+          URL: ${{ inputs.server_url }}
+        run: node -e "require('fs').writeFileSync('nuntius.config.json', JSON.stringify({ url: process.env.URL }, null, 2))"
+      - run: npx electron-builder --win nsis portable --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nuntius-Windows
+          path: |
+            desktop/dist/*.exe

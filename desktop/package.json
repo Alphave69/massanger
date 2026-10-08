@@ -1,0 +1,50 @@
+{
+  "name": "nuntius-desktop",
+  "productName": "Nuntius",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nuntius — приложение для Windows",
+  "author": "Nuntius",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable --x64",
+    "dist:setup": "electron-builder --win nsis --x64",
+    "dist:portable": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "^26.17.0"
+  },
+  "build": {
+    "appId": "ru.nuntius.app",
+    "productName": "Nuntius",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "nuntius.config.json",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nuntius",
+      "artifactName": "Nuntius-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Nuntius-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": "dir",
+      "icon": "build/icon.png"
+    }
+  }
+}

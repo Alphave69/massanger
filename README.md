@@ -80,3 +80,8 @@ server/src/
   auth.ts                пароли и JWT
   store.ts               хранилище
 ```
+
+## Чтобы работало без твоего ПК
+
+- **Сервер 24/7** — пошагово в [DEPLOY.md](DEPLOY.md): арендуешь VPS, запускаешь `deploy/setup.sh`, готово.
+- **Приложение для Windows** (установщик, который можно просто скинуть друзьям) — в [desktop/README.md](desktop/README.md).
