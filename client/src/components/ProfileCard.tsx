@@ -21,7 +21,8 @@ export function ProfileCard() {
     if (!profile) return
     const onDown = (e: PointerEvent) => {
       const t = e.target as Element
-      if (!ref.current?.contains(t) && !t.closest?.('.mgroup__avatar, .mgroup__author, .member, .friend__who, .main__title--user')) ui.hideProfile()
+      // Подробности значка и праздник — поверх карточки, клики по ним её не закрывают
+      if (!ref.current?.contains(t) && !t.closest?.('.mgroup__avatar, .mgroup__author, .member, .friend__who, .main__title--user, .bdg-layer, .bdg-cele')) ui.hideProfile()
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && ui.hideProfile()
     window.addEventListener('pointerdown', onDown)

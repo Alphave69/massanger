@@ -5,15 +5,21 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import cors from 'cors'
 import express, { type Response } from 'express'
-import { Server } from 'socket.io'
+import { Server, type Socket } from 'socket.io'
 import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
 import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 import { createVoice } from './voice.js'
 import { on, reply } from './safe.js'
+import { createBadges, eggsOf, EGGS } from './badges.js'
+import { runCommand } from './commands.js'
+import { registerAdminRoutes } from './admin.js'
 import { registerGuildRoutes } from './guilds.js'
 import { registerGroupRoutes } from './groups.js'
+import { registerRoleRoutes } from './roles.js'
+import { broadcastGuild, serializeGuild } from './guildView.js'
+import { hasChannelPermission } from './permissions.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
@@ -29,17 +35,35 @@ const fail = (res: Response, code: number, error: string) => void res.status(cod
 // ============ представления данных для клиента ============
 
 /** Себя пользователь видит вместе с выбранным статусом (в т.ч. «невидимка») и настройками приватности */
-const selfUser = (u: store.User) => ({ ...store.publicUser(u), status: u.status, privacy: u.privacy, email: u.email })
+const selfUser = (u: store.User) => ({
+  ...store.publicUser(u),
+  status: u.status,
+  privacy: u.privacy,
+  email: u.email,
+  stats: u.stats,
+  eggs: eggsOf(u),
+  eggTotal: EGGS.length,
+  admin: store.isAdmin(u),
+  owner: store.isAppOwner(u),
+  privileges: u.privileges,
+})
 
-function serializeGuild(guild: store.Guild) {
-  return {
-    id: guild.id,
-    name: guild.name,
-    ownerId: guild.ownerId,
-    isLobby: Boolean(guild.isLobby),
-    channels: guild.channels,
-    members: guild.memberIds.map(store.findUser).filter((u) => u !== undefined).map(store.publicUser),
-  }
+/** Профиль поменялся (значки, галочка…) — ему целиком, остальным — публичную часть */
+function userChanged(u: store.User) {
+  io.emit('user:update', store.publicUser(u))
+  io.to(`user:${u.id}`).emit('me:update', selfUser(u))
+}
+
+const badges = createBadges(io, userChanged)
+
+/** Разослать сервер всем участникам — каждому свою версию: каналы и права у всех разные (guildView.ts) */
+const emitGuild = (guild: store.Guild) => broadcastGuild(io, guild)
+
+/** Событие нескольким людям сразу. Пустой список не шлём: io.to([]) разослал бы событие вообще всем */
+function emitTo(userIds: string[], event: string, payload: unknown, except?: Socket) {
+  if (!userIds.length) return
+  const rooms = userIds.map((id) => `user:${id}`)
+  ;(except ? except.to(rooms) : io.to(rooms)).emit(event, payload)
 }
 
 function friendEntries(userId: string) {
@@ -92,6 +116,8 @@ function befriend(a: string, b: string) {
     io.to(`user:${id}`).emit('dm:update', dmView(dm, id))
     io.to(`user:${id}`).emit('message:new', message)
   }
+  badges.syncId(a)
+  badges.syncId(b)
 }
 
 /** Может ли `fromId` писать в личку человеку `to` с учётом его настроек приватности */
@@ -113,6 +139,7 @@ const voice = createVoice(io, {
   announceDm: (dm) => {
     for (const id of dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(dm, id))
   },
+  stats: badges,
 })
 
 /** bcrypt учитывает только первые 72 байта (русская буква — 2 байта): длиннее не пускаем, чтобы пароль не обрезался молча */
@@ -123,10 +150,6 @@ async function kickStaleSockets(user: store.User) {
   const sockets = await io.in(`user:${user.id}`).fetchSockets()
   for (const s of sockets) if (s.data.tokenVersion !== user.tokenVersion) s.disconnect(true)
 }
-
-/** Комнаты, куда уходят события канала: серверный канал — всем участникам сервера, личка — двоим */
-const roomsFor = (access: store.ChannelAccess) =>
-  access.kind === 'guild' ? [`guild:${access.guild.id}`] : access.dm.memberIds.map((id) => `user:${id}`)
 
 // ============ присутствие и статусы ============
 
@@ -215,7 +238,7 @@ app.post('/api/auth/register/verify', (req, res) => {
 
   const user = store.createUser(d)
   // Сообщаем всем на общем сервере, что пришёл новый человек
-  for (const guild of store.guildsOf(user.id)) io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
+  for (const guild of store.guildsOf(user.id)) emitGuild(guild)
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 
@@ -227,6 +250,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user || typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) {
     return fail(res, 401, 'Неверный логин, почта или пароль')
   }
+  if (user.banned) return fail(res, 403, 'Аккаунт заблокирован')
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 
@@ -251,6 +275,7 @@ app.post('/api/auth/reset/verify', async (req, res) => {
   if (!check.ok) return fail(res, 400, check.error)
   const user = store.findUser(check.data.userId)
   if (!user) return fail(res, 404, 'Аккаунт не найден')
+  if (user.banned) return fail(res, 403, 'Аккаунт заблокирован')
   store.updateUser(user, { passwordHash: await hashPassword(req.body.password), tokenVersion: user.tokenVersion + 1 })
   void kickStaleSockets(user)
   res.json({ token: signToken(user), user: selfUser(user) })
@@ -265,7 +290,7 @@ app.get('/api/state', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
   res.json({
     user: selfUser(user),
-    guilds: store.guildsOf(user.id).map(serializeGuild),
+    guilds: store.guildsOf(user.id).map((g) => serializeGuild(g, user.id)),
     friends: friendEntries(user.id),
     dms: dmsFor(user.id),
     presence: presenceMap(),
@@ -322,8 +347,8 @@ app.patch('/api/me', requireAuth, async (req, res) => {
   }
 
   store.updateUser(user, patch)
-  io.emit('user:update', store.publicUser(user))
-  io.to(`user:${user.id}`).emit('me:update', selfUser(user))
+  userChanged(user)
+  badges.sync(user) // «Стиляга», «Палиндром»
   if (patch.status) broadcastPresence()
   res.json({ user: selfUser(user) })
 })
@@ -387,9 +412,11 @@ app.post('/api/guilds', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
   const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 48) : ''
   if (!name) return fail(res, 400, 'Укажи название сервера')
+  if (!user.privileges.createServers) return fail(res, 403, 'Создавать серверы тебе запретил администратор')
   const guild = store.createGuild(name, user.id)
   io.in(`user:${user.id}`).socketsJoin(`guild:${guild.id}`)
-  res.json({ guild: serializeGuild(guild) })
+  badges.award(user, 'architect')
+  res.json({ guild: serializeGuild(guild, user.id) })
 })
 
 app.post('/api/guilds/:id/join', requireAuth, (req, res) => {
@@ -397,12 +424,12 @@ app.post('/api/guilds/:id/join', requireAuth, (req, res) => {
   const guild = store.joinGuild(String(req.params.id), user.id)
   if (!guild) return fail(res, 404, 'Сервер не найден — проверь код приглашения')
   io.in(`user:${user.id}`).socketsJoin(`guild:${guild.id}`)
-  io.to(`guild:${guild.id}`).emit('guild:update', serializeGuild(guild))
+  emitGuild(guild)
   voice.sendRooms(
     user.id,
     guild.channels.filter((c) => c.type === 'voice').map((c) => c.id),
   )
-  res.json({ guild: serializeGuild(guild) })
+  res.json({ guild: serializeGuild(guild, user.id) })
 })
 
 // --- друзья ---
@@ -475,12 +502,45 @@ app.post('/api/dms', requireAuth, (req, res) => {
 app.get('/api/channels/:id/messages', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
   const channelId = String(req.params.id)
+  // серверный канал без права VIEW_CHANNEL — как будто его нет
   if (!store.channelAccess(channelId, user.id)) return fail(res, 404, 'Канал не найден')
   res.json({ messages: store.messagesIn(channelId) })
 })
 
-registerGuildRoutes(app, { io, voice, fail, serializeGuild })
-registerGroupRoutes(app, { io, voice, fail, dmView, systemMessage })
+/** Удалить сообщение: своё — всегда, чужое — с правом MANAGE_MESSAGES в канале, админ приложения — любое */
+app.delete('/api/messages/:id', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const message = store.findMessage(String(req.params.id))
+  const access = message ? store.locateChannel(message.channelId) : undefined
+  const admin = store.isAdmin(user)
+  if (!message || !access || (!admin && !store.canSee(access, user.id))) return fail(res, 404, 'Сообщение не найдено')
+  const own = message.authorId === user.id
+  const moderator = access.kind === 'guild' && hasChannelPermission(access.guild, access.channel, user.id, 'MANAGE_MESSAGES')
+  if (!own && !moderator && !admin) {
+    return fail(res, 403, message.authorId === store.SYSTEM_AUTHOR ? 'Служебные сообщения удаляют только модераторы' : 'Нет права удалять чужие сообщения')
+  }
+  store.deleteMessage(message)
+  emitTo(store.viewersOf(access), 'message:deleted', { id: message.id, channelId: message.channelId })
+  res.json({ ok: true })
+})
+
+registerGuildRoutes(app, { io, voice, fail, emitGuild })
+registerRoleRoutes(app, { voice, fail, emitGuild })
+registerGroupRoutes(app, { io, voice, fail, dmView, systemMessage, badges })
+registerAdminRoutes(app, { io, voice, badges, fail, changed: userChanged, kickStaleSockets, isOnline: (id) => (socketCount.get(id) ?? 0) > 0 })
+
+// --- значки и пасхалки ---
+
+app.get('/api/badges', requireAuth, (req, res) => {
+  res.json(badges.catalogFor((req as AuthedRequest).user))
+})
+
+app.post('/api/me/eggs', requireAuth, (req, res) => {
+  const { user } = req as AuthedRequest
+  const found = badges.findEgg(user, typeof req.body?.id === 'string' ? req.body.id : '')
+  if (!found) return fail(res, 400, 'Такой пасхалки нет')
+  res.json({ isNew: found.isNew, egg: found.egg, user: selfUser(user) })
+})
 
 // В продакшене отдаём собранный клиент с того же порта
 const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../client/dist')
@@ -511,6 +571,12 @@ io.on('connection', (socket) => {
   broadcastPresence()
   voice.attach(socket, userId)
 
+  // Часовой пояс (для «Совы» и «Жаворонка») и значки за стаж — при каждом подключении
+  const me = store.findUser(userId)
+  const tz = socket.handshake.auth?.tz
+  if (me && typeof tz === 'number' && Number.isInteger(tz) && Math.abs(tz) <= 840 && tz !== me.tz) store.updateUser(me, { tz })
+  if (me) badges.sync(me)
+
   on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: unknown) => {
     const answer = reply(ack)
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
@@ -520,6 +586,10 @@ io.on('connection', (socket) => {
       answer({ error: 'Не удалось отправить сообщение' })
       return
     }
+    if (access.kind === 'guild' && !hasChannelPermission(access.guild, access.channel, userId, 'SEND_MESSAGES')) {
+      answer({ error: 'Нет прав писать в этом канале' })
+      return
+    }
     if (access.kind === 'dm' && access.dm.kind === 'dm') {
       const other = otherIn(access.dm, userId)
       if (!other || !canWriteDm(userId, other, access.dm.id)) {
@@ -527,8 +597,23 @@ io.on('connection', (socket) => {
         return
       }
     }
-    const message = store.addMessage(channelId, userId, content)
-    io.to(roomsFor(access)).emit('message:new', message)
+    // Команды: /roll, /flip, /8ball, /me…
+    const author = store.findUser(userId)
+    const command = runCommand(content)
+    if (command && 'error' in command) {
+      answer({ error: command.error })
+      return
+    }
+    const message = store.addMessage(channelId, userId, command ? command.content : content, command?.flavor)
+    if (author) {
+      badges.onMessage(author, message.createdAt)
+      if (command) {
+        author.stats.commands++
+        badges.findEgg(author, 'commands', true)
+      }
+    }
+    // серверный канал — только тем, кто его видит; личка — её участникам
+    emitTo(store.viewersOf(access), 'message:new', message)
     if (access.kind === 'dm') {
       for (const id of access.dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(access.dm, id))
     }
@@ -539,11 +624,12 @@ io.on('connection', (socket) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
     if (!access) return
+    if (access.kind === 'guild' && !hasChannelPermission(access.guild, access.channel, userId, 'SEND_MESSAGES')) return
     if (access.kind === 'dm' && access.dm.kind === 'dm') {
       const other = otherIn(access.dm, userId)
       if (!other || !canWriteDm(userId, other, access.dm.id)) return
     }
-    socket.to(roomsFor(access)).emit('typing', { channelId, userId })
+    emitTo(store.viewersOf(access), 'typing', { channelId, userId }, socket)
   })
 
   // Клиент сам сообщает, что человек отошёл (нет активности несколько минут)

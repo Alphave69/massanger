@@ -1,5 +1,6 @@
-import { Users, Volume2 } from 'lucide-react'
+import { Lock, Users, Volume2 } from 'lucide-react'
 import type { Channel, Guild } from '../../lib/api'
+import { can, isPrivateChannel } from '../../lib/perms'
 import { ui, useUi } from '../../lib/ui'
 import { VoiceStage } from './VoiceStage'
 
@@ -14,7 +15,15 @@ export function VoiceChannelView({ guild, channel }: { guild: Guild; channel: Ch
             <Volume2 size={17} />
           </span>
           <h2 className="truncate">{channel.name}</h2>
-          <span className="main__sub">голосовой канал · {guild.name}</span>
+          {isPrivateChannel(guild, channel) && (
+            <span className="main__lock" data-tip="Приватный канал">
+              <Lock size={14} />
+            </span>
+          )}
+          <span className="main__sub">
+            голосовой канал · {guild.name}
+            {!can(guild, 'CONNECT', channel.id) && ' · только просмотр'}
+          </span>
         </div>
         <div className="main__actions">
           <button className={`icon-btn${asideOpen ? ' is-active' : ''}`} onClick={ui.toggleAside} data-tip="Участники">

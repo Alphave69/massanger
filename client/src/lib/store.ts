@@ -252,6 +252,15 @@ export const chat = {
     })
   },
 
+  /** Сообщение удалили (автор или модератор) */
+  removeMessage(channelId: string, messageId: string) {
+    set((st) => {
+      const list = st.messages[channelId]
+      if (!list?.some((m) => m.id === messageId)) return {}
+      return { messages: { ...st.messages, [channelId]: list.filter((m) => m.id !== messageId) } }
+    })
+  },
+
   /** Пропущенный звонок — как непрочитанное в переписке */
   bumpUnread(channelId: string) {
     set((st) => ({ unread: { ...st.unread, [channelId]: (st.unread[channelId] ?? 0) + 1 } }))

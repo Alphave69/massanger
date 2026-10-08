@@ -2,9 +2,9 @@ import { create } from 'zustand'
 
 export type ModalKind = 'create-guild' | 'join-guild' | 'invite' | null
 
-export type SettingsSection = 'account' | 'profile' | 'privacy' | 'appearance' | 'voice' | 'notifications'
+export type SettingsSection = 'account' | 'profile' | 'badges' | 'privacy' | 'appearance' | 'voice' | 'notifications' | 'lab' | 'admin'
 
-export type ServerSection = 'overview' | 'channels' | 'members' | 'invite'
+export type ServerSection = 'overview' | 'roles' | 'channels' | 'members' | 'invite'
 
 export type ChannelModal = { mode: 'create'; guildId: string; type: 'text' | 'voice' } | { mode: 'edit'; guildId: string; channelId: string }
 

@@ -6,6 +6,7 @@ import { useVoice } from '../lib/voice'
 import { Avatar } from './Avatar'
 import { GroupAvatar } from './groups/GroupAvatar'
 import { UserBar } from './UserBar'
+import { UserTags } from './UserTags'
 import { VoicePanel } from './voice/VoicePanel'
 import { MEMBERS, plural } from '../lib/format'
 
@@ -86,7 +87,10 @@ function DmRow({ dm, active, index }: { dm: DmRef; active: boolean; index: numbe
     >
       {dm.kind === 'group' ? <GroupAvatar memberIds={dm.memberIds} size={34} /> : user && <Avatar user={user} size={34} status={status} />}
       <span className="dm-row__text">
-        <span className="dm-row__name truncate">{title}</span>
+        <span className="dm-row__title">
+          <span className="dm-row__name truncate">{title}</span>
+          {dm.kind === 'dm' && user && <UserTags user={user} size={13} />}
+        </span>
         <span className={`dm-row__sub truncate${typingName ? ' is-typing' : ''}`}>{sub}</span>
       </span>
       {inCall && (

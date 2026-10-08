@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { Fullscreen, HeadphoneOff, Maximize2, MicOff, Minimize2, MonitorUp, Phone, SlidersHorizontal, Video } from 'lucide-react'
-import type { VoiceMember } from '../../lib/api'
+import { Fullscreen, HeadphoneOff, Lock, Maximize2, Mic, MicOff, Minimize2, MonitorUp, Phone, PhoneOff, Shield, SlidersHorizontal, Video } from 'lucide-react'
+import type { Guild, VoiceMember } from '../../lib/api'
 import { plural } from '../../lib/format'
+import { can, guildOfChannel, outranks } from '../../lib/perms'
 import { uiZoom } from '../../lib/settings'
 import { useChat } from '../../lib/store'
-import { joinVoice, setUserVolume, toggleCamera, toggleLocalMute, useVoice } from '../../lib/voice'
+import { joinVoice, moderateVoice, setUserVolume, toggleCamera, toggleLocalMute, useVoice } from '../../lib/voice'
 import { Avatar } from '../Avatar'
+import { Popover } from '../guild/Popover'
 import { VoiceControls } from './VoiceControls'
 
 const EMPTY: VoiceMember[] = []
@@ -27,6 +29,8 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   const status = useVoice((s) => s.status)
   const calling = useVoice((s) => s.calling === roomId)
   const meId = useChat((s) => s.me!.id)
+  // Голосовой канал сервера (в личках и группах — undefined): от него зависят права
+  const guild = useChat((s) => guildOfChannel(s.guilds, roomId))
   const [focus, setFocus] = useState<string | null>(null)
   const inRoom = myRoom === roomId
 
@@ -49,6 +53,8 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   }, [tileKeys, screenKey])
 
   if (!inRoom && variant === 'channel') {
+    const canConnect = !guild || can(guild, 'CONNECT', roomId)
+    const canVideo = !guild || can(guild, 'VIDEO', roomId)
     return (
       <div className="stage stage--lobby">
         <div className="stage__lobby">
@@ -60,19 +66,28 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
           <h3>{members.length ? `Здесь уже ${plural(members.length, ['человек', 'человека', 'человек'])}` : 'В канале пока пусто'}</h3>
           <p>{members.length ? 'Заходи — тебя услышат сразу.' : 'Зайди первым — друзья увидят, что ты тут.'}</p>
           <div className="stage__lobby-actions">
-            <button className="btn btn--primary" onClick={() => void joinVoice(roomId)}>
+            <button className="btn btn--primary" onClick={() => void joinVoice(roomId)} disabled={!canConnect}>
               <Phone size={16} /> Присоединиться
             </button>
-            <button
-              className="btn btn--outline"
-              onClick={async () => {
-                await joinVoice(roomId)
-                void toggleCamera()
-              }}
-            >
-              <Video size={16} /> С камерой
-            </button>
+            {/* у .btn обрезается всё, что торчит, — подсказку вешаем на обёртку */}
+            <span className="stage__lobby-tip" {...(canConnect && !canVideo ? { 'data-tip': 'Нет прав на видео в этом канале' } : null)}>
+              <button
+                className="btn btn--outline"
+                disabled={!canConnect || !canVideo}
+                onClick={async () => {
+                  await joinVoice(roomId)
+                  if (useVoice.getState().roomId === roomId) void toggleCamera()
+                }}
+              >
+                <Video size={16} /> С камерой
+              </button>
+            </span>
           </div>
+          {!canConnect && (
+            <p className="stage__denied">
+              <Lock size={14} /> У тебя нет права подключаться к этому каналу — можно только смотреть, кто здесь.
+            </p>
+          )}
         </div>
       </div>
     )
@@ -83,7 +98,7 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
       {status === 'connecting' && inRoom && <div className="stage__status">Подключаемся…</div>}
       {calling && <div className="stage__status stage__status--calling">Звоним…</div>}
       <div className="stage__tiles">
-        {focused && <Tile info={focused} focused onToggleFocus={() => setFocus(null)} />}
+        {focused && <Tile info={focused} guild={guild} roomId={roomId} focused onToggleFocus={() => setFocus(null)} />}
         <div
           className={focused ? 'stage__strip' : `stage__grid stage__grid--${Math.min(tiles.length, 9)}`}
           style={cols && !focused ? ({ '--cols': cols } as CSSProperties) : undefined}
@@ -91,7 +106,7 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
           {tiles
             .filter((t) => t.key !== focused?.key)
             .map((t) => (
-              <Tile key={t.key} info={t} onToggleFocus={() => setFocus(t.key)} />
+              <Tile key={t.key} info={t} guild={guild} roomId={roomId} onToggleFocus={() => setFocus(t.key)} />
             ))}
         </div>
       </div>
@@ -104,6 +119,7 @@ const placeholder = (userId: string): VoiceMember => ({
   userId,
   muted: false,
   deafened: false,
+  serverMuted: false,
   video: false,
   screen: false,
   cameraStream: null,
@@ -116,7 +132,16 @@ function LobbyAvatar({ userId }: { userId: string }) {
   return user ? <Avatar user={user} size={56} /> : null
 }
 
-function Tile({ info, focused, onToggleFocus }: { info: TileInfo; focused?: boolean; onToggleFocus: () => void }) {
+interface TileProps {
+  info: TileInfo
+  /** Сервер голосового канала (в личке — undefined) */
+  guild: Guild | undefined
+  roomId: string
+  focused?: boolean
+  onToggleFocus: () => void
+}
+
+function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
   const { member, kind } = info
   const meId = useChat((s) => s.me!.id)
   const isMe = member.userId === meId
@@ -145,7 +170,12 @@ function Tile({ info, focused, onToggleFocus }: { info: TileInfo; focused?: bool
       <div className="tile__label">
         {kind === 'screen' && <MonitorUp size={14} />}
         <span className="truncate">{kind === 'screen' ? `Экран · ${name}` : isMe ? `${name} (ты)` : name}</span>
-        {kind === 'person' && member.muted && <MicOff size={14} />}
+        {kind === 'person' && member.serverMuted && (
+          <span className="tile__srv" data-tip="Заглушён на сервере">
+            <MicOff size={14} />
+          </span>
+        )}
+        {kind === 'person' && member.muted && !member.serverMuted && <MicOff size={14} />}
         {kind === 'person' && member.deafened && <HeadphoneOff size={14} />}
         {kind === 'person' && localMuted && <span className="tile__tag">заглушён</span>}
       </div>
@@ -153,6 +183,7 @@ function Tile({ info, focused, onToggleFocus }: { info: TileInfo; focused?: bool
         <span className="tile__state">{peerState === 'failed' ? 'нет связи' : 'подключаемся…'}</span>
       )}
       <div className="tile__tools">
+        {!isMe && kind === 'person' && guild && <ModMenu guild={guild} roomId={roomId} member={member} />}
         {!isMe && kind === 'person' && <VolumeMenu userId={member.userId} />}
         {focused && document.fullscreenEnabled && (
           <button
@@ -169,6 +200,64 @@ function Tile({ info, focused, onToggleFocus }: { info: TileInfo; focused?: bool
         </button>
       </div>
     </div>
+  )
+}
+
+/** Модерация на сервере: заглушить для всех / отключить от голоса — по правам в канале и старшинству ролей */
+function ModMenu({ guild, roomId, member }: { guild: Guild; roomId: string; member: VoiceMember }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const name = useChat((s) => s.users[member.userId]?.displayName ?? 'участник')
+  const canMute = can(guild, 'MUTE_MEMBERS', roomId)
+  const canMove = can(guild, 'MOVE_MEMBERS', roomId)
+  if ((!canMute && !canMove) || !outranks(guild, member.userId)) return null
+
+  const act = async (action: 'mute' | 'unmute' | 'disconnect') => {
+    setBusy(true)
+    const ok = await moderateVoice(member.userId, action)
+    setBusy(false)
+    if (ok) setOpen(false)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        className={`tile__tool${member.serverMuted ? ' is-server' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        data-tip="Модерация"
+        aria-label="Модерация"
+        aria-expanded={open}
+      >
+        <Shield size={15} />
+      </button>
+      {open && (
+        <Popover anchorRef={btnRef} onClose={() => setOpen(false)} align="end" className="mod-menu">
+          <div className="mod-menu__title">
+            <Shield size={13} /> <span className="truncate">{name}</span>
+          </div>
+          {canMute && (
+            <button className="mod-menu__item" disabled={busy} onClick={() => void act(member.serverMuted ? 'unmute' : 'mute')}>
+              {member.serverMuted ? <Mic size={15} /> : <MicOff size={15} />}
+              <span>
+                <b>{member.serverMuted ? 'Снять заглушение' : 'Заглушить на сервере'}</b>
+                <small>{member.serverMuted ? 'Сможет снова говорить' : 'Не сможет говорить, пока не снимут'}</small>
+              </span>
+            </button>
+          )}
+          {canMove && (
+            <button className="mod-menu__item mod-menu__item--danger" disabled={busy} onClick={() => void act('disconnect')}>
+              <PhoneOff size={15} />
+              <span>
+                <b>Отключить от голоса</b>
+                <small>Сможет зайти снова</small>
+              </span>
+            </button>
+          )}
+        </Popover>
+      )}
+    </>
   )
 }
 

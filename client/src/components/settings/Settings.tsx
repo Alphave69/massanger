@@ -1,5 +1,7 @@
 import { useEffect, type ComponentType } from 'react'
-import { Bell, IdCard, LogOut, Mic, Palette, ShieldCheck, UserRound, X } from 'lucide-react'
+import { Award, Bell, Crown, FlaskConical, IdCard, LogOut, Mic, Palette, ShieldCheck, UserRound, X } from 'lucide-react'
+import { versionClick } from '../../lib/eggs'
+import { useSettings } from '../../lib/settings'
 import { selfPresence } from '../../lib/status'
 import { useChat } from '../../lib/store'
 import { ui, useUi, type SettingsSection } from '../../lib/ui'
@@ -10,13 +12,19 @@ import { PrivacySection } from './PrivacySection'
 import { AppearanceSection } from './AppearanceSection'
 import { VoiceSection } from './VoiceSection'
 import { NotificationsSection } from './NotificationsSection'
+import { BadgesSection } from './BadgesSection'
+import { LabSection } from './LabSection'
+import { AdminSection } from './AdminSection'
 
-const NAV: { group: string; items: { id: SettingsSection; label: string; icon: ComponentType<{ size?: number }> }[] }[] = [
+type NavGroup = { group: string; items: { id: SettingsSection; label: string; icon: ComponentType<{ size?: number }> }[] }
+
+const NAV: NavGroup[] = [
   {
     group: 'Пользователь',
     items: [
       { id: 'account', label: 'Мой аккаунт', icon: UserRound },
       { id: 'profile', label: 'Профиль', icon: IdCard },
+      { id: 'badges', label: 'Значки', icon: Award },
       { id: 'privacy', label: 'Конфиденциальность', icon: ShieldCheck },
     ],
   },
@@ -30,6 +38,11 @@ const NAV: { group: string; items: { id: SettingsSection; label: string; icon: C
   },
 ]
 
+/** Открывается пасхалкой «Разработчик» */
+const LAB: NavGroup = { group: 'Секретное', items: [{ id: 'lab', label: 'Лаборатория', icon: FlaskConical }] }
+/** Только для админов приложения */
+const ADMIN: NavGroup = { group: 'Nuntius', items: [{ id: 'admin', label: 'Админка', icon: Crown }] }
+
 const SECTIONS: Record<SettingsSection, ComponentType> = {
   account: AccountSection,
   profile: ProfileSection,
@@ -37,12 +50,16 @@ const SECTIONS: Record<SettingsSection, ComponentType> = {
   appearance: AppearanceSection,
   voice: VoiceSection,
   notifications: NotificationsSection,
+  badges: BadgesSection,
+  lab: LabSection,
+  admin: AdminSection,
 }
 
 /** Полноэкранные настройки — как в Discord: слева разделы, справа содержимое */
 export function Settings({ onLogout }: { onLogout: () => void }) {
   const section = useUi((s) => s.settings)
   const me = useChat((s) => s.me)
+  const devMode = useSettings((s) => s.devMode)
 
   useEffect(() => {
     if (!section) return
@@ -52,7 +69,10 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   }, [section])
 
   if (!section || !me) return null
-  const Content = SECTIONS[section]
+  // Закрытые разделы без доступа не открываем, даже если попросили
+  const allowed = section === 'admin' ? me.admin : section === 'lab' ? devMode : true
+  const Content = SECTIONS[allowed ? section : 'account']
+  const nav = [...NAV, ...(devMode ? [LAB] : []), ...(me.admin ? [ADMIN] : [])]
 
   return (
     <div className="settings zoomed" role="dialog" aria-modal="true" aria-label="Настройки">
@@ -66,7 +86,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
             </span>
           </button>
 
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div key={g.group} className="settings__group">
               <div className="settings__group-title">{g.group}</div>
               {g.items.map((item) => (
@@ -88,7 +108,10 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
             <LogOut size={17} />
             Выйти из аккаунта
           </button>
-          <div className="settings__version">nuntius · v0.3</div>
+          {/* 7 кликов — режим разработчика (пасхалка) */}
+          <div className="settings__version" onClick={versionClick}>
+            nuntius · v0.4
+          </div>
         </div>
       </nav>
 

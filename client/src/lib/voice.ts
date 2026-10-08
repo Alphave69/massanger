@@ -4,6 +4,7 @@ import { useSettings } from './settings'
 import { chat, useChat } from './store'
 import { desktopNotify, tone, toneLoop } from './fx'
 import { ui } from './ui'
+import { can, guildOfChannel } from './perms'
 
 /**
  * Голосовой движок.
@@ -116,6 +117,21 @@ let stopRingtone: (() => void) | null = null
 let pttDown = false
 
 const meId = () => useChat.getState().me?.id ?? ''
+
+/** Нас заглушил модератор (или в канале нет права говорить) — микрофон закрыт, пока не снимут */
+export function selfServerMuted(s: Pick<VoiceState, 'roomId' | 'rooms'> = get()): boolean {
+  if (!s.roomId) return false
+  return Boolean(s.rooms[s.roomId]?.find((m) => m.userId === meId())?.serverMuted)
+}
+
+/** Можно ли включать камеру и экран в комнате (в личках — всегда, на сервере — с правом VIDEO) */
+export function videoAllowed(roomId: string | null = get().roomId): boolean {
+  if (!roomId) return true
+  const guild = guildOfChannel(useChat.getState().guilds, roomId)
+  return !guild || can(guild, 'VIDEO', roomId)
+}
+
+const NO_VIDEO = { title: 'Видео недоступно', text: 'Нет прав на видео в этом канале' }
 type SinkContext = AudioContext & { setSinkId?: (id: string) => Promise<void> }
 
 // ============ «ворота» для микрофона (AudioWorklet) ============
@@ -264,7 +280,7 @@ function applyGate() {
   gate?.port.postMessage({
     mode: s.inputMode,
     threshold: s.sensitivity / 100,
-    muted: s.muted || s.deafened || get().noMic,
+    muted: s.muted || s.deafened || get().noMic || selfServerMuted(),
     ptt: pttDown,
   })
   if (inputGain) inputGain.gain.value = s.inputVolume / 100
@@ -543,6 +559,11 @@ let joinSeq = 0
 export async function joinVoice(roomId: string) {
   const st = get()
   if (!socket || (st.roomId === roomId && st.status !== 'idle')) return
+  const guild = guildOfChannel(useChat.getState().guilds, roomId)
+  if (guild && !can(guild, 'CONNECT', roomId)) {
+    chat.toast({ title: 'Нет доступа', text: 'У тебя нет права подключаться к этому каналу' })
+    return
+  }
   if (st.roomId) leaveVoice(false)
   const seq = ++joinSeq
   set({ roomId, status: 'connecting', incoming: st.incoming.filter((c) => c.roomId !== roomId) })
@@ -653,6 +674,7 @@ export async function toggleCamera() {
     return
   }
   if (cameraBusy) return
+  if (!videoAllowed()) return chat.toast(NO_VIDEO)
   cameraBusy = true
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } })
@@ -685,6 +707,7 @@ export async function toggleScreen() {
     return
   }
   if (screenBusy) return
+  if (!videoAllowed()) return chat.toast(NO_VIDEO)
   screenBusy = true
   try {
     // Звук системы — без звука самого Nuntius: иначе собеседники услышали бы себя с задержкой
@@ -705,6 +728,23 @@ export async function toggleScreen() {
   } finally {
     screenBusy = false
   }
+}
+
+/** Модерация голоса на сервере: заглушить / снять заглушение / отключить человека (нужны права в канале) */
+export function moderateVoice(userId: string, action: 'mute' | 'unmute' | 'disconnect'): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      chat.toast({ title: 'Не получилось', text: 'Нет связи с сервером' })
+      return resolve(false)
+    }
+    socket.timeout(5000).emit('voice:moderate', { userId, action }, (err: Error | null, res: { ok?: boolean; error?: string }) => {
+      if (err || !res?.ok) {
+        chat.toast({ title: 'Не получилось', text: res?.error ?? 'Сервер не ответил' })
+        return resolve(false)
+      }
+      resolve(true)
+    })
+  })
 }
 
 export function setUserVolume(userId: string, volume: number) {
@@ -774,6 +814,7 @@ export function attachVoice(s: Socket) {
   })
 
   s.on('voice:room', ({ roomId, members }: { roomId: string; members: VoiceMember[] }) => {
+    const wasMuted = selfServerMuted()
     set((st) => {
       const rooms = { ...st.rooms }
       if (members.length) rooms[roomId] = members
@@ -781,6 +822,16 @@ export function attachVoice(s: Socket) {
       return { rooms }
     })
     if (roomId !== get().roomId) return
+    // Модератор заглушил или снял заглушение — «ворота» микрофона закрываются сразу, без нашего участия
+    const nowMuted = selfServerMuted()
+    if (nowMuted !== wasMuted && members.some((m) => m.userId === meId())) {
+      applyGate()
+      tone(nowMuted ? 'mute' : 'unmute')
+      const guild = guildOfChannel(useChat.getState().guilds, roomId)
+      if (nowMuted && guild && !can(guild, 'SPEAK', roomId)) chat.toast({ title: 'Только слушать', text: 'В этом канале у тебя нет права говорить' })
+      else if (nowMuted) chat.toast({ title: 'Тебя заглушили', text: 'Модератор выключил тебе микрофон на сервере' })
+      else chat.toast({ title: 'Можно говорить', text: 'Заглушение на сервере снято' })
+    }
     // Кто ушёл или перезашёл — закрываем старое соединение (новое предложит сам)
     for (const peer of [...peers.values()]) {
       const m = members.find((x) => x.userId === peer.userId)
@@ -802,8 +853,13 @@ export function attachVoice(s: Socket) {
     teardown()
     // Ушёл сам (вышел с сервера, удалил канал) — говорить «тебя отключили» незачем
     if (reason === 'left' || !wasIn) return
+    if (reason === 'disconnected') return chat.toast({ title: 'Голос отключён', text: 'Модератор отключил тебя от голоса' })
     const text =
-      reason === 'moved' ? 'Ты подключился к голосу в другой вкладке' : reason === 'deleted' ? 'Канал или группу удалили' : 'Тебя убрали с сервера или из группы'
+      reason === 'moved'
+        ? 'Ты подключился к голосу в другой вкладке'
+        : reason === 'deleted'
+          ? 'Канал или группу удалили'
+          : 'Тебя убрали с сервера или из группы — или закрыли доступ к каналу'
     chat.toast({ title: 'Голос отключён', text })
   })
 
@@ -850,6 +906,13 @@ export function attachVoice(s: Socket) {
 // Сервер, группа или канал пропали из списка — забываем, кто там сидел (иначе при возвращении покажем старое)
 useChat.subscribe((s, prev) => {
   if (s.guilds === prev.guilds && s.dms === prev.dms) return
+  // Права на видео забрали прямо во время звонка — гасим камеру и экран
+  const { roomId: here, localCamera, localScreen } = get()
+  if (here && (localCamera || localScreen) && !videoAllowed(here)) {
+    if (localCamera) void toggleCamera()
+    if (localScreen) void toggleScreen()
+    chat.toast(NO_VIDEO)
+  }
   const known = new Set([...s.guilds.flatMap((g) => g.channels.map((c) => c.id)), ...s.dms.map((d) => d.id)])
   const { rooms, roomId } = get()
   const stale = Object.keys(rooms).filter((id) => !known.has(id) && id !== roomId)

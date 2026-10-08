@@ -16,11 +16,14 @@ export function VoicePanel() {
   if (!roomId) return null
   const where = describeRoom(roomId)
   const quality = ping === null ? 'unknown' : ping < 120 ? 'good' : ping < 300 ? 'ok' : 'bad'
+  // немного юмора на крайних значениях
+  const pingTip =
+    ping === null ? 'Пинг измеряется…' : ping <= 5 ? `Пинг ${ping} мс · ⚡ скорость света` : ping >= 400 ? `Пинг ${ping} мс · 🐢 черепашья почта` : `Пинг ${ping} мс`
 
   return (
     <div className={`voice-panel voice-panel--${status}`}>
       <div className="voice-panel__top">
-        <span className={`signal signal--${quality}`} data-tip={ping === null ? 'Пинг измеряется…' : `Пинг ${ping} мс`}>
+        <span className={`signal signal--${quality}`} data-tip={pingTip}>
           <i />
           <i />
           <i />

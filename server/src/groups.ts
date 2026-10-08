@@ -3,6 +3,7 @@ import type { Server } from 'socket.io'
 import { requireAuth, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
 import type { Voice } from './voice.js'
+import type { Badges } from './badges.js'
 
 /** Групповые переписки: создать, переименовать, добавить людей, исключить, выйти */
 
@@ -12,6 +13,7 @@ interface Deps {
   fail: (res: Response, code: number, error: string) => void
   dmView: (dm: store.Dm, userId: string) => unknown
   systemMessage: (dm: store.Dm, text: string) => void
+  badges: Badges
 }
 
 const nameOf = (userId: string) => store.findUser(userId)?.displayName ?? 'кто-то'
@@ -20,7 +22,7 @@ const nameOf = (userId: string) => store.findUser(userId)?.displayName ?? 'кт�
 const idsFrom = (raw: unknown, selfId: string) =>
   Array.isArray(raw) ? [...new Set(raw.filter((v): v is string => typeof v === 'string' && v !== selfId))] : []
 
-export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, systemMessage }: Deps) {
+export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, systemMessage, badges }: Deps) {
   const emitDm = (dm: store.Dm) => {
     for (const id of dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(dm, id))
   }
@@ -45,6 +47,7 @@ export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, sys
     const { user } = req as AuthedRequest
     const ids = idsFrom(req.body?.userIds, user.id)
     if (!ids.length) return fail(res, 400, 'Выбери хотя бы одного друга')
+    if (!user.privileges.createGroups) return fail(res, 403, 'Создавать группы тебе запретил администратор')
     if (ids.length + 1 > store.GROUP_LIMIT) return fail(res, 400, `В группе может быть максимум ${store.GROUP_LIMIT} человек`)
     const problem = notFriendsProblem(user.id, ids)
     if (problem) return fail(res, 400, problem)
@@ -59,6 +62,7 @@ export function registerGroupRoutes(app: Express, { io, voice, fail, dmView, sys
     const group = store.createGroup(user.id, ids, name)
     emitDm(group)
     systemMessage(group, `${nameOf(user.id)} создал(а) группу`)
+    badges.award(user, 'gatherer')
     res.json({ dm: dmView(group, user.id) })
   })
 

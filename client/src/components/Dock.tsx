@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Compass, Plus } from 'lucide-react'
+import { sphereTileClick } from '../lib/eggs'
 import { initials } from '../lib/format'
 import { chat, useChat } from '../lib/store'
 import { ui } from '../lib/ui'
@@ -16,6 +17,8 @@ export function Dock() {
   const homeActive = view.kind === 'home' || view.kind === 'dm'
   const dmUnread = dms.reduce((sum, d) => sum + (unread[d.id] ?? 0), 0)
   const homeBadge = dmUnread + requests
+  // пасхалка «Не трогай сферу»: 7 быстрых кликов — сфера взрывается и кружится
+  const [burst, setBurst] = useState(0)
 
   return (
     <nav className="dock glow" aria-label="Навигация">
@@ -23,10 +26,15 @@ export function Dock() {
         tip="Личное"
         active={homeActive}
         badge={homeBadge}
-        onClick={() => chat.setView({ kind: 'home', tab: requests ? 'pending' : 'online' })}
+        onClick={() => {
+          chat.setView({ kind: 'home', tab: requests ? 'pending' : 'online' })
+          if (sphereTileClick()) setBurst((n) => n + 1)
+        }}
         className="dock__tile--home"
       >
-        <MiniSphere size={30} dots={80} />
+        <span key={burst} className={`dock__sphere${burst ? ' egg-burst' : ''}`}>
+          <MiniSphere size={30} dots={80} />
+        </span>
       </DockItem>
 
       <div className="dock__sep" />

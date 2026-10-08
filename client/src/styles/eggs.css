@@ -1,0 +1,640 @@
+/* =====================================================================
+   Пасхалки, «Лаборатория» и мелкие радости в чате
+   ===================================================================== */
+
+/* ============ бочка (сделай бочку) ============ */
+
+.egg-barrel #root {
+  animation: egg-barrel 1.2s cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+@keyframes egg-barrel {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============ вечеринка (Konami) ============ */
+
+.egg-party {
+  position: fixed;
+  inset: 0;
+  z-index: 460;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.egg-party__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 60%, rgba(255, 255, 255, 0.16), transparent 60%);
+  animation: egg-party-glow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes egg-party-glow {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.egg-party__dot {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: var(--size, 5px);
+  height: var(--size, 5px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+  opacity: 0;
+  animation: egg-confetti 3.4s cubic-bezier(0.15, 0.6, 0.35, 1) forwards;
+}
+
+.egg-party__dot.is-square {
+  border-radius: 1px;
+}
+
+@keyframes egg-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0);
+  }
+  45% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(calc(var(--spin) * 0.5));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + var(--fall))) rotate(var(--spin));
+  }
+}
+
+.egg-party__title {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  translate: -50% 0;
+  font: 700 clamp(28px, 6vw, 64px) var(--display, 'Unbounded', sans-serif);
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow:
+    0 0 24px rgba(255, 255, 255, 0.8),
+    0 0 60px rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  animation: egg-title 6s ease forwards;
+}
+
+@keyframes egg-title {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+/* ============ снег из точек (20 декабря — 10 января) ============ */
+
+.egg-snow {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.egg-snow i {
+  position: absolute;
+  top: -10px;
+  width: var(--size, 3px);
+  height: var(--size, 3px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  animation: egg-snow linear infinite;
+}
+
+@keyframes egg-snow {
+  to {
+    transform: translate(var(--sway, 0), 105vh);
+  }
+}
+
+/* ============ горячие клавиши (?) ============ */
+
+.egg-keys {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  display: grid;
+  place-items: safe center;
+  padding: 16px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade-in 0.2s ease;
+}
+
+.egg-keys__card {
+  width: min(520px, 100%);
+  padding: 22px 24px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line-2);
+  background: #050505;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+  animation: pop-in 0.35s var(--ease-spring);
+}
+
+.egg-keys__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.egg-keys__head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+}
+
+.egg-keys__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--text);
+  color: var(--black);
+}
+
+.egg-keys__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.egg-keys__list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.egg-keys__list li:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.egg-keys__list li.is-secret {
+  color: var(--text-3);
+}
+
+.egg-keys__combo {
+  flex: none;
+  min-width: 150px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.egg-keys kbd,
+.cmd-hints kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  font: 500 11px var(--mono);
+  color: var(--text);
+}
+
+.egg-keys__list li.is-secret kbd {
+  color: var(--text-3);
+}
+
+.egg-keys__label {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.egg-keys__foot {
+  margin: 12px 0 0;
+  text-align: center;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+/* ============ «Лаборатория» (режим разработчика) ============ */
+
+.lab-negative body {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* картинки и видео не выворачиваем */
+.lab-negative video,
+.lab-negative img {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.lab-mirror .shell,
+.lab-mirror .settings {
+  transform: scaleX(-1);
+}
+
+.lab-retro body {
+  filter: sepia(1) hue-rotate(70deg) saturate(3.2) brightness(0.95);
+}
+
+.lab-retro body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+}
+
+.lab-negative.lab-retro body {
+  filter: invert(1) hue-rotate(180deg) sepia(1) hue-rotate(70deg) saturate(3.2);
+}
+
+.lab-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--line-2);
+  background: radial-gradient(ellipse at 0% 50%, rgba(255, 255, 255, 0.07), transparent 70%);
+}
+
+.lab-hero__icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
+}
+
+.lab-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.lab-hero__text b {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.lab-code {
+  font: 12px var(--mono);
+  color: var(--text-2);
+  user-select: all;
+}
+
+/* ============ сфера в доке и своя аватарка ============ */
+
+.dock__sphere {
+  display: grid;
+  place-items: center;
+}
+
+.dock__sphere.egg-burst {
+  animation: egg-burst 1.1s var(--ease-spring);
+}
+
+@keyframes egg-burst {
+  0% {
+    transform: scale(1);
+    filter: none;
+  }
+  25% {
+    transform: scale(1.9) rotate(90deg);
+    filter: drop-shadow(0 0 16px #fff) blur(1px);
+  }
+  60% {
+    transform: scale(0.6) rotate(300deg);
+  }
+  100% {
+    transform: scale(1) rotate(360deg);
+    filter: none;
+  }
+}
+
+.userbar__avatar {
+  display: inline-flex;
+}
+
+.userbar__avatar.egg-dizzy {
+  animation: egg-dizzy 1.4s cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+@keyframes egg-dizzy {
+  0% {
+    transform: rotate(0);
+  }
+  70% {
+    transform: rotate(1080deg) scale(0.9);
+  }
+  85% {
+    transform: rotate(1060deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(1080deg);
+  }
+}
+
+/* ============ спящий статус: всплывающие «z» ============ */
+
+.avatar__zzz {
+  position: absolute;
+  right: -2px;
+  top: -4px;
+  pointer-events: none;
+  font: 700 1em var(--mono);
+  color: var(--text);
+}
+
+.avatar__zzz i {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-style: normal;
+  opacity: 0;
+  animation: egg-zzz 3s ease-in infinite;
+}
+
+.avatar__zzz i:nth-child(2) {
+  animation-delay: 1s;
+}
+
+.avatar__zzz i:nth-child(3) {
+  animation-delay: 2s;
+}
+
+@keyframes egg-zzz {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(8px, -18px) scale(1.15);
+  }
+}
+
+/* ============ загрузка: латынь под сферой ============ */
+
+.splash__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.splash__quote {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  animation: rise-in 0.8s 0.2s var(--ease-out) both;
+}
+
+.splash__quote i {
+  font: italic 500 15px var(--display, 'Unbounded', sans-serif);
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.splash__quote span {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+/* ============ друзья: приветствие и шутки в пустых списках ============ */
+
+.friends-greet {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.friends-greet b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.empty__joke {
+  max-width: 340px;
+  cursor: pointer;
+  user-select: none;
+  animation: rise-in 0.4s var(--ease-out);
+}
+
+.empty__joke:hover {
+  color: var(--text);
+}
+
+/* ============ чат: команды, /me, желание, поэма ============ */
+
+.bubble--cmd {
+  border-style: dashed;
+  border-color: var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.bubble__cmd {
+  align-self: center;
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--line-2);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.bubble--me {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 4px;
+  font-style: italic;
+  color: var(--text-2);
+}
+
+.bubble--me b {
+  font-style: normal;
+  color: var(--text);
+}
+
+.wish {
+  align-self: center;
+  font-size: 11px;
+  color: var(--text);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  cursor: default;
+  animation: egg-twinkle 2.4s ease-in-out infinite;
+}
+
+@keyframes egg-twinkle {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.typing.is-poem b {
+  font-style: italic;
+}
+
+.typing.is-poem {
+  color: var(--text);
+}
+
+.welcome__secret {
+  margin: 6px 0 0;
+  font-style: italic;
+  color: var(--text-3);
+  animation: rise-in 0.6s var(--ease-out);
+}
+
+/* нет прав писать в канал */
+.composer__locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 20px;
+  border: 1px dashed var(--line-2);
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.composer__locked b {
+  color: var(--text-2);
+}
+
+/* подсказка команд над полем ввода */
+.composer {
+  position: relative;
+}
+
+.cmd-hints {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 16px;
+  border: 1px solid var(--line-2);
+  background: #050505;
+  box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.6);
+  animation: menu-in 0.18s var(--ease-out);
+}
+
+.cmd-hints__head {
+  padding: 6px 10px 4px;
+  font: 600 10px var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.cmd-hint {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--text-2);
+}
+
+.cmd-hint.is-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+.cmd-hint__name {
+  flex: none;
+  font: 600 13px var(--mono);
+  color: var(--text);
+}
+
+.cmd-hint__args {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.cmd-hint__desc {
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.cmd-hints__keys {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ============ меньше движения — без лишних анимаций ============ */
+
+.reduce-motion .egg-party__dot,
+.reduce-motion .egg-snow,
+.reduce-motion .avatar__zzz i,
+.reduce-motion .wish,
+.reduce-motion .dock__sphere.egg-burst,
+.reduce-motion .userbar__avatar.egg-dizzy,
+.reduce-motion.egg-barrel #root {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .egg-party__dot,
+  .egg-snow,
+  .avatar__zzz i,
+  .wish,
+  .dock__sphere.egg-burst,
+  .userbar__avatar.egg-dizzy,
+  .egg-barrel #root {
+    animation: none;
+  }
+}

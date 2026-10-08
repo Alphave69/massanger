@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Headphones, HeadphoneOff, LogOut, Mic, MicOff, Pencil, Settings as SettingsIcon, X } from 'lucide-react'
 import { api, ApiError, type Status } from '../lib/api'
+import { selfAvatarClick } from '../lib/eggs'
 import { STATUS_LABEL, STATUS_OPTIONS, selfPresence } from '../lib/status'
 import { useSettings } from '../lib/settings'
 import { toggleDeafen, toggleMute, useVoice } from '../lib/voice'
@@ -8,6 +9,7 @@ import { chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { Avatar } from './Avatar'
 import { StatusIcon } from './StatusIcon'
+import { BadgeRow } from './badges/BadgeRow'
 
 /** Панель «я» слева внизу: открывает карточку профиля со статусами, рядом — микрофон, звук, настройки */
 export function UserBar({ onLogout }: { onLogout: () => void }) {
@@ -19,6 +21,8 @@ export function UserBar({ onLogout }: { onLogout: () => void }) {
   // Как в голосовой панели: при выключенном звуке микрофон тоже выключен
   const micOff = muted || deafened || noMic
   const rootRef = useRef<HTMLDivElement>(null)
+  // пасхалка «Голова кружится»: 5 быстрых кликов по своей аватарке
+  const [dizzy, setDizzy] = useState(0)
 
   useEffect(() => {
     if (!open) return
@@ -38,7 +42,13 @@ export function UserBar({ onLogout }: { onLogout: () => void }) {
     <div className="userbar" ref={rootRef}>
       {open && <SelfPopout onLogout={onLogout} />}
       <button className={`userbar__me${open ? ' is-open' : ''}`} onClick={() => ui.setStatusMenu(!open)} aria-expanded={open}>
-        <Avatar user={me} size={36} status={selfPresence(me.status)} />
+        <span
+          key={dizzy}
+          className={`userbar__avatar${dizzy ? ' egg-dizzy' : ''}`}
+          onClick={() => selfAvatarClick() && setDizzy((n) => n + 1)}
+        >
+          <Avatar user={me} size={36} status={selfPresence(me.status)} />
+        </span>
         <span className="userbar__names">
           <span className="userbar__name truncate">{me.displayName}</span>
           <span className="userbar__status truncate">{me.customStatus || STATUS_LABEL[me.status]}</span>
@@ -104,6 +114,7 @@ function SelfPopout({ onLogout }: { onLogout: () => void }) {
         <div className="self-popout__name">{me.displayName}</div>
         <div className="self-popout__tag">@{me.username}</div>
         {me.bio && <p className="self-popout__bio">{me.bio}</p>}
+        <BadgeRow user={me} max={8} />
       </div>
 
       <div className="status-menu__custom">

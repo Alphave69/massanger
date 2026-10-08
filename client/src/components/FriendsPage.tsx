@@ -6,6 +6,7 @@ import { chat, presenceOf, useChat, type FriendRef, type FriendsTab } from '../l
 import { ui } from '../lib/ui'
 import { Avatar } from './Avatar'
 import { MiniSphere } from './MiniSphere'
+import { UserTags } from './UserTags'
 
 const TABS: { id: FriendsTab; label: string }[] = [
   { id: 'online', label: 'В сети' },
@@ -13,10 +14,43 @@ const TABS: { id: FriendsTab; label: string }[] = [
   { id: 'pending', label: 'Заявки' },
 ]
 
+/** Приветствие по времени суток */
+function greeting(hour: number) {
+  if (hour >= 5 && hour < 12) return 'Доброе утро'
+  if (hour >= 12 && hour < 18) return 'Добрый день'
+  if (hour >= 18 && hour < 23) return 'Добрый вечер'
+  return 'Доброй ночи'
+}
+
+/** Шутки для пустых списков — сменяются сами и по клику */
+const JOKES: Record<Exclude<FriendsTab, 'add'>, string[]> = {
+  online: [
+    'Сейчас никого из друзей нет в сети. Сфера скучает.',
+    'Все ушли гулять. Сфера осталась за главную.',
+    'Тишина в эфире. Напиши первым — вдруг проснутся.',
+    'Друзья не в сети. Наверное, трогают траву.',
+    'Никого. Можно спокойно поговорить с самим собой.',
+  ],
+  all: [
+    'Пока ни одного друга. Самое время позвать кого-нибудь!',
+    'Список друзей пуст, как сфера без точек.',
+    'Один в поле не воин. Позови кого-нибудь!',
+    'Здесь будут твои люди. Начни с одного.',
+  ],
+  pending: [
+    'Заявок нет. Тишина и покой.',
+    'Почтовый голубь пролетел мимо. Заявок нет.',
+    'Пусто. Даже спам-боты не стучатся.',
+    'Заявок нет — значит, все уже твои друзья. Или пока не знают о тебе.',
+  ],
+}
+
 export function FriendsPage({ tab }: { tab: FriendsTab }) {
   const friends = useChat((s) => s.friends)
   const presence = useChat((s) => s.presence)
+  const myName = useChat((s) => s.me?.displayName ?? '')
   const requests = friends.filter((f) => f.state === 'incoming').length
+  const firstName = myName.trim().split(/\s+/)[0]
 
   const setTab = (t: FriendsTab) => chat.setView({ kind: 'home', tab: t })
 
@@ -52,6 +86,11 @@ export function FriendsPage({ tab }: { tab: FriendsTab }) {
             <UserPlus size={15} /> Добавить в друзья
           </button>
         </nav>
+        {firstName && (
+          <span className="friends-greet truncate">
+            {greeting(new Date().getHours())}, <b>{firstName}</b>
+          </span>
+        )}
       </header>
 
       <div className="main__scroll friends" key={tab}>
@@ -100,7 +139,7 @@ function FriendRow({ friend, index }: { friend: FriendRef; index: number }) {
         <Avatar user={user} size={40} status={friend.state === 'friends' ? status : undefined} />
         <span className="friend__text">
           <span className="friend__name">
-            {user.displayName} <span className="friend__tag">@{user.username}</span>
+            {user.displayName} <UserTags user={user} /> <span className="friend__tag">@{user.username}</span>
           </span>
           <span className="friend__sub truncate">{sub}</span>
         </span>
@@ -188,16 +227,21 @@ function AddFriend() {
 }
 
 function EmptyFriends({ tab }: { tab: FriendsTab }) {
-  const text =
-    tab === 'online'
-      ? 'Сейчас никого из друзей нет в сети. Сфера скучает.'
-      : tab === 'pending'
-        ? 'Заявок нет. Тишина и покой.'
-        : 'Пока ни одного друга. Самое время позвать кого-нибудь!'
+  const jokes = JOKES[tab === 'add' ? 'all' : tab]
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * jokes.length))
+  const next = () => setIndex((i) => (i + 1) % jokes.length)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setIndex((i) => (i + 1) % jokes.length), 9000)
+    return () => window.clearInterval(timer)
+  }, [jokes])
+
   return (
     <div className="empty">
       <MiniSphere size={120} dots={200} />
-      <p>{text}</p>
+      <p key={index} className="empty__joke" onClick={next}>
+        {jokes[index % jokes.length]}
+      </p>
       {tab !== 'pending' && (
         <button className="btn btn--primary" onClick={() => chat.setView({ kind: 'home', tab: 'add' })}>
           <UserPlus size={16} /> Добавить в друзья

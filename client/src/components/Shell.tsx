@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { initVoice, resetVoice } from '../lib/voice'
@@ -21,10 +21,26 @@ import { ChannelModal } from './guild/ChannelModal'
 import { GroupModal } from './groups/GroupModal'
 import { IncomingCall } from './voice/IncomingCall'
 import { VoiceChannelView } from './voice/VoiceChannelView'
+import { EggLayer } from './eggs/EggLayer'
+import { BadgeCelebration } from './badges/BadgeCelebration'
 
 interface Props {
   onLogout: () => void
 }
+
+/** Латынь под сферой, пока грузимся: Nuntius — «вестник» по-латыни */
+const QUOTES: [string, string][] = [
+  ['Festina lente', 'Поспешай медленно'],
+  ['Verba volant, scripta manent', 'Слова улетают, написанное остаётся'],
+  ['Dum spiro, spero', 'Пока дышу — надеюсь'],
+  ['Carpe diem', 'Лови момент'],
+  ['Per aspera ad astra', 'Через тернии к звёздам'],
+  ['Veni, vidi, vici', 'Пришёл, увидел, победил'],
+  ['Memento mori', 'Помни о смерти (но сначала ответь на сообщения)'],
+  ['Alea iacta est', 'Жребий брошен'],
+  ['Tempus fugit', 'Время бежит'],
+  ['Nuntius', 'Вестник — это ты'],
+]
 
 export function Shell({ onLogout }: Props) {
   const ready = useChat((s) => s.ready)
@@ -42,6 +58,7 @@ export function Shell({ onLogout }: Props) {
   })
   const viewGuild = useChat((s) => (s.view.kind === 'guild' ? s.guilds.find((g) => g.id === (s.view as { guildId: string }).guildId) : undefined))
   const totalUnread = useChat((s) => Object.values(s.unread).reduce((a, b) => a + b, 0))
+  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)])
 
   useEffect(() => {
     let alive = true
@@ -79,7 +96,13 @@ export function Shell({ onLogout }: Props) {
   if (!ready) {
     return (
       <div className="splash">
-        <MiniSphere size={72} dots={140} />
+        <div className="splash__inner">
+          <MiniSphere size={72} dots={140} />
+          <p className="splash__quote">
+            <i>{quote[0]}</i>
+            <span>{quote[1]}</span>
+          </p>
+        </div>
       </div>
     )
   }
@@ -118,6 +141,8 @@ export function Shell({ onLogout }: Props) {
     <IncomingCall />
     {/* уведомления — поверх всего, в том числе поверх настроек */}
     <Toasts />
+    <BadgeCelebration />
+    <EggLayer />
     </>
   )
 }

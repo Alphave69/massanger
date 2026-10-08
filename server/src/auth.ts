@@ -16,7 +16,8 @@ export function userFromToken(token: string | undefined): User | undefined {
   try {
     const { sub, v } = jwt.verify(token, SECRET) as { sub: string; v?: number }
     const user = findUser(sub)
-    if (!user || (v ?? 0) !== user.tokenVersion) return undefined
+    // заблокированного не пускаем, даже если токен ещё живой
+    if (!user || user.banned || (v ?? 0) !== user.tokenVersion) return undefined
     return user
   } catch {
     return undefined

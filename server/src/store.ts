@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { canView, DEFAULT_EVERYONE, isPermission, type Permission } from './permissions.js'
 
 // Простое хранилище в JSON-файле. Для компании друзей хватит с запасом;
 // когда понадобится — заменим на SQLite/Postgres, не трогая остальной код.
@@ -18,6 +19,31 @@ export interface Privacy {
 
 export const DEFAULT_PRIVACY: Privacy = { dms: 'servers', friendRequests: 'everyone' }
 
+/** Счётчики для значков */
+export interface UserStats {
+  messages: number
+  /** Сколько всего просидел в голосе (секунды) */
+  voiceSeconds: number
+  /** Самая длинная сессия в голосе (секунды) */
+  longestVoice: number
+  /** Сколько раз начинал звонок в личке/группе */
+  calls: number
+  /** Сколько раз пользовался командами (/roll и т.п.) */
+  commands: number
+}
+
+export const EMPTY_STATS: UserStats = { messages: 0, voiceSeconds: 0, longestVoice: 0, calls: 0, commands: 0 }
+
+/** Что разрешено человеку во всём приложении (меняет админ) */
+export interface Privileges {
+  /** Может создавать свои серверы */
+  createServers: boolean
+  /** Может создавать группы */
+  createGroups: boolean
+}
+
+export const DEFAULT_PRIVILEGES: Privileges = { createServers: true, createGroups: true }
+
 export interface User {
   id: string
   username: string
@@ -32,12 +58,50 @@ export interface User {
   privacy: Privacy
   /** Растёт при смене пароля / «выйти везде» — старые токены перестают работать */
   tokenVersion: number
+
+  // --- значки и пасхалки ---
+  stats: UserStats
+  /** id значка → когда получен */
+  badges: Record<string, number>
+  /** id пасхалки → когда найдена */
+  eggs: Record<string, number>
+  /** Смещение часового пояса в минутах (как Date.getTimezoneOffset) — для «Совы» и т.п.; null — неизвестно */
+  tz: number | null
+
+  // --- админка ---
+  /** «Галочка» у имени — подтверждённый человек */
+  verified: boolean
+  /** Доступ к админке приложения (владелец приложения — админ всегда) */
+  admin: boolean
+  /** Заблокирован: не может войти, все сессии закрыты */
+  banned: boolean
+  privileges: Privileges
+}
+
+/** Исключения для роли в конкретном канале */
+export interface Override {
+  allow: Permission[]
+  deny: Permission[]
 }
 
 export interface Channel {
   id: string
   name: string
   type: 'text' | 'voice'
+  /** id роли → исключения в этом канале (роль @everyone — id сервера) */
+  overrides: Record<string, Override>
+}
+
+export interface Role {
+  id: string
+  name: string
+  /** Цвет имени ('#rrggbb') или null — без цвета */
+  color: string | null
+  /** Показывать участников с этой ролью отдельной группой в списке */
+  hoist: boolean
+  permissions: Permission[]
+  /** Чем больше, тем выше роль (у @everyone — 0) */
+  position: number
 }
 
 export interface Guild {
@@ -49,6 +113,10 @@ export interface Guild {
   createdAt: number
   /** Общий сервер, куда попадают все новые люди: его нельзя удалить */
   isLobby?: boolean
+  /** Роли сервера; первая — @everyone (id = id сервера) */
+  roles: Role[]
+  /** id участника → id его ролей (кроме @everyone) */
+  memberRoles: Record<string, string[]>
 }
 
 /** Связь между двумя людьми: заявка в друзья или уже дружба */
@@ -75,12 +143,16 @@ export interface Dm {
 
 export const GROUP_LIMIT = 10
 
+/** Особый вид сообщения — результат команды (/roll, /flip, /8ball, /me) */
+export type MessageFlavor = 'roll' | 'flip' | 'ball' | 'me'
+
 export interface Message {
   id: string
   channelId: string
   authorId: string
   content: string
   createdAt: number
+  flavor?: MessageFlavor
 }
 
 interface Data {
@@ -105,6 +177,14 @@ function load(): Data {
       email: u.email ?? null,
       privacy: { ...DEFAULT_PRIVACY, ...u.privacy },
       tokenVersion: u.tokenVersion ?? 0,
+      stats: { ...EMPTY_STATS, ...u.stats },
+      badges: u.badges ?? {},
+      eggs: u.eggs ?? {},
+      tz: typeof u.tz === 'number' ? u.tz : null,
+      verified: u.verified ?? false,
+      admin: u.admin ?? false,
+      banned: u.banned ?? false,
+      privileges: { ...DEFAULT_PRIVILEGES, ...u.privileges },
     })),
     // общий сервер переименован вместе с приложением
     guilds: migrateGuilds(raw.guilds ?? []),
@@ -119,9 +199,28 @@ function migrateGuilds(guilds: Guild[]): Guild[] {
   const hasLobby = guilds.some((g) => g.isLobby)
   return guilds.map((g, i) => {
     const lobby = g.isLobby || (!hasLobby && i === 0)
-    return { ...g, isLobby: lobby || undefined, name: lobby && g.name === 'Massanger' ? 'Nuntius' : g.name }
+    // роли появились позже: у старых серверов есть только @everyone с правами по умолчанию
+    const roles = g.roles?.length ? g.roles : [everyoneRole(g.id)]
+    return {
+      ...g,
+      isLobby: lobby || undefined,
+      name: lobby && g.name === 'Massanger' ? 'Nuntius' : g.name,
+      roles: roles.map((r) => ({ ...r, permissions: (r.permissions ?? []).filter(isPermission) })),
+      memberRoles: g.memberRoles ?? {},
+      channels: g.channels.map((c) => ({ ...c, overrides: c.overrides ?? {} })),
+    }
   })
 }
+
+/** Роль @everyone: есть у всех участников, её id совпадает с id сервера */
+export const everyoneRole = (guildId: string): Role => ({
+  id: guildId,
+  name: '@everyone',
+  color: null,
+  hoist: false,
+  permissions: [...DEFAULT_EVERYONE],
+  position: 0,
+})
 
 const data = load()
 
@@ -140,6 +239,12 @@ function save() {
 
 export const id = () => randomUUID()
 
+/** Редкость значка для сортировки (задаёт badges.ts, чтобы store не зависел от каталога) */
+let badgeRank: (id: string) => number = () => 0
+export const setBadgeRank = (fn: (id: string) => number) => {
+  badgeRank = fn
+}
+
 export function publicUser(u: User) {
   return {
     id: u.id,
@@ -148,6 +253,14 @@ export function publicUser(u: User) {
     customStatus: u.customStatus,
     bio: u.bio,
     createdAt: u.createdAt,
+    /** «Галочка» у имени */
+    verified: u.verified,
+    /** Номер регистрации: «пользователь №7» */
+    number: userNumber(u.id),
+    /** Полученные значки: сначала редкие, внутри — по времени получения */
+    badges: Object.entries(u.badges)
+      .map(([id, at]) => ({ id, at }))
+      .sort((a, b) => badgeRank(b.id) - badgeRank(a.id) || a.at - b.at),
   }
 }
 export type PublicUser = ReturnType<typeof publicUser>
@@ -171,6 +284,14 @@ export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordH
     bio: '',
     privacy: { ...DEFAULT_PRIVACY },
     tokenVersion: 0,
+    stats: { ...EMPTY_STATS },
+    badges: {},
+    eggs: {},
+    tz: null,
+    verified: false,
+    admin: false,
+    banned: false,
+    privileges: { ...DEFAULT_PRIVILEGES },
   }
   data.users.push(user)
   // Все новые пользователи сразу попадают на общий сервер
@@ -180,7 +301,23 @@ export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordH
 }
 
 export type UserPatch = Partial<
-  Pick<User, 'username' | 'displayName' | 'email' | 'status' | 'customStatus' | 'bio' | 'privacy' | 'passwordHash' | 'tokenVersion'>
+  Pick<
+    User,
+    | 'username'
+    | 'displayName'
+    | 'email'
+    | 'status'
+    | 'customStatus'
+    | 'bio'
+    | 'privacy'
+    | 'passwordHash'
+    | 'tokenVersion'
+    | 'tz'
+    | 'verified'
+    | 'admin'
+    | 'banned'
+    | 'privileges'
+  >
 >
 
 export function updateUser(user: User, patch: UserPatch) {
@@ -192,16 +329,31 @@ export function updateUser(user: User, patch: UserPatch) {
 
 function defaultChannels(): Channel[] {
   return [
-    { id: id(), name: 'общий', type: 'text' },
-    { id: id(), name: 'мемы', type: 'text' },
-    { id: id(), name: 'Голосовой', type: 'voice' },
+    { id: id(), name: 'общий', type: 'text', overrides: {} },
+    { id: id(), name: 'мемы', type: 'text', overrides: {} },
+    { id: id(), name: 'Голосовой', type: 'voice', overrides: {} },
   ]
+}
+
+function newGuild(name: string, ownerId: string, memberIds: string[], isLobby?: true): Guild {
+  const guildId = id()
+  return {
+    id: guildId,
+    name,
+    ownerId,
+    channels: defaultChannels(),
+    memberIds,
+    createdAt: Date.now(),
+    isLobby,
+    roles: [everyoneRole(guildId)],
+    memberRoles: {},
+  }
 }
 
 function ensureLobby(ownerId: string): Guild {
   let lobby = data.guilds.find((g) => g.isLobby)
   if (!lobby) {
-    lobby = { id: id(), name: 'Nuntius', ownerId, channels: defaultChannels(), memberIds: [], createdAt: Date.now(), isLobby: true }
+    lobby = newGuild('Nuntius', ownerId, [], true)
     data.guilds.push(lobby)
   }
   return lobby
@@ -214,7 +366,7 @@ export const allGuilds = () => data.guilds
 export const guildsOf = (userId: string) => data.guilds.filter((g) => g.memberIds.includes(userId))
 
 export function createGuild(name: string, ownerId: string): Guild {
-  const guild: Guild = { id: id(), name, ownerId, channels: defaultChannels(), memberIds: [ownerId], createdAt: Date.now() }
+  const guild = newGuild(name, ownerId, [ownerId])
   data.guilds.push(guild)
   save()
   return guild
@@ -239,7 +391,7 @@ export function deleteGuild(guild: Guild) {
 }
 
 export function addChannel(guild: Guild, name: string, type: Channel['type']): Channel {
-  const channel: Channel = { id: id(), name, type }
+  const channel: Channel = { id: id(), name, type, overrides: {} }
   guild.channels.push(channel)
   save()
   return channel
@@ -253,6 +405,7 @@ export function removeChannel(guild: Guild, channelId: string) {
 
 export function removeGuildMember(guild: Guild, userId: string) {
   guild.memberIds = guild.memberIds.filter((id) => id !== userId)
+  delete guild.memberRoles[userId]
   save()
 }
 
@@ -320,14 +473,29 @@ export function deleteDm(dm: Dm) {
 
 export type ChannelAccess = { kind: 'guild'; guild: Guild; channel: Channel } | { kind: 'dm'; dm: Dm }
 
-export function channelAccess(channelId: string, userId: string): ChannelAccess | undefined {
+/** Где находится канал — без проверки, кто спрашивает (для админки и рассылок) */
+export function locateChannel(channelId: string): ChannelAccess | undefined {
   const dm = findDm(channelId)
-  if (dm) return dm.memberIds.includes(userId) ? { kind: 'dm', dm } : undefined
+  if (dm) return { kind: 'dm', dm }
   for (const guild of data.guilds) {
     const channel = guild.channels.find((c) => c.id === channelId)
-    if (channel) return guild.memberIds.includes(userId) ? { kind: 'guild', guild, channel } : undefined
+    if (channel) return { kind: 'guild', guild, channel }
   }
   return undefined
+}
+
+/** Видит ли человек канал: участник лички — или участник сервера с правом VIEW_CHANNEL */
+export const canSee = (access: ChannelAccess, userId: string) =>
+  access.kind === 'dm' ? access.dm.memberIds.includes(userId) : canView(access.guild, access.channel, userId)
+
+/** Кто видит канал (им и уходят его события) */
+export const viewersOf = (access: ChannelAccess) =>
+  access.kind === 'dm' ? access.dm.memberIds : access.guild.memberIds.filter((id) => canView(access.guild, access.channel, id))
+
+/** Канал, если человек его видит (серверный — только с правом VIEW_CHANNEL) */
+export function channelAccess(channelId: string, userId: string): ChannelAccess | undefined {
+  const access = locateChannel(channelId)
+  return access && canSee(access, userId) ? access : undefined
 }
 
 // --- messages ---
@@ -342,11 +510,44 @@ export function messagesIn(channelId: string, limit = 150): Message[] {
 /** Автор служебных сообщений («теперь вы друзья» и т.п.) */
 export const SYSTEM_AUTHOR = 'system'
 
-export function addMessage(channelId: string, authorId: string, content: string): Message {
-  const message: Message = { id: id(), channelId, authorId, content, createdAt: Date.now() }
+export function addMessage(channelId: string, authorId: string, content: string, flavor?: MessageFlavor): Message {
+  const message: Message = { id: id(), channelId, authorId, content, createdAt: Date.now(), ...(flavor ? { flavor } : {}) }
   data.messages.push(message)
   const dm = findDm(channelId)
   if (dm) dm.lastMessageAt = message.createdAt
   save()
   return message
 }
+
+export const findMessage = (messageId: string) => data.messages.find((m) => m.id === messageId)
+
+export function deleteMessage(message: Message) {
+  data.messages = data.messages.filter((m) => m !== message)
+  save()
+}
+
+// --- для значков и админки ---
+
+export const allUsers = () => data.users
+
+/** Порядковый номер регистрации: 1 — самый первый человек в Nuntius */
+export const userNumber = (userId: string) => data.users.findIndex((u) => u.id === userId) + 1
+
+/**
+ * Владелец приложения: логин из NUNTIUS_OWNER в .env, иначе — самый первый зарегистрированный.
+ * Он всегда админ, и снять это нельзя.
+ */
+export function isAppOwner(user: User) {
+  const owner = process.env.NUNTIUS_OWNER?.trim().replace(/^@/, '').toLowerCase()
+  return owner ? user.username.toLowerCase() === owner : data.users[0]?.id === user.id
+}
+
+export const isAdmin = (user: User) => user.admin || isAppOwner(user)
+
+export const counts = () => ({
+  users: data.users.length,
+  guilds: data.guilds.length,
+  groups: data.dms.filter((d) => d.kind === 'group').length,
+  dms: data.dms.filter((d) => d.kind === 'dm').length,
+  messages: data.messages.length,
+})

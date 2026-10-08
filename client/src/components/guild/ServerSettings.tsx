@@ -1,15 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowUp, Check, Copy, Crown, Hash, LayoutGrid, LogOut, Pencil, Plus, Trash2, UserMinus, UserPlus, Users, Volume2, X } from 'lucide-react'
-import { api, ApiError, type Channel, type Guild } from '../../lib/api'
+import { ArrowDown, ArrowUp, Check, Copy, Hash, LayoutGrid, Lock, LogOut, Pencil, Plus, Shield, Trash2, UserPlus, Users, Volume2, X } from 'lucide-react'
+import { api, ApiError, PERMISSIONS, type Channel, type Guild } from '../../lib/api'
 import { initials, MEMBERS, plural } from '../../lib/format'
+import { can, isPrivateChannel, PERMISSION_INFO, rolesOf } from '../../lib/perms'
 import { chat, useChat } from '../../lib/store'
 import { ui, useUi, type ServerSection } from '../../lib/ui'
-import { Avatar } from '../Avatar'
 import { Group, SectionHead } from '../settings/controls'
+import { MembersSection } from './MembersSection'
+import { RoleChip } from './RoleBits'
+import { RolesSection } from './RolesSection'
 
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : 'Что-то пошло не так')
 
-/** Полноэкранные настройки сервера: обзор, каналы, участники, приглашение, удалить/покинуть */
+/** Полноэкранные настройки сервера: обзор, роли, каналы, участники, приглашение — что видно, зависит от прав */
 export function ServerSettings() {
   const state = useUi((s) => s.serverSettings)
   const guild = useChat((s) => (state ? s.guilds.find((g) => g.id === state.guildId) : undefined))
@@ -30,14 +33,35 @@ export function ServerSettings() {
 
   if (!state || !guild) return null
   const isOwner = guild.ownerId === meId
-  const section = state.section
   const go = (s: ServerSection) => ui.openServerSettings(guild.id, s)
 
-  const nav: { id: ServerSection; label: string; icon: typeof Hash; ownerOnly?: boolean }[] = [
-    { id: 'overview', label: 'Обзор', icon: LayoutGrid },
-    { id: 'channels', label: 'Каналы', icon: Hash, ownerOnly: true },
-    { id: 'members', label: 'Участники', icon: Users },
-    { id: 'invite', label: 'Приглашение', icon: UserPlus },
+  const allowed: Record<ServerSection, boolean> = {
+    overview: true,
+    roles: can(guild, 'MANAGE_ROLES'),
+    channels: can(guild, 'MANAGE_CHANNELS'),
+    members: true,
+    invite: can(guild, 'CREATE_INVITE'),
+  }
+  // Права могли забрать прямо сейчас — тогда возвращаемся в «Обзор»
+  const section = allowed[state.section] ? state.section : 'overview'
+  const topRole = meId ? rolesOf(guild, meId)[0] : undefined
+
+  const groups: { title: string; items: { id: ServerSection; label: string; icon: typeof Hash }[] }[] = [
+    {
+      title: 'Сервер',
+      items: [
+        { id: 'overview', label: 'Обзор', icon: LayoutGrid },
+        { id: 'roles', label: 'Роли', icon: Shield },
+        { id: 'channels', label: 'Каналы', icon: Hash },
+      ],
+    },
+    {
+      title: 'Люди',
+      items: [
+        { id: 'members', label: 'Участники', icon: Users },
+        { id: 'invite', label: 'Приглашение', icon: UserPlus },
+      ],
+    },
   ]
 
   return (
@@ -48,20 +72,22 @@ export function ServerSettings() {
             <span className="server-badge__icon">{initials(guild.name)}</span>
             <span className="settings__me-text">
               <span className="truncate">{guild.name}</span>
-              <span className="settings__me-sub">{isOwner ? 'ты владелец' : 'настройки сервера'}</span>
+              <span className="settings__me-sub truncate">{isOwner ? 'ты владелец' : topRole ? `роль: ${topRole.name}` : 'настройки сервера'}</span>
             </span>
           </div>
-          <div className="settings__group">
-            <div className="settings__group-title">Сервер</div>
-            {nav
-              .filter((n) => !n.ownerOnly || isOwner)
-              .map((n) => (
-                <button key={n.id} className={`settings__item${section === n.id ? ' is-active' : ''}`} onClick={() => go(n.id)}>
-                  <n.icon size={17} />
-                  {n.label}
-                </button>
-              ))}
-          </div>
+          {groups.map((g) => (
+            <div key={g.title} className="settings__group">
+              <div className="settings__group-title">{g.title}</div>
+              {g.items
+                .filter((n) => allowed[n.id])
+                .map((n) => (
+                  <button key={n.id} className={`settings__item${section === n.id ? ' is-active' : ''}`} onClick={() => go(n.id)}>
+                    <n.icon size={17} />
+                    {n.label}
+                  </button>
+                ))}
+            </div>
+          ))}
           <div className="settings__sep" />
           <div className="settings__version">nuntius · сервер</div>
         </div>
@@ -70,8 +96,9 @@ export function ServerSettings() {
       <main className="settings__content">
         <div className="settings__content-inner" key={section}>
           {section === 'overview' && <Overview guild={guild} isOwner={isOwner} />}
-          {section === 'channels' && isOwner && <Channels guild={guild} />}
-          {section === 'members' && <Members guild={guild} isOwner={isOwner} />}
+          {section === 'roles' && <RolesSection guild={guild} />}
+          {section === 'channels' && <Channels guild={guild} />}
+          {section === 'members' && <MembersSection guild={guild} />}
           {section === 'invite' && <Invite guild={guild} />}
         </div>
         <div className="settings__tools">
@@ -88,6 +115,10 @@ export function ServerSettings() {
 }
 
 function Overview({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
+  const canRename = can(guild, 'MANAGE_SERVER')
+  const meId = useChat((s) => s.me?.id ?? '')
+  const myRoles = rolesOf(guild, meId)
+  const myPerms = isOwner || can(guild, 'ADMINISTRATOR') ? [...PERMISSIONS] : PERMISSIONS.filter((p) => can(guild, p))
   const [name, setName] = useState(guild.name)
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState('')
@@ -130,10 +161,10 @@ function Overview({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
 
   return (
     <>
-      <SectionHead title="Обзор" subtitle={isOwner ? 'Название и судьба сервера.' : 'Сервер, на котором ты состоишь.'} />
+      <SectionHead title="Обзор" subtitle={isOwner ? 'Название и судьба сервера.' : canRename ? 'Название сервера и твоё место на нём.' : 'Сервер, на котором ты состоишь.'} />
       <div className="server-overview glow">
         <span className="server-overview__icon">{initials(name || guild.name)}</span>
-        {isOwner ? (
+        {canRename ? (
           <form className="server-overview__form" onSubmit={save}>
             <span className="set-group__title">Название сервера</span>
             <div className="inline-edit__line">
@@ -152,6 +183,25 @@ function Overview({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
           </div>
         )}
       </div>
+
+      {!isOwner && (
+        <Group title="Ты на этом сервере">
+          <div className="my-roles">
+            {myRoles.length ? myRoles.map((r) => <RoleChip key={r.id} role={r} />) : <span className="muted">Особых ролей нет — только @everyone.</span>}
+          </div>
+          <div className="my-perms">
+            {myPerms.length ? (
+              myPerms.map((p) => (
+                <span key={p} className="my-perms__item" data-tip={PERMISSION_INFO[p].description}>
+                  <Check size={12} /> {PERMISSION_INFO[p].label}
+                </span>
+              ))
+            ) : (
+              <span className="muted">Прав на сервере нет.</span>
+            )}
+          </div>
+        </Group>
+      )}
 
       {isOwner && !guild.isLobby && (
         <Group title="Опасная зона" danger>
@@ -222,6 +272,11 @@ function ChannelItem({ guild, channel, first, last }: { guild: Guild; channel: C
     <div className="ch-item">
       {channel.type === 'text' ? <Hash size={16} /> : <Volume2 size={16} />}
       <span className="truncate">{channel.name}</span>
+      {isPrivateChannel(guild, channel) && (
+        <span className="ch-item__lock" data-tip="Приватный канал">
+          <Lock size={13} />
+        </span>
+      )}
       <div className="ch-item__tools">
         <button className="icon-btn" disabled={first} onClick={() => void move(-1)} data-tip="Выше" aria-label="Выше">
           <ArrowUp size={15} />
@@ -232,50 +287,13 @@ function ChannelItem({ guild, channel, first, last }: { guild: Guild; channel: C
         <button
           className="icon-btn"
           onClick={() => ui.openChannelModal({ mode: 'edit', guildId: guild.id, channelId: channel.id })}
-          data-tip="Переименовать или удалить"
+          data-tip={can(guild, 'MANAGE_ROLES') ? 'Название и права' : 'Переименовать или удалить'}
           aria-label="Настроить"
         >
           <Pencil size={15} />
         </button>
       </div>
     </div>
-  )
-}
-
-function Members({ guild, isOwner }: { guild: Guild; isOwner: boolean }) {
-  const [confirm, setConfirm] = useState<string | null>(null)
-  const kick = async (userId: string) => {
-    if (confirm !== userId) return setConfirm(userId)
-    try {
-      chat.upsertGuild((await api.kickMember(guild.id, userId)).guild)
-      setConfirm(null)
-    } catch (err) {
-      chat.toast({ title: 'Не получилось', text: errorText(err) })
-    }
-  }
-  const members = [...guild.members].sort((a, b) => (a.id === guild.ownerId ? -1 : b.id === guild.ownerId ? 1 : a.displayName.localeCompare(b.displayName, 'ru')))
-  return (
-    <>
-      <SectionHead title="Участники" subtitle={`${plural(guild.members.length, ['человек', 'человека', 'человек'])} на сервере.`} />
-      <div className="ch-list">
-        {members.map((m) => (
-          <div key={m.id} className="ch-item ch-item--member">
-            <Avatar user={m} size={32} />
-            <span className="ch-item__who">
-              <b className="truncate">
-                {m.displayName} {m.id === guild.ownerId && <Crown size={13} className="member__crown" />}
-              </b>
-              <span className="truncate">@{m.username}</span>
-            </span>
-            {isOwner && m.id !== guild.ownerId && (
-              <button className={`btn btn--sm ${confirm === m.id ? 'btn--primary' : 'btn--ghost'}`} onClick={() => void kick(m.id)} onBlur={() => setConfirm(null)}>
-                <UserMinus size={15} /> {confirm === m.id ? 'Точно?' : 'Выгнать'}
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
   )
 }
 

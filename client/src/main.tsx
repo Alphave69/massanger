@@ -16,6 +16,10 @@ import './styles/auth.css'
 import './styles/app.css'
 import './styles/settings.css'
 import './styles/voice.css'
+import './styles/roles.css'
+import './styles/badges.css'
+import './styles/admin.css'
+import './styles/eggs.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

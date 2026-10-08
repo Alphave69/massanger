@@ -32,6 +32,12 @@ export interface Settings {
   autoGain: boolean
   muted: boolean
   deafened: boolean
+
+  // секретное: открывается пасхалкой (7 кликов по версии в настройках)
+  devMode: boolean
+  labNegative: boolean // «Негатив» — светлая тема наоборот
+  labMirror: boolean // «Зазеркалье» — интерфейс зеркально
+  labRetro: boolean // «Ретро-терминал» — зелёный фосфор
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -59,6 +65,11 @@ export const DEFAULT_SETTINGS: Settings = {
   autoGain: true,
   muted: false,
   deafened: false,
+
+  devMode: false,
+  labNegative: false,
+  labMirror: false,
+  labRetro: false,
 }
 
 const KEY = 'nuntius.settings'

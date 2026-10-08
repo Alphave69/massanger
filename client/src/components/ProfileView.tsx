@@ -1,11 +1,14 @@
 import { Check, MessageCircle, UserMinus, UserPlus, X } from 'lucide-react'
 import { acceptFriend, openDmWith, removeFriend, sendFriendRequest } from '../lib/actions'
-import { formatSince } from '../lib/format'
+import { DAYS, daysSince } from '../lib/badges'
+import { formatSince, plural } from '../lib/format'
 import { STATUS_LABEL } from '../lib/status'
 import { chat, presenceOf, useChat } from '../lib/store'
 import { ui } from '../lib/ui'
 import { Avatar } from './Avatar'
+import { BadgeRow } from './badges/BadgeRow'
 import { StatusIcon } from './StatusIcon'
+import { UserTags } from './UserTags'
 
 interface Props {
   userId: string
@@ -23,6 +26,7 @@ export function ProfileView({ userId, inDm }: Props) {
   if (!user) return null
 
   const isMe = userId === meId
+  const days = daysSince(user.createdAt)
 
   const add = async () => {
     const res = await sendFriendRequest(user.username)
@@ -32,13 +36,18 @@ export function ProfileView({ userId, inDm }: Props) {
   return (
     <div className="profile">
       <div className="profile__banner" />
+      {user.number > 0 && <UserNumber n={user.number} />}
       <div className="profile__avatar">
         <Avatar user={user} size={84} status={status} ring />
       </div>
 
       <div className="profile__body">
-        <h3 className="profile__name">{user.displayName}</h3>
+        <h3 className="profile__name">
+          <span>{user.displayName}</span>
+          <UserTags user={user} size={18} />
+        </h3>
         <div className="profile__tag">@{user.username}</div>
+        <BadgeRow user={user} max={10} />
 
         <div className="profile__status">
           <StatusIcon status={status} size={12} />
@@ -55,7 +64,9 @@ export function ProfileView({ userId, inDm }: Props) {
           )}
           <div>
             <dt>В Nuntius с</dt>
-            <dd>{formatSince(user.createdAt)}</dd>
+            <dd>
+              {formatSince(user.createdAt)} <span className="profile__days">· {days === 0 ? 'сегодня' : plural(days, DAYS)}</span>
+            </dd>
           </div>
           {!isMe && mutual && (
             <div>
@@ -109,5 +120,15 @@ export function ProfileView({ userId, inDm }: Props) {
         )}
       </div>
     </div>
+  )
+}
+
+/** «№ 7» в углу баннера — какой по счёту человек в Nuntius */
+export function UserNumber({ n }: { n: number }) {
+  return (
+    <span className={`profile__number${n === 1 ? ' is-first' : n <= 10 ? ' is-early' : ''}`} aria-label={`Пользователь номер ${n}`}>
+      <span className="profile__number-sign">№</span>
+      {n}
+    </span>
   )
 }

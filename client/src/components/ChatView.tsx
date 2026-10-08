@@ -1,20 +1,47 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ArrowUp, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
-import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
+import { ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
+import { api, SYSTEM_AUTHOR, type Message, type MessageFlavor, type User, type VoiceMember } from '../lib/api'
+import { findEgg, introClick, isAprilFools, isWishTime } from '../lib/eggs'
 import { formatDay, formatStamp, formatTime, MEMBERS, plural, sameDay } from '../lib/format'
+import { can, roleColor } from '../lib/perms'
 import { sendMessage, sendTyping } from '../lib/realtime'
 import { STATUS_LABEL } from '../lib/status'
 import { activeChannelId, chat, dmTitle, presenceOf, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { joinVoice, toggleCamera, useVoice } from '../lib/voice'
 import { Avatar } from './Avatar'
+import { UserTags } from './UserTags'
 import { GroupAvatar } from './groups/GroupAvatar'
+import { MessageActions } from './guild/MessageActions'
 import { VoiceStage } from './voice/VoiceStage'
 
 const GROUP_WINDOW = 7 * 60 * 1000
-const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неизвестный', customStatus: '', bio: '', createdAt: 0 }
+const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неизвестный', customStatus: '', bio: '', createdAt: 0, verified: false, number: 0, badges: [] }
 const NO_MEMBERS: VoiceMember[] = []
+/** Столько секунд «печатает…» без перерыва — уже не сообщение, а поэма (пасхалка) */
+const POEM_AFTER = 40_000
+
+/** Подписи у результатов команд */
+const CMD_LABEL: Record<Exclude<MessageFlavor, 'me'>, string> = { roll: '/roll', flip: '/flip', ball: '/8ball' }
+
+interface Command {
+  name: string
+  args?: string
+  hint: string
+}
+
+/** Команды, которые понимает сервер (подсказка над полем ввода) */
+const COMMANDS: Command[] = [
+  { name: 'roll', args: '[N | NdM]', hint: 'Бросить кубик: d6, /roll 20 или /roll 2d6' },
+  { name: 'flip', hint: 'Подбросить монетку — орёл или решка' },
+  { name: '8ball', args: 'вопрос', hint: 'Спросить магический шар' },
+  { name: 'me', args: 'действие', hint: 'Написать о себе в третьем лице' },
+  { name: 'shrug', args: '[текст]', hint: 'Пожать плечами ¯\\_(ツ)_/¯' },
+  { name: 'tableflip', args: '[текст]', hint: 'Перевернуть стол (╯°□°)╯︵ ┻━┻' },
+  { name: 'unflip', hint: 'Поставить стол на место ┬─┬ ノ( ゜-゜ノ)' },
+  { name: 'lenny', hint: 'Загадочное лицо ( ͡° ͜ʖ ͡°)' },
+]
 
 /** Позвонить в личку/группу (или зайти в уже идущий звонок), по желанию — сразу с камерой */
 async function startCall(roomId: string, video: boolean) {
@@ -78,8 +105,11 @@ export function ChatView() {
   }
 
   const placeholder = group ? `Написать в «${groupTitle}»` : dmUser ? `Написать @${dmUser.username}` : `Написать в #${channel!.name}`
-  const typingNames = typingIds.filter((id) => id !== meId).map((id) => users[id]?.displayName ?? '…')
+  const typers = typingIds.filter((id) => id !== meId)
   const groups = groupMessages(messages ?? [])
+  // На сервере писать можно не везде — без права SEND_MESSAGES вместо поля ввода плашка
+  const canSend = !guild || can(guild, 'SEND_MESSAGES', channelId)
+  const april = isAprilFools()
 
   return (
     <section className="main panel glow chat">
@@ -94,6 +124,7 @@ export function ChatView() {
           <button className="main__title main__title--user" onClick={(e) => ui.showProfile(dmUser.id, e.currentTarget)}>
             <Avatar user={dmUser} size={30} status={dmStatus} />
             <h2>{dmUser.displayName}</h2>
+            <UserTags user={dmUser} size={16} />
             <span className="main__sub">{dmUser.customStatus || STATUS_LABEL[dmStatus]}</span>
           </button>
         ) : (
@@ -132,28 +163,58 @@ export function ChatView() {
         <div className="chat__spacer" />
 
         {group ? (
-          <div className="welcome" key={channelId}>
-            <GroupAvatar memberIds={group.memberIds} size={84} />
-            <h3>{groupTitle}</h3>
-            <p>
-              Это начало группы <b>{groupTitle}</b>. Здесь можно переписываться и созваниваться всем вместе.
-            </p>
-          </div>
+          <Welcome
+            key={channelId}
+            channelId={channelId}
+            visual={<GroupAvatar memberIds={group.memberIds} size={84} />}
+            title={groupTitle}
+            text={
+              april ? (
+                <>
+                  Это конец группы <b>{groupTitle}</b>… Шутка, с 1 апреля ✦ Это только начало — переписывайтесь и созванивайтесь всем вместе.
+                </>
+              ) : (
+                <>
+                  Это начало группы <b>{groupTitle}</b>. Здесь можно переписываться и созваниваться всем вместе.
+                </>
+              )
+            }
+          />
         ) : dmUser ? (
-          <div className="welcome" key={channelId}>
-            <Avatar user={dmUser} size={84} status={dmStatus} ring />
-            <h3>{dmUser.displayName}</h3>
-            <span className="welcome__tag">@{dmUser.username}</span>
-            <p>
-              Это начало вашей личной переписки с <b>{dmUser.displayName}</b>. Только вы двое.
-            </p>
-          </div>
+          <Welcome
+            key={channelId}
+            channelId={channelId}
+            visual={<Avatar user={dmUser} size={84} status={dmStatus} ring />}
+            title={
+              <>
+                {dmUser.displayName} <UserTags user={dmUser} size={22} />
+              </>
+            }
+            tag={`@${dmUser.username}`}
+            text={
+              april ? (
+                <>
+                  Это конец вашей личной переписки с <b>{dmUser.displayName}</b>… Шутка, с 1 апреля ✦ Только вы двое — и это только начало.
+                </>
+              ) : (
+                <>
+                  Это начало вашей личной переписки с <b>{dmUser.displayName}</b>. Только вы двое.
+                </>
+              )
+            }
+          />
         ) : (
-          <div className="welcome" key={channelId}>
-            <span className="welcome__hash">#</span>
-            <h3>Добро пожаловать в #{channel!.name}!</h3>
-            <p>Это начало канала #{channel!.name}. Напиши что-нибудь первым.</p>
-          </div>
+          <Welcome
+            key={channelId}
+            channelId={channelId}
+            visual={<span className="welcome__hash">#</span>}
+            title={`Добро пожаловать в #${channel!.name}!`}
+            text={
+              april
+                ? `Это конец канала #${channel!.name}. Дальше ничего нет… Шутка, с 1 апреля ✦ Напиши что-нибудь первым.`
+                : `Это начало канала #${channel!.name}. Напиши что-нибудь первым.`
+            }
+          />
         )}
 
         {messages === undefined && <MessageSkeleton />}
@@ -171,6 +232,8 @@ export function ChatView() {
                   <div key={m.id} className={`sysmsg${known && !known.has(m.id) ? ' sysmsg--fresh' : ''}`}>
                     <span className="sysmsg__text">{m.content}</span>
                     <time>{formatTime(m.createdAt)}</time>
+                    {isWishTime(m.createdAt) && <Wish />}
+                    <MessageActions message={m} />
                   </div>
                 ))}
               </Fragment>
@@ -178,6 +241,8 @@ export function ChatView() {
           }
           const mine = g.authorId === meId
           const author = users[g.authorId] ?? UNKNOWN
+          // цвет имени — цвет высшей цветной роли на сервере
+          const color = guild ? roleColor(guild, g.authorId) : null
           return (
             <Fragment key={g.messages[0].id}>
               {g.newDay && (
@@ -194,19 +259,19 @@ export function ChatView() {
                 <div className="mgroup__body">
                   {!mine && (
                     <div className="mgroup__meta">
-                      <button className="mgroup__author" onClick={(e) => ui.showProfile(author.id, e.currentTarget)}>
+                      <button
+                        className={`mgroup__author${color ? ' has-color' : ''}`}
+                        style={color ? { color } : undefined}
+                        onClick={(e) => ui.showProfile(author.id, e.currentTarget)}
+                      >
                         {author.displayName}
                       </button>
+                      <UserTags user={author} />
                       <time>{formatStamp(g.messages[0].createdAt)}</time>
                     </div>
                   )}
                   {g.messages.map((m) => (
-                    <div key={m.id} className={`bubble${known && !known.has(m.id) ? ' bubble--fresh' : ''}`}>
-                      <span className="bubble__text">{m.content}</span>
-                      <time className="bubble__time" title={formatStamp(m.createdAt)}>
-                        {formatTime(m.createdAt)}
-                      </time>
-                    </div>
+                    <Bubble key={m.id} message={m} fresh={Boolean(known && !known.has(m.id))} name={author.displayName} color={color} />
                   ))}
                 </div>
               </div>
@@ -215,22 +280,20 @@ export function ChatView() {
         })}
       </div>
 
-      <Composer key={channelId} channelId={channelId} placeholder={placeholder} />
-
-      <div className={`typing${typingNames.length ? ' is-visible' : ''}`}>
-        {typingNames.length > 0 && (
-          <>
-            <span className="typing__dots">
-              <i />
-              <i />
-              <i />
-            </span>
+      {canSend ? (
+        <Composer key={channelId} channelId={channelId} placeholder={placeholder} />
+      ) : (
+        <div className="composer">
+          <div className="composer__locked">
+            <Lock size={15} />
             <span className="truncate">
-              <b>{typingNames.slice(0, 3).join(', ')}</b> {typingNames.length > 1 ? 'печатают…' : 'печатает…'}
+              У тебя нет прав писать в <b>#{channel?.name}</b>
             </span>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
+
+      <TypingBar key={`typing:${channelId}`} ids={typers} />
     </section>
   )
 }
@@ -276,10 +339,112 @@ function groupMessages(list: Message[]): Group[] {
   return groups
 }
 
+/** Начало чата. Три клика по заголовку или тексту — спрятанная строка (пасхалка «Начало начал») */
+function Welcome({ channelId, visual, title, tag, text }: { channelId: string; visual: ReactNode; title: ReactNode; tag?: string; text: ReactNode }) {
+  const [secret, setSecret] = useState(false)
+  const click = () => {
+    if (introClick(channelId)) setSecret(true)
+  }
+  return (
+    <div className="welcome">
+      {visual}
+      <h3 onClick={click}>{title}</h3>
+      {tag && <span className="welcome__tag">{tag}</span>}
+      <p onClick={click}>{text}</p>
+      {secret && <p className="welcome__secret">…а где-то там, далеко, — его конец</p>}
+    </div>
+  )
+}
+
+/** Звёздочка у времени 11:11 и 22:22 */
+function Wish() {
+  return (
+    <span className="wish" data-tip="Загадай желание" aria-label="Загадай желание">
+      ✦
+    </span>
+  )
+}
+
+/** Одно сообщение: обычное, «/me» (курсивом от третьего лица) или результат команды */
+function Bubble({ message: m, fresh, name, color }: { message: Message; fresh: boolean; name: string; color: string | null }) {
+  const flavor = m.flavor
+  const kind = flavor === 'me' ? ' bubble--me' : flavor ? ' bubble--cmd' : ''
+  return (
+    <div className={`bubble${kind}${fresh ? ' bubble--fresh' : ''}`}>
+      {flavor && flavor !== 'me' && <span className="bubble__cmd">{CMD_LABEL[flavor] ?? '/'}</span>}
+      <span className="bubble__text">
+        {flavor === 'me' && (
+          <>
+            <b style={color ? { color } : undefined}>{name}</b>{' '}
+          </>
+        )}
+        {m.content}
+      </span>
+      <time className="bubble__time" title={formatStamp(m.createdAt)}>
+        {formatTime(m.createdAt)}
+      </time>
+      {isWishTime(m.createdAt) && <Wish />}
+      <MessageActions message={m} />
+    </div>
+  )
+}
+
+/** «печатает…»; кто печатает без перерыва 40 секунд — «пишет поэму…» */
+function TypingBar({ ids }: { ids: string[] }) {
+  const users = useChat((s) => s.users)
+  const since = useRef(new Map<string, number>())
+  const [, tick] = useState(0)
+
+  // Запоминаем, с какого момента человек печатает (ушёл больше чем на пару секунд — отсчёт заново)
+  const now = Date.now()
+  const map = since.current
+  for (const id of ids) if (!map.has(id)) map.set(id, now)
+  for (const id of map.keys()) if (!ids.includes(id)) map.delete(id)
+  const poets = ids.filter((id) => now - (map.get(id) ?? now) >= POEM_AFTER)
+  const hasPoet = poets.length > 0
+
+  // Перерисоваться ровно тогда, когда кто-то «дописал до поэмы»
+  useEffect(() => {
+    const waiting = ids.filter((id) => !poets.includes(id))
+    if (!waiting.length) return
+    const next = Math.min(...waiting.map((id) => (map.get(id) ?? Date.now()) + POEM_AFTER)) - Date.now()
+    const timer = window.setTimeout(() => tick((n) => n + 1), Math.max(0, next) + 50)
+    return () => window.clearTimeout(timer)
+  })
+
+  useEffect(() => {
+    if (hasPoet) findEgg('poem')
+  }, [hasPoet])
+
+  const names = ids.map((id) => users[id]?.displayName ?? '…')
+  const verb =
+    ids.length === 1 ? (hasPoet ? 'пишет поэму…' : 'печатает…') : poets.length === ids.length ? 'пишут поэму…' : 'печатают…'
+
+  return (
+    <div className={`typing${ids.length ? ' is-visible' : ''}${hasPoet ? ' is-poem' : ''}`}>
+      {ids.length > 0 && (
+        <>
+          <span className="typing__dots">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="truncate">
+            <b>{names.slice(0, 3).join(', ')}</b> {verb}
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Composer({ channelId, placeholder }: { channelId: string; placeholder: string }) {
   const [value, setValue] = useState('')
   const [sending, setSending] = useState(false)
   const [burst, setBurst] = useState(0)
+  // подсказка команд: закрыли по Esc — не показываем, пока не сотрут «/»
+  const [hintsClosed, setHintsClosed] = useState(false)
+  const [sel, setSel] = useState(0)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   useLayoutEffect(() => {
@@ -288,6 +453,17 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
     el.style.height = '0px'
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }, [value])
+
+  // Пока набирают первое слово после «/», подсказываем команды
+  const query = /^\/(\S*)$/.exec(value)?.[1]?.toLowerCase()
+  const matches = query === undefined || hintsClosed ? [] : COMMANDS.filter((c) => c.name.startsWith(query))
+  const active = Math.min(sel, Math.max(0, matches.length - 1))
+
+  const complete = (c: Command) => {
+    setValue(`/${c.name} `)
+    setSel(0)
+    ref.current?.focus()
+  }
 
   const send = async () => {
     const content = value.trim()
@@ -303,6 +479,31 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (matches.length > 0 && !e.nativeEvent.isComposing) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        setSel((active + step + matches.length) % matches.length)
+        return
+      }
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault()
+        complete(matches[active])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setHintsClosed(true)
+        return
+      }
+      // Enter на недописанной команде («/fl») — дописывает её, на полной — отправляет
+      if (e.key === 'Enter' && !e.shiftKey && matches[active].name !== query) {
+        e.preventDefault()
+        complete(matches[active])
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       void send()
@@ -313,6 +514,33 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
 
   return (
     <div className="composer">
+      {matches.length > 0 && (
+        <div className="cmd-hints" role="listbox" aria-label="Команды">
+          <div className="cmd-hints__head">Команды</div>
+          {matches.map((c, i) => (
+            <button
+              key={c.name}
+              type="button"
+              role="option"
+              aria-selected={i === active}
+              className={`cmd-hint${i === active ? ' is-active' : ''}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setSel(i)}
+              onClick={() => complete(c)}
+            >
+              <span className="cmd-hint__name">
+                /{c.name}
+                {c.args && <span className="cmd-hint__args"> {c.args}</span>}
+              </span>
+              <span className="cmd-hint__desc truncate">{c.hint}</span>
+            </button>
+          ))}
+          <div className="cmd-hints__keys">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> выбрать · <kbd>Tab</kbd> дописать · <kbd>Esc</kbd> закрыть
+          </div>
+        </div>
+      )}
       <div className="composer__box glow">
         <textarea
           ref={ref}
@@ -320,9 +548,14 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
           value={value}
           autoFocus
           placeholder={placeholder}
+          aria-autocomplete="list"
+          aria-expanded={matches.length > 0}
           onChange={(e) => {
-            setValue(e.target.value)
-            if (e.target.value) sendTyping(channelId)
+            const v = e.target.value
+            setValue(v)
+            setSel(0)
+            if (!v.startsWith('/')) setHintsClosed(false)
+            if (v) sendTyping(channelId)
           }}
           onKeyDown={onKeyDown}
         />

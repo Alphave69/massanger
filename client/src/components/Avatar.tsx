@@ -24,6 +24,14 @@ export function Avatar({ user, size = 40, status, ring }: Props) {
           <StatusIcon status={status} size={badge - 4} />
         </span>
       )}
+      {/* спит — над аватаркой всплывают «z» */}
+      {status === 'sleep' && size >= 32 && (
+        <span className="avatar__zzz" style={{ fontSize: Math.max(9, Math.round(size * 0.22)) }} aria-hidden="true">
+          <i>z</i>
+          <i>z</i>
+          <i>z</i>
+        </span>
+      )}
     </span>
   )
 }

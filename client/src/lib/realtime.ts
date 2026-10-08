@@ -5,6 +5,9 @@ import { attachVoice, initVoice } from './voice'
 import { blip, desktopNotify, pulseSphere } from './fx'
 import { useSettings } from './settings'
 import { ui } from './ui'
+import { onBadgeEarned } from './badges'
+import { onEggFound, onMessageSent } from './eggs'
+import { onAnnounce } from './admin'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -40,7 +43,8 @@ export function connectRealtime(onUnauthorized: () => void) {
   const s = io({
     auth: (cb) => {
       usedToken = getToken()
-      cb({ token: usedToken })
+      // часовой пояс — чтобы сервер понимал, что у человека ночь (значки «Сова», «Жаворонок»)
+      cb({ token: usedToken, tz: new Date().getTimezoneOffset() })
     },
   })
   socket = s
@@ -126,6 +130,11 @@ export function connectRealtime(onUnauthorized: () => void) {
     }
   })
 
+  s.on('message:deleted', ({ id, channelId }: { id: string; channelId: string }) => chat.removeMessage(channelId, id))
+  s.on('badge:earned', onBadgeEarned)
+  s.on('egg:found', onEggFound)
+  s.on('announce', onAnnounce)
+
   s.on('call:missed', ({ roomId, from }: { roomId: string; from: string }) => {
     const st = useChat.getState()
     if (!document.hidden && st.view.kind === 'dm' && st.view.dmId === roomId) return
@@ -163,6 +172,7 @@ export function sendMessage(channelId: string, content: string): Promise<boolean
         return
       }
       if (chat.addMessage(res.message).isNew) pulseSphere(1)
+      onMessageSent(content)
       resolve(true)
     })
   })

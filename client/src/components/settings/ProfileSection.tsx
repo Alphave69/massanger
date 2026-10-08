@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
-import { formatSince } from '../../lib/format'
+import { DAYS, daysSince } from '../../lib/badges'
+import { formatSince, plural } from '../../lib/format'
 import { STATUS_LABEL, selfPresence } from '../../lib/status'
 import { chat, useChat } from '../../lib/store'
 import { Avatar } from '../Avatar'
+import { BadgeRow } from '../badges/BadgeRow'
+import { UserNumber } from '../ProfileView'
 import { StatusIcon } from '../StatusIcon'
+import { UserTags } from '../UserTags'
 import { SectionHead } from './controls'
 
 const BIO_MAX = 190
@@ -19,6 +23,7 @@ export function ProfileSection() {
   const [error, setError] = useState<string | null>(null)
 
   const dirty = displayName !== me.displayName || customStatus !== me.customStatus || bio !== me.bio
+  const days = daysSince(me.createdAt)
   const status = selfPresence(me.status)
 
   const reset = () => {
@@ -91,12 +96,17 @@ export function ProfileSection() {
           <span className="set-group__title">Превью</span>
           <div className="preview-card glow">
             <div className="profile__banner" />
+            {me.number > 0 && <UserNumber n={me.number} />}
             <div className="profile__avatar">
               <Avatar user={{ id: me.id, displayName: displayName || me.displayName }} size={84} status={status} ring />
             </div>
             <div className="profile__body">
-              <h3 className="profile__name">{displayName || me.displayName}</h3>
+              <h3 className="profile__name">
+                <span>{displayName || me.displayName}</span>
+                <UserTags user={me} size={18} />
+              </h3>
               <div className="profile__tag">@{me.username}</div>
+              <BadgeRow user={me} max={9} />
               <div className="profile__status">
                 <StatusIcon status={status} size={12} />
                 {STATUS_LABEL[me.status]}
@@ -111,10 +121,16 @@ export function ProfileSection() {
                 )}
                 <div>
                   <dt>В Nuntius с</dt>
-                  <dd>{formatSince(me.createdAt)}</dd>
+                  <dd>
+                    {formatSince(me.createdAt)} <span className="profile__days">· {days === 0 ? 'сегодня' : plural(days, DAYS)}</span>
+                  </dd>
                 </div>
               </dl>
             </div>
+          </div>
+          <div className="profile-edit__since">
+            {days === 0 ? 'Ты с нами с сегодняшнего дня' : `Ты с нами ${plural(days, DAYS)}`}
+            {me.number > 0 && ` · пользователь № ${me.number}`}
           </div>
         </div>
       </div>
