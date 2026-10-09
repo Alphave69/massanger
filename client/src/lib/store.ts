@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { SYSTEM_AUTHOR, type DmView, type FriendEntry, type FriendState, type Guild, type InitialState, type Me, type Message, type Presence, type User } from './api'
+import { isMobile } from './mobile'
 import { selfPresence } from './status'
+import { useUi } from './ui'
 
 export type FriendsTab = 'online' | 'all' | 'pending' | 'add'
 
@@ -290,7 +292,8 @@ export const chat = {
     if (list?.some((x) => x.id === m.id)) return { isNew: false, isActive: false, mine: false }
 
     const mine = m.authorId === st.me?.id
-    const isActive = activeChannelId(st) === m.channelId && !document.hidden
+    // «Открыт» — только если чат и правда на экране: на телефоне со списка его не видно
+    const isActive = activeChannelId(st) === m.channelId && !document.hidden && (!isMobile() || useUi.getState().mobileMain)
     const typingHere = st.typing[m.channelId]
     let typing = st.typing
     if (typingHere?.[m.authorId]) {

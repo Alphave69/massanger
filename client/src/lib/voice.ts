@@ -5,6 +5,7 @@ import { chat, useChat } from './store'
 import { desktopNotify, tone, toneLoop } from './fx'
 import { ui } from './ui'
 import { can, guildOfChannel } from './perms'
+import { isDesktopApp } from './platform'
 
 /**
  * Голосовой движок.
@@ -252,14 +253,31 @@ async function acquireMic(quiet = false) {
       set({ noMic: false })
       sendState({ muted: useSettings.getState().muted })
     }
-  } catch {
+  } catch (err) {
     if (!get().noMic) {
       set({ noMic: true })
       sendState({ muted: true })
     }
-    if (!quiet) chat.toast({ title: 'Нет доступа к микрофону', text: 'Ты в голосе, но тебя не слышно. Проверь разрешение и микрофон в настройках' })
+    if (!quiet) chat.toast({ title: 'Нет доступа к микрофону', text: micProblem(err) })
   }
   applyGate()
+}
+
+/** Почему не дали микрофон — по названию ошибки, чтобы было понятно, что чинить */
+export function micProblem(err: unknown): string {
+  const name = err instanceof DOMException ? err.name : ''
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return isDesktopApp()
+      ? 'Windows не пускает приложение к микрофону: Параметры → Конфиденциальность и защита → Микрофон → включи «Доступ к микрофону» и «Разрешить классическим приложениям доступ к микрофону»'
+      : 'Браузер запретил микрофон: нажми на значок слева от адреса сайта и разреши микрофон'
+  }
+  if (name === 'NotReadableError' || name === 'AbortError') {
+    return 'Микрофон занят другой программой или не отвечает. Закрой её или выбери другой микрофон в настройках → Голос и звук'
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return 'Микрофон не найден. Подключи его или выбери другой в настройках → Голос и звук'
+  }
+  return `Ты в голосе, но тебя не слышно. Проверь микрофон в настройках${name ? ` (${name})` : ''}`
 }
 
 // Подключили микрофон, пока сидим без него, — пробуем взять

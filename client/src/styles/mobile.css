@@ -644,10 +644,10 @@
     height: 48px;
   }
 
-  /* --- уведомления — сверху, во всю ширину (снизу они закрывали бы поле ввода) --- */
+  /* --- уведомления — сверху, во всю ширину (снизу они закрывали бы поле ввода), под шапкой: ← и заголовок остаются доступны --- */
 
   .toasts {
-    top: calc(env(safe-area-inset-top) + 8px);
+    top: calc(env(safe-area-inset-top) + 56px + 8px);
     right: 10px;
     bottom: auto;
     left: 10px;
@@ -659,8 +659,16 @@
     animation: toast-drop 0.5s var(--ease-spring);
   }
 
+  /* тонкая полоска под шапкой — не закрывает ни ←, ни заголовок, ни кнопки */
   .conn-banner {
-    top: env(safe-area-inset-top);
+    top: calc(env(safe-area-inset-top) + 56px);
+    max-width: calc(100vw - 20px);
+    padding: 3px 12px;
+    border-radius: 0 0 10px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* --- карточка профиля — снизу, во всю ширину --- */

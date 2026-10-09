@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, SYSTEM_AUTHOR } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { initVoice, resetVoice } from '../lib/voice'
 import { activeChannelId, chat, useChat } from '../lib/store'
@@ -145,22 +145,22 @@ export function Shell({ onLogout }: Props) {
     () =>
       useChat.subscribe((s, prev) => {
         if (!isMobile() || !s.ready || !prev.ready) return
-        // Телефон, открыт список: чат не виден — новые сообщения «открытого» канала тоже непрочитанные
-        const here = activeChannelId(s)
-        const list = here ? s.messages[here] : undefined
-        const old = here ? prev.messages[here] : undefined
-        // (вкладка в фоне — addMessage уже посчитал их сам, второй раз не считаем)
-        const counted = here !== null && s.unread[here] !== prev.unread[here]
-        if (here && list && old && list.length > old.length && !counted && !useUi.getState().mobileMain) {
-          const fresh = list.slice(old.length).filter((m) => m.authorId !== s.me?.id && m.authorId !== SYSTEM_AUTHOR)
-          for (let i = 0; i < fresh.length; i++) chat.bumpUnread(here)
-        }
+        // Непрочитанное на телефоне со списка считает сам addMessage — чат не на экране
         // Открыли личку или канал откуда угодно (профиль, пересылка, новый канал) — показываем сам чат.
         // Щелчок по серверу в доке меняет только сервер — тогда остаёмся в списке его каналов
         const v = s.view
         const p = prev.view
         if (v.kind === 'dm' && (p.kind !== 'dm' || p.dmId !== v.dmId)) ui.showMain()
         else if (v.kind === 'guild' && s.channelByGuild !== prev.channelByGuild) ui.showMain()
+      }),
+    [],
+  )
+
+  // Телефон: чат выехал на экран — его сообщения прочитаны
+  useEffect(
+    () =>
+      useUi.subscribe((s, prev) => {
+        if (s.mobileMain && !prev.mobileMain && !document.hidden) chat.markRead()
       }),
     [],
   )

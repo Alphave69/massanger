@@ -1,5 +1,6 @@
 import { Headphones, HeadphoneOff, Lock, Mic, MicOff, MonitorUp, MonitorOff, PhoneOff, Settings as SettingsIcon, Video, VideoOff } from 'lucide-react'
 import { can, guildOfChannel } from '../../lib/perms'
+import { canShareScreen } from '../../lib/platform'
 import { useSettings } from '../../lib/settings'
 import { chat, useChat } from '../../lib/store'
 import { ui } from '../../lib/ui'
@@ -62,15 +63,18 @@ export function VoiceControls({ compact }: { compact?: boolean }) {
       >
         {camera ? <Video size={20} /> : <VideoOff size={20} />}
       </button>
-      <button
-        className={`vc__btn${screen ? ' is-on' : ''}`}
-        onClick={() => void toggleScreen()}
-        disabled={!screen && !videoOk}
-        data-tip={!screen && !videoOk ? NO_VIDEO : screen ? 'Остановить демонстрацию' : 'Демонстрация экрана'}
-        aria-pressed={screen}
-      >
-        {screen ? <MonitorOff size={20} /> : <MonitorUp size={20} />}
-      </button>
+      {/* Экран — только где браузер умеет его показывать (на телефонах кнопка была бы мёртвой) */}
+      {(screen || canShareScreen()) && (
+        <button
+          className={`vc__btn${screen ? ' is-on' : ''}`}
+          onClick={() => void toggleScreen()}
+          disabled={!screen && !videoOk}
+          data-tip={!screen && !videoOk ? NO_VIDEO : screen ? 'Остановить демонстрацию' : 'Демонстрация экрана'}
+          aria-pressed={screen}
+        >
+          {screen ? <MonitorOff size={20} /> : <MonitorUp size={20} />}
+        </button>
+      )}
       {!compact && (
         <button className="vc__btn" onClick={() => ui.openSettings('voice')} data-tip="Настройки голоса">
           <SettingsIcon size={20} />

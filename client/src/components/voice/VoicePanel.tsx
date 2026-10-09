@@ -1,10 +1,11 @@
 import { MonitorUp, PhoneOff, Video } from 'lucide-react'
+import { canShareScreen } from '../../lib/platform'
 import { describeRoom, openRoom } from '../../lib/rooms'
 import { useChat } from '../../lib/store'
 import { leaveVoice, toggleCamera, toggleScreen, useVoice } from '../../lib/voice'
 
 /** Показ экрана: телефоны (iPhone, Android) так не умеют — там кнопку не показываем */
-const canShare = typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+const canShare = canShareScreen()
 
 /** Плашка «Голос подключён» над своей панелью — видна, где бы ты ни был в приложении */
 export function VoicePanel() {

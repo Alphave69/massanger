@@ -713,8 +713,8 @@
 
 .bdg-cele__card {
   position: relative;
-  width: 360px;
-  max-width: 100%;
+  /* min(): у грид-ячейки авто-ширина, max-width: 100% карточку не сужает — на 320px она уезжала за край */
+  width: min(360px, 100%);
   padding: 0 28px 26px;
   border-radius: 28px;
   border: 1px solid var(--line-3);

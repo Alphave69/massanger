@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Mic, Square, Volume2 } from 'lucide-react'
 import { blip } from '../../lib/fx'
 import { keyLabel, setSetting, useSettings } from '../../lib/settings'
+import { micProblem } from '../../lib/voice'
 import { Choice, Group, SectionHead, Select, Slider, Toggle } from './controls'
 
 type SinkCapable = { setSinkId?: (id: string) => Promise<void> }
@@ -36,8 +37,8 @@ export function VoiceSection() {
       stream.getTracks().forEach((t) => t.stop())
       setError(null)
       await refresh()
-    } catch {
-      setError('Браузер не дал доступ к микрофону. Разреши его в настройках сайта (значок слева от адреса) и попробуй снова.')
+    } catch (err) {
+      setError(micProblem(err))
     }
   }
 
@@ -158,9 +159,9 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
             autoGainControl: s.autoGain,
           },
         })
-      } catch {
+      } catch (err) {
         if (cancelled) return
-        onError('Не получилось включить микрофон. Проверь, что он подключён и браузеру разрешён доступ.')
+        onError(micProblem(err))
         setTesting(false)
         return
       }

@@ -24,6 +24,11 @@ export function isInstalledApp(): boolean {
   return isDesktopApp() || isStandalone()
 }
 
+/** Браузер умеет показывать экран (на iPhone и Android getDisplayMedia нет) */
+export function canShareScreen(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+}
+
 export type Os = 'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'other'
 
 export function detectOs(): Os {
