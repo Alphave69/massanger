@@ -221,19 +221,32 @@ async function applySink() {
   if (c?.setSinkId) await c.setSinkId(id).catch(() => {})
 }
 
+/**
+ * Открыть микрофон из настроек. Выбранный просим строго (exact): «мягкую» просьбу (ideal) новый Chromium
+ * пропускает и берёт системный по умолчанию — в приложении для Windows так открывался не тот микрофон.
+ * Выбранный не открылся (выдернули, занят) — берём системный, а onFallback говорит об этом
+ */
+export async function openMic(onFallback?: (text: string) => void): Promise<MediaStream> {
+  const s = useSettings.getState()
+  const audio = { noiseSuppression: s.noiseSuppression, echoCancellation: s.echoCancellation, autoGainControl: s.autoGain }
+  if (s.inputDeviceId) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: { ...audio, deviceId: { exact: s.inputDeviceId } }, video: false })
+    } catch (err) {
+      // запрет доступа на другом микрофоне будет тем же — сразу наверх
+      if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) throw err
+      onFallback?.(`Выбранный микрофон не открылся${err instanceof DOMException ? ` (${err.name})` : ''} — взяли системный по умолчанию. Выбрать другой: Настройки → Голос и звук`)
+    }
+  }
+  return navigator.mediaDevices.getUserMedia({ audio, video: false })
+}
+
 /** Взять микрофон с текущими настройками (при смене устройства/обработки — заново, без переподключения) */
 async function acquireMic(quiet = false) {
   if (!ctx || !inputGain) return
-  const s = useSettings.getState()
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: s.inputDeviceId ? { ideal: s.inputDeviceId } : undefined,
-        noiseSuppression: s.noiseSuppression,
-        echoCancellation: s.echoCancellation,
-        autoGainControl: s.autoGain,
-      },
-      video: false,
+    const stream = await openMic((text) => {
+      if (!quiet) chat.toast({ title: 'Микрофон', text })
     })
     if (!get().roomId) {
       stream.getTracks().forEach((t) => t.stop())

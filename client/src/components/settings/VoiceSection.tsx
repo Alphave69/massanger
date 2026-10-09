@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Mic, Square, Volume2 } from 'lucide-react'
 import { blip } from '../../lib/fx'
 import { keyLabel, setSetting, useSettings } from '../../lib/settings'
-import { micProblem } from '../../lib/voice'
+import { micProblem, openMic } from '../../lib/voice'
 import { Choice, Group, SectionHead, Select, Slider, Toggle } from './controls'
 
 type SinkCapable = { setSinkId?: (id: string) => Promise<void> }
@@ -163,15 +163,10 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
     }, 8000)
 
     const start = async () => {
+      // выбранный микрофон не открылся и взяли системный — об этом и скажем вместо «всё хорошо»
+      const notes: string[] = []
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: s.inputDeviceId ? { ideal: s.inputDeviceId } : undefined,
-            noiseSuppression: s.noiseSuppression,
-            echoCancellation: s.echoCancellation,
-            autoGainControl: s.autoGain,
-          },
-        })
+        stream = await openMic((text) => notes.push(text))
       } catch (err) {
         window.clearTimeout(slow)
         if (cancelled) return
@@ -184,7 +179,7 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
         stream.getTracks().forEach((t) => t.stop())
         return
       }
-      onError(null)
+      onError(notes[0] ?? null)
       setOpened(stream.getAudioTracks()[0]?.label || 'микрофон без названия')
       ctx = new AudioContext()
       if (s.outputDeviceId && (ctx as SinkCapable).setSinkId) await (ctx as SinkCapable).setSinkId!(s.outputDeviceId).catch(() => {})
