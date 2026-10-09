@@ -1,7 +1,7 @@
 {
   "name": "nuntius-desktop",
   "productName": "Nuntius",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Nuntius — приложение для Windows",
   "author": "Nuntius",
@@ -11,6 +11,9 @@
     "dist": "electron-builder --win nsis portable --x64",
     "dist:setup": "electron-builder --win nsis --x64",
     "dist:portable": "electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "electron": "44.7.0",
@@ -28,6 +31,12 @@
       "nuntius.config.json",
       "package.json"
     ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/Alphave69/massanger/releases/download/desktop-latest"
+      }
+    ],
     "win": {
       "icon": "build/icon.png"
     },
@@ -37,10 +46,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Nuntius",
-      "artifactName": "Nuntius-Setup-${version}.${ext}"
+      "artifactName": "Nuntius-Setup.${ext}"
     },
     "portable": {
-      "artifactName": "Nuntius-Portable-${version}.${ext}"
+      "artifactName": "Nuntius-Portable.${ext}"
     },
     "linux": {
       "target": "dir",

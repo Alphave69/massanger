@@ -261,6 +261,15 @@ export const chat = {
     })
   },
 
+  /** Сообщение изменилось (реакции, правка) — заменить, если оно у нас загружено */
+  updateMessage(m: Message) {
+    set((st) => {
+      const list = st.messages[m.channelId]
+      if (!list?.some((x) => x.id === m.id)) return {}
+      return { messages: { ...st.messages, [m.channelId]: list.map((x) => (x.id === m.id ? m : x)) } }
+    })
+  },
+
   /** Пропущенный звонок — как непрочитанное в переписке */
   bumpUnread(channelId: string) {
     set((st) => ({ unread: { ...st.unread, [channelId]: (st.unread[channelId] ?? 0) + 1 } }))

@@ -1,12 +1,30 @@
-// Nuntius для Windows — тонкая оболочка над сайтом: открывает твой сервер в отдельном окне,
-// живёт в трее как Discord, умеет демонстрацию экрана со звуком и уведомления.
-const { app, BrowserWindow, Menu, Tray, desktopCapturer, ipcMain, nativeImage, net, session, shell } = require('electron')
+// Nuntius для Windows — тонкая оболочка над сайтом: открывает твой сервер в своём чёрном окне
+// (рамка нарисована нами, как в Discord), живёт в трее, умеет демонстрацию экрана со звуком,
+// уведомления и сама обновляется.
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  WebContentsView,
+  clipboard,
+  desktopCapturer,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  net,
+  session,
+  shell,
+} = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const ICON = path.join(__dirname, 'icon.png')
 const CONNECT_PAGE = path.join(__dirname, 'connect.html')
 const PICKER_PAGE = path.join(__dirname, 'picker.html')
+const TITLEBAR_PAGE = path.join(__dirname, 'titlebar.html')
+const BAR_HEIGHT = 32 // высота нашей полоски заголовка, сайт — сразу под ней
+const UPDATE_EVERY = 6 * 60 * 60 * 1000 // проверка обновлений раз в 6 часов
 
 // ============ настройки ============
 
@@ -70,9 +88,16 @@ const isAppUrl = (u) => Boolean(serverUrl()) && sameOrigin(u, serverUrl())
 
 // ============ окно ============
 
-let win = null
+let win = null // окно: само рисует полоску заголовка (titlebar.html)
+let view = null // сайт (или страница подключения) — под полоской
 let tray = null
 let quitting = false
+let htmlFullscreen = false // сайт развернул видео или демонстрацию на весь экран
+let unread = 0
+let updateReady = false // новая версия скачана и ждёт перезапуска
+
+const site = () => view.webContents
+const isFullscreen = () => htmlFullscreen || win.isFullScreen()
 
 function createWindow() {
   const b = config.bounds || {}
@@ -83,11 +108,22 @@ function createWindow() {
     y: b.y,
     minWidth: 940,
     minHeight: 600,
+    frame: false, // без белой рамки Windows — свою рисует titlebar.html
     backgroundColor: '#000000', // без белой вспышки при запуске
     title: 'Nuntius',
     icon: ICON,
     show: false,
-    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'titlebar-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+    },
+  })
+
+  // Сайт живёт в отдельном «слое» под полоской заголовка
+  view = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -96,37 +132,50 @@ function createWindow() {
       spellcheck: true,
     },
   })
+  view.setBackgroundColor('#000000')
+  win.contentView.addChildView(view)
+  layout()
+  // размер окна поменялся любым способом (растянули, двойной клик по полоске, Win+↑) — подгоняем сайт
+  win.contentView.on('bounds-changed', layout)
+
   if (config.maximized) win.maximize()
   win.once('ready-to-show', () => win.show())
 
-  // Ссылки на другие сайты — в обычный браузер
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) void shell.openExternal(url)
-    return { action: 'deny' }
-  })
-  win.webContents.on('will-navigate', (e, url) => {
-    if (url.startsWith('file:') || isAppUrl(url)) return
-    e.preventDefault()
-    if (/^https?:/i.test(url)) void shell.openExternal(url)
+  // Полоска заголовка — только наша локальная страница: никуда не уходит и ничего не открывает
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  // Заголовок окна на панели задач берём у сайта, а не у полоски
+  win.on('page-title-updated', (e) => e.preventDefault())
+  void win.loadFile(TITLEBAR_PAGE)
+
+  for (const event of ['resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen']) {
+    win.on(event, () => {
+      layout()
+      sendState()
+    })
+  }
+  win.on('leave-full-screen', () => {
+    // окно вышло из полного экрана не через сайт — пусть и сайт выйдет
+    if (!htmlFullscreen) return
+    htmlFullscreen = false
+    layout()
+    sendState()
+    site()
+      .executeJavaScript('document.fullscreenElement && document.exitFullscreen()', true)
+      .catch(() => {})
   })
 
-  // Сервер недоступен — показываем страницу подключения с ошибкой и кнопкой «Повторить»
-  win.webContents.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
-    if (!isMainFrame || code === -3 /* отменено */ || url.startsWith('file:')) return
-    showConnect(`Не удалось открыть ${new URL(url).host}: ${description}`)
+  // Окно получило фокус — сразу в сайт, чтобы можно было печатать без лишнего клика
+  win.on('focus', () => {
+    win.flashFrame(false)
+    if (!site().isDestroyed()) site().focus()
+    sendState()
   })
-
-  // «(3) Nuntius» в заголовке — непрочитанные: в подсказку трея и мигание на панели задач
-  win.on('page-title-updated', (_e, title) => {
-    const unread = Number(/^\((\d+)\)/.exec(title)?.[1] ?? 0)
-    tray?.setToolTip(unread ? `Nuntius — непрочитанных: ${unread}` : 'Nuntius')
-    if (unread && !win.isFocused()) win.flashFrame(true)
-  })
-  win.on('focus', () => win.flashFrame(false))
+  win.on('blur', sendState)
 
   // Закрыть = свернуть в трей (как Discord); выйти — через меню трея
   win.on('close', (e) => {
-    rememberBounds()
+    saveBounds()
     if (quitting) return
     e.preventDefault()
     win.hide()
@@ -134,28 +183,183 @@ function createWindow() {
   win.on('resize', rememberBounds)
   win.on('move', rememberBounds)
 
+  setupSite()
   openApp()
+}
+
+/** Раскладка: полоска сверху, сайт под ней; в полном экране сайт на всё окно */
+function layout() {
+  if (!win || win.isDestroyed()) return
+  const { width, height } = win.contentView.getBounds()
+  const top = isFullscreen() ? 0 : BAR_HEIGHT
+  view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) })
+}
+
+/** Состояние для полоски заголовка: какие кнопки рисовать, тусклая ли она, есть ли непрочитанное */
+function windowState() {
+  return {
+    maximized: win.isMaximized(),
+    focused: win.isFocused(),
+    fullscreen: isFullscreen(),
+    unread,
+    update: updateReady ? 'ready' : null,
+  }
+}
+
+function sendState() {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
+  win.webContents.send('win:state', windowState())
+}
+
+function setupSite() {
+  const wc = site()
+
+  // Ссылки на другие сайты — в обычный браузер
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  // Уходить можно только по своему серверу; файлы, брошенные в окно, страницу не подменяют
+  wc.on('will-navigate', (e, url) => {
+    if (isAppUrl(url)) return
+    e.preventDefault()
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+  })
+
+  // Сервер недоступен — показываем страницу подключения с ошибкой и кнопкой «Повторить»
+  wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* отменено */ || url.startsWith('file:')) return
+    let host = url
+    try {
+      host = new URL(url).host
+    } catch {
+      // оставим как есть
+    }
+    showConnect(`Не удалось открыть ${host}: ${description}`)
+  })
+  wc.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return
+    showConnect('Страница неожиданно закрылась — нажми «Повторить»')
+  })
+
+  // «(3) Nuntius» в заголовке — непрочитанные: в полоску, в подсказку трея и мигание на панели задач
+  wc.on('page-title-updated', (_e, title) => {
+    unread = Number(/^\((\d+)\)/.exec(title)?.[1] ?? 0)
+    win.setTitle(title || 'Nuntius')
+    tray?.setToolTip(unread ? `Nuntius — непрочитанных: ${unread}` : 'Nuntius')
+    if (unread && !win.isFocused()) win.flashFrame(true)
+    sendState()
+  })
+
+  // Видео или демонстрация на весь экран: окно — в полный экран, полоска прячется
+  wc.on('enter-html-full-screen', () => {
+    htmlFullscreen = true
+    win.setFullScreen(true)
+    layout()
+    sendState()
+  })
+  wc.on('leave-html-full-screen', () => {
+    htmlFullscreen = false
+    win.setFullScreen(false)
+    layout()
+    sendState()
+  })
+
+  // F5 / Ctrl+R — обновить, Ctrl+Shift+I — инструменты разработчика (по коду клавиши, чтобы работало и в русской раскладке)
+  wc.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return
+    // AltGr в Windows приходит как Ctrl+Alt — такие сочетания не трогаем, это ввод символов
+    const ctrl = (input.control || input.meta) && !input.alt
+    if (input.code === 'F5' || (ctrl && !input.shift && input.code === 'KeyR')) {
+      e.preventDefault()
+      reloadSite()
+    } else if (ctrl && input.shift && input.code === 'KeyI') {
+      e.preventDefault()
+      if (wc.isDevToolsOpened()) wc.closeDevTools()
+      else wc.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  // Правый клик там, где сайт не показал своё меню: копировать, вставить, ссылки, орфография
+  wc.on('context-menu', (_e, params) => {
+    const items = contextMenuItems(wc, params)
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
+  })
+}
+
+function contextMenuItems(wc, params) {
+  const groups = []
+  const flags = params.editFlags || {}
+
+  if (params.isEditable) {
+    const spelling = []
+    if (params.misspelledWord) {
+      for (const word of (params.dictionarySuggestions || []).slice(0, 5)) {
+        spelling.push({ label: word, click: () => wc.replaceMisspelling(word) })
+      }
+      if (!spelling.length) spelling.push({ label: 'Нет вариантов', enabled: false })
+      spelling.push({
+        label: 'Добавить в словарь',
+        click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      })
+      groups.push(spelling)
+    }
+    groups.push([
+      { label: 'Вырезать', role: 'cut', enabled: Boolean(flags.canCut) },
+      { label: 'Копировать', role: 'copy', enabled: Boolean(flags.canCopy) },
+      { label: 'Вставить', role: 'paste', enabled: Boolean(flags.canPaste) },
+    ])
+    groups.push([{ label: 'Выделить всё', role: 'selectAll', enabled: flags.canSelectAll !== false }])
+  } else if (params.selectionText && params.selectionText.trim()) {
+    groups.push([{ label: 'Копировать', role: 'copy' }])
+  }
+
+  const link = params.linkURL
+  if (link && /^(https?|mailto):/i.test(link)) {
+    groups.push([
+      { label: 'Открыть ссылку в браузере', click: () => void shell.openExternal(link) },
+      { label: 'Копировать ссылку', click: () => clipboard.writeText(link) },
+    ])
+  }
+
+  if (params.mediaType === 'image' && params.hasImageContents !== false) {
+    groups.push([
+      { label: 'Копировать картинку', click: () => wc.copyImageAt(params.x, params.y) },
+      { label: 'Сохранить картинку как…', click: () => wc.downloadURL(params.srcURL) },
+    ])
+  }
+
+  // группы через разделители
+  return groups.flatMap((group, i) => (i ? [{ type: 'separator' }, ...group] : group))
+}
+
+function reloadSite() {
+  // на странице подключения «обновить» = попробовать сервер ещё раз
+  if (site().getURL().startsWith('file:')) openApp()
+  else site().reload()
 }
 
 let boundsTimer = null
 function rememberBounds() {
-  if (!win || win.isDestroyed()) return
   clearTimeout(boundsTimer)
-  boundsTimer = setTimeout(() => {
-    if (!win || win.isDestroyed()) return
-    const maximized = win.isMaximized()
-    saveConfig({ maximized, bounds: maximized ? config.bounds : win.getBounds() })
-  }, 400)
+  boundsTimer = setTimeout(saveBounds, 400)
+}
+
+function saveBounds() {
+  clearTimeout(boundsTimer)
+  if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+  const maximized = win.isMaximized()
+  saveConfig({ maximized, bounds: maximized ? config.bounds : win.getBounds() })
 }
 
 function openApp() {
   const url = serverUrl()
-  if (url) void win.loadURL(url)
+  if (url) void site().loadURL(url)
   else showConnect()
 }
 
 function showConnect(error) {
-  void win.loadFile(CONNECT_PAGE, { query: { url: serverUrl(), error: error || '' } })
+  void site().loadFile(CONNECT_PAGE, { query: { url: serverUrl(), error: error || '' } })
 }
 
 function showWindow() {
@@ -165,16 +369,39 @@ function showWindow() {
   win.focus()
 }
 
+// ============ полоска заголовка: свернуть, развернуть, закрыть, обновить ============
+
+/** Кнопки окна принимаем только от нашей полоски заголовка */
+const fromBar = (e) => Boolean(win) && !win.isDestroyed() && e.sender.id === win.webContents.id
+
+ipcMain.handle('win:get-state', (e) => (fromBar(e) ? windowState() : null))
+ipcMain.on('win:minimize', (e) => fromBar(e) && win.minimize())
+ipcMain.on('win:toggle-maximize', (e) => {
+  if (!fromBar(e)) return
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
+  site().focus()
+})
+ipcMain.on('win:close', (e) => fromBar(e) && win.close()) // close → прячем в трей
+ipcMain.on('win:update', (e) => fromBar(e) && installUpdate())
+
 // ============ трей ============
 
 function buildTray() {
   const image = nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 })
   tray = new Tray(image)
   tray.setToolTip('Nuntius')
-  const menu = () =>
+  refreshTrayMenu()
+  tray.on('click', () => (win.isVisible() && win.isFocused() ? win.hide() : showWindow()))
+}
+
+function refreshTrayMenu() {
+  if (!tray) return
+  tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Открыть Nuntius', click: showWindow },
       { label: 'Сменить сервер…', click: () => (showWindow(), showConnect()) },
+      ...(updateReady ? [{ label: 'Перезапустить и обновить', click: installUpdate }] : []),
       { type: 'separator' },
       {
         label: 'Запускать вместе с Windows',
@@ -182,10 +409,11 @@ function buildTray() {
         checked: app.getLoginItemSettings().openAtLogin,
         click: (item) => {
           app.setLoginItemSettings({ openAtLogin: item.checked })
-          tray.setContextMenu(menu())
+          refreshTrayMenu()
         },
       },
       { type: 'separator' },
+      { label: `Версия ${app.getVersion()}`, enabled: false },
       {
         label: 'Выйти',
         click: () => {
@@ -193,9 +421,57 @@ function buildTray() {
           app.quit()
         },
       },
-    ])
-  tray.setContextMenu(menu())
-  tray.on('click', () => (win.isVisible() && win.isFocused() ? win.hide() : showWindow()))
+    ]),
+  )
+}
+
+// ============ обновления: сами качаются с GitHub, ставятся по кнопке «Обновить» ============
+
+let updater = null
+
+function setupUpdates() {
+  // только установленная версия для Windows; портативная и сборка «из папки» не обновляются
+  if (!app.isPackaged || process.platform !== 'win32' || process.env.PORTABLE_EXECUTABLE_DIR) return
+  try {
+    updater = require('electron-updater').autoUpdater
+  } catch (err) {
+    console.warn('[обновления] модуль не загрузился:', err?.message || err)
+    return
+  }
+  updater.autoDownload = true
+  updater.autoInstallOnAppQuit = true
+  // установщик уже запущен и приложение вот-вот закроется — окно больше не прячем в трей
+  require('electron').autoUpdater.on('before-quit-for-update', () => {
+    quitting = true
+  })
+  // ошибки (нет интернета, GitHub недоступен) — только в лог, без окошек
+  updater.on('error', (err) => console.warn('[обновления]', err?.message || err))
+  updater.on('update-downloaded', (info) => {
+    console.log('[обновления] скачана версия', info?.version)
+    updateReady = true
+    sendState()
+    refreshTrayMenu()
+  })
+  const check = () => {
+    try {
+      updater.checkForUpdates()?.catch((err) => console.warn('[обновления]', err?.message || err))
+    } catch (err) {
+      console.warn('[обновления]', err?.message || err)
+    }
+  }
+  setTimeout(check, 15_000) // не мешаем запуску
+  setInterval(check, UPDATE_EVERY)
+}
+
+function installUpdate() {
+  if (!updater || !updateReady) return
+  // quitting здесь не ставим: если установщик не запустится, app.quit() не будет, и крестик должен
+  // по-прежнему прятать окно в трей. Когда выход настоящий, quitting выставит before-quit.
+  try {
+    updater.quitAndInstall(true, true) // тихо поставить и сразу запустить новую версию
+  } catch (err) {
+    console.warn('[обновления] не получилось установить:', err?.message || err)
+  }
 }
 
 // ============ права: микрофон, камера, уведомления, экран ============
@@ -291,7 +567,7 @@ ipcMain.handle('connect:save', async (e, raw) => {
     return { error: 'Сервер не отвечает — проверь адрес и интернет' }
   }
   saveConfig({ url })
-  void win.loadURL(url)
+  void site().loadURL(url)
   return { ok: true }
 })
 
@@ -306,10 +582,12 @@ if (!app.requestSingleInstanceLock()) {
   app.setAppUserModelId('ru.nuntius.app')
   app.whenReady().then(() => {
     config = loadConfig()
+    nativeTheme.themeSource = 'dark' // тёмные системные меню и рамка окна выбора экрана
     Menu.setApplicationMenu(null)
     setupPermissions()
     createWindow()
     buildTray()
+    setupUpdates()
   })
   app.on('before-quit', () => {
     quitting = true

@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:" />
+    <title>Nuntius</title>
+    <!-- Своя полоска заголовка вместо белой рамки Windows: чёрная, со сферой и кнопками окна.
+         Сайт лежит поверх этой страницы, сразу под полоской (см. main.js → layout). -->
+    <style>
+      :root {
+        --bar: 32px;
+        --text: rgba(255, 255, 255, 0.86);
+        --text-dim: rgba(255, 255, 255, 0.4);
+        --line: rgba(255, 255, 255, 0.06);
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        --mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      body {
+        color: var(--text);
+        font: 12px/1 var(--font);
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        cursor: default;
+      }
+
+      /* ============ полоска ============ */
+
+      .bar {
+        position: fixed;
+        inset: 0 0 auto;
+        height: var(--bar);
+        display: flex;
+        align-items: center;
+        background: #000;
+        /* за полоску можно таскать окно, двойной клик — развернуть (это делает сама Windows) */
+        -webkit-app-region: drag;
+        animation: fade-in 0.5s var(--ease-out) both;
+      }
+      .bar::after {
+        content: '';
+        position: absolute;
+        inset: auto 0 0;
+        height: 1px;
+        background: var(--line);
+        pointer-events: none;
+      }
+      body.is-full .bar {
+        display: none;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 100%;
+        padding: 0 12px 0 10px;
+      }
+      .mark {
+        width: 18px;
+        height: 18px;
+        flex: none;
+        fill: #fff;
+        filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.55)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
+        transition: opacity 0.3s var(--ease-out);
+      }
+      .name {
+        font-weight: 600;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--text);
+        transition: opacity 0.3s var(--ease-out);
+      }
+
+      /* непрочитанные — белая таблетка со свечением */
+      .unread {
+        min-width: 16px;
+        height: 16px;
+        padding: 0 5px;
+        border-radius: 8px;
+        background: #fff;
+        color: #000;
+        font: 700 10px/16px var(--mono);
+        text-align: center;
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
+        animation: pop-in 0.45s var(--ease-spring) both;
+      }
+      .unread[hidden] {
+        display: none;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      /* новая версия скачана — светящаяся кнопка «Обновить» */
+      .update {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 20px;
+        margin-right: 10px;
+        padding: 0 10px 0 8px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font: 600 11px/1 var(--font);
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        outline: none;
+        -webkit-app-region: no-drag;
+        animation: pop-in 0.5s var(--ease-spring) both;
+        transition:
+          background-color 0.2s var(--ease-out),
+          color 0.2s var(--ease-out),
+          transform 0.15s var(--ease-out);
+      }
+      .update[hidden] {
+        display: none;
+      }
+      .update::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        box-shadow: 0 0 14px rgba(255, 255, 255, 0.7);
+        animation: breathe 2.4s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .update svg {
+        width: 10px;
+        height: 10px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .update:hover {
+        background: #fff;
+        color: #000;
+      }
+      .update:active {
+        transform: scale(0.96);
+      }
+
+      /* ============ кнопки окна ============ */
+
+      .controls {
+        display: flex;
+        align-self: stretch;
+        -webkit-app-region: no-drag;
+      }
+      .ctl {
+        position: relative;
+        z-index: 1;
+        width: 46px;
+        height: var(--bar);
+        display: grid;
+        place-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        outline: none;
+        transition:
+          background-color 0.15s var(--ease-out),
+          color 0.15s var(--ease-out),
+          box-shadow 0.25s var(--ease-out);
+      }
+      .ctl svg {
+        width: 10px;
+        height: 10px;
+        overflow: visible;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1;
+        transition: opacity 0.3s var(--ease-out);
+      }
+      .ctl:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .ctl:active {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      .ctl.close:hover {
+        background: #fff;
+        color: #000;
+        box-shadow: 0 0 14px rgba(255, 255, 255, 0.32);
+      }
+      .ctl.close:active {
+        background: rgba(255, 255, 255, 0.78);
+      }
+      .ctl [hidden] {
+        display: none;
+      }
+
+      /* окно не в фокусе — всё приглушаем, как в Windows */
+      body.is-blur .mark,
+      body.is-blur .name {
+        opacity: 0.45;
+      }
+      body.is-blur .ctl:not(:hover) svg {
+        opacity: 0.45;
+      }
+
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes pop-in {
+        from {
+          opacity: 0;
+          transform: scale(0.6);
+        }
+      }
+      @keyframes breathe {
+        0%,
+        100% {
+          opacity: 0.25;
+        }
+        50% {
+          opacity: 0.9;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <svg class="mark" id="mark" viewBox="-1.12 -1.12 2.24 2.24" aria-hidden="true"></svg>
+        <span class="name">Nuntius</span>
+        <span class="unread" id="unread" hidden></span>
+      </div>
+      <div class="spacer"></div>
+      <button class="update" id="update" type="button" tabindex="-1" title="Новая версия уже скачана — нажми, чтобы перезапустить" hidden>
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M8.6 5.2A3.6 3.6 0 1 1 7.5 2.4M8.3 0.8v2.1H6.2" /></svg>
+        Обновить
+      </button>
+      <div class="controls">
+        <button class="ctl" id="min" type="button" tabindex="-1" title="Свернуть">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" /></svg>
+        </button>
+        <button class="ctl" id="max" type="button" tabindex="-1" title="Развернуть">
+          <svg viewBox="0 0 10 10" id="icon-max" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" /></svg>
+          <svg viewBox="0 0 10 10" id="icon-restore" aria-hidden="true" hidden>
+            <rect x="0.5" y="2.5" width="7" height="7" />
+            <path d="M2.5 2.5v-2h7v7h-2" />
+          </svg>
+        </button>
+        <button class="ctl close" id="close" type="button" tabindex="-1" title="Закрыть (Nuntius останется в трее)">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" /></svg>
+        </button>
+      </div>
+    </header>
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const api = window.titlebar
+
+      // ===== знак: сфера из точек, как на иконке =====
+      const N = 40
+      const points = Array.from({ length: N }, (_, i) => {
+        const y = 1 - (2 * (i + 0.5)) / N
+        const r = Math.sqrt(1 - y * y)
+        const phi = i * Math.PI * (3 - Math.sqrt(5))
+        return [Math.cos(phi) * r, y, Math.sin(phi) * r]
+      })
+      const TILT = -0.38
+      function drawMark(turn) {
+        const ct = Math.cos(turn)
+        const st = Math.sin(turn)
+        const cx = Math.cos(TILT)
+        const sx = Math.sin(TILT)
+        const dots = points
+          .map(([x, y, z]) => {
+            const x1 = x * ct + z * st // поворот вокруг вертикали
+            const z1 = -x * st + z * ct
+            return [x1, y * cx - z1 * sx, y * sx + z1 * cx] // и наклон к зрителю
+          })
+          .filter((p) => p[2] > -0.15)
+          .sort((a, b) => a[2] - b[2])
+        $('mark').innerHTML = dots
+          .map(([x, y, z]) => {
+            const near = (z + 0.15) / 1.15 // 0 — у края, 1 — ближе всего к нам
+            const r = 0.07 + 0.09 * near
+            return `<circle cx="${x.toFixed(3)}" cy="${y.toFixed(3)}" r="${r.toFixed(3)}" fill-opacity="${(0.25 + 0.75 * near).toFixed(2)}"/>`
+          })
+          .join('')
+      }
+      // при запуске сфера плавно докручивается и замирает
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+      const SPIN = 1600
+      const start = performance.now()
+      const spin = (now) => {
+        const t = Math.min(1, (now - start) / SPIN)
+        drawMark(-1.4 * Math.pow(1 - t, 3))
+        if (t < 1) requestAnimationFrame(spin)
+      }
+      if (reduce) drawMark(0)
+      else requestAnimationFrame(spin)
+
+      // ===== состояние окна =====
+      let lastUnread = 0
+      function apply(state) {
+        if (!state) return
+        document.body.classList.toggle('is-blur', !state.focused)
+        document.body.classList.toggle('is-full', Boolean(state.fullscreen))
+        // у svg нет свойства .hidden — меняем сам атрибут
+        $('icon-max').toggleAttribute('hidden', Boolean(state.maximized))
+        $('icon-restore').toggleAttribute('hidden', !state.maximized)
+        $('max').title = state.maximized ? 'Свернуть в окно' : 'Развернуть'
+
+        const n = Number(state.unread) || 0
+        const pill = $('unread')
+        pill.hidden = n <= 0
+        if (n > 0 && n !== lastUnread) {
+          pill.textContent = n > 99 ? '99+' : String(n)
+          // число поменялось — таблетка заново «выпрыгивает»
+          pill.style.animation = 'none'
+          void pill.offsetWidth
+          pill.style.animation = ''
+        }
+        lastUnread = n
+        $('update').hidden = state.update !== 'ready'
+      }
+
+      // кнопки не забирают фокус у сайта
+      for (const b of document.querySelectorAll('button')) b.addEventListener('mousedown', (e) => e.preventDefault())
+      $('min').onclick = () => api.minimize()
+      $('max').onclick = () => api.toggleMaximize()
+      $('close').onclick = () => api.close()
+      $('update').onclick = () => api.update()
+
+      api.onState(apply)
+      api.getState().then(apply)
+    </script>
+  </body>
+</html>

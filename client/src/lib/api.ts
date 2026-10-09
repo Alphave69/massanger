@@ -202,6 +202,21 @@ export const GROUP_LIMIT = 10
 /** Результат команды: /roll, /flip, /8ball, /me */
 export type MessageFlavor = 'roll' | 'flip' | 'ball' | 'me'
 
+/** Ответ: снимок сообщения, на которое ответили (остаётся, даже если оригинал удалят) */
+export interface ReplyRef {
+  id: string
+  authorId: string
+  /** Начало текста оригинала (до 200 символов) */
+  content: string
+}
+
+/** Пересланное: кто написал оригинал, откуда («#общий · Nuntius», «личка», название группы) и когда */
+export interface Forwarded {
+  authorId: string
+  from: string
+  createdAt: number
+}
+
 export interface Message {
   id: string
   channelId: string
@@ -209,6 +224,12 @@ export interface Message {
   content: string
   createdAt: number
   flavor?: MessageFlavor
+  /** Реакции: эмодзи → id поставивших (по порядку) */
+  reactions?: Record<string, string[]>
+  replyTo?: ReplyRef
+  forwarded?: Forwarded
+  /** Когда текст меняли в последний раз */
+  editedAt?: number
 }
 
 // ============ админка ============

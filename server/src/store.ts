@@ -146,6 +146,22 @@ export const GROUP_LIMIT = 10
 /** Особый вид сообщения — результат команды (/roll, /flip, /8ball, /me) */
 export type MessageFlavor = 'roll' | 'flip' | 'ball' | 'me'
 
+/** Ответ на сообщение: снимок оригинала — остаётся, даже если оригинал удалят */
+export interface ReplyRef {
+  id: string
+  authorId: string
+  /** Начало текста оригинала (до REPLY_SNIPPET символов) */
+  content: string
+}
+
+/** Пересланное сообщение: кто написал оригинал, откуда он и когда */
+export interface Forwarded {
+  authorId: string
+  /** «#общий · Nuntius», «личка» или название группы */
+  from: string
+  createdAt: number
+}
+
 export interface Message {
   id: string
   channelId: string
@@ -153,7 +169,17 @@ export interface Message {
   content: string
   createdAt: number
   flavor?: MessageFlavor
+  /** Реакции: эмодзи → кто поставил (по порядку) */
+  reactions?: Record<string, string[]>
+  replyTo?: ReplyRef
+  forwarded?: Forwarded
+  /** Когда текст меняли в последний раз */
+  editedAt?: number
 }
+
+export const REPLY_SNIPPET = 200
+/** Больше разных реакций на одно сообщение не ставим */
+export const MAX_REACTIONS = 20
 
 interface Data {
   users: User[]
@@ -510,8 +536,33 @@ export function messagesIn(channelId: string, limit = 150): Message[] {
 /** Автор служебных сообщений («теперь вы друзья» и т.п.) */
 export const SYSTEM_AUTHOR = 'system'
 
-export function addMessage(channelId: string, authorId: string, content: string, flavor?: MessageFlavor): Message {
-  const message: Message = { id: id(), channelId, authorId, content, createdAt: Date.now(), ...(flavor ? { flavor } : {}) }
+/** Обрезать текст, не разрывая эмодзи пополам (суррогатную пару) */
+export function snip(text: string, max: number) {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max)
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut
+}
+
+/** Снимок сообщения для ответа на него */
+export const replyRef = (m: Message): ReplyRef => ({ id: m.id, authorId: m.authorId, content: snip(m.content, REPLY_SNIPPET) })
+
+export function addMessage(
+  channelId: string,
+  authorId: string,
+  content: string,
+  flavor?: MessageFlavor,
+  extra: Pick<Message, 'replyTo' | 'forwarded'> = {},
+): Message {
+  const message: Message = {
+    id: id(),
+    channelId,
+    authorId,
+    content,
+    createdAt: Date.now(),
+    ...(flavor ? { flavor } : {}),
+    ...(extra.replyTo ? { replyTo: extra.replyTo } : {}),
+    ...(extra.forwarded ? { forwarded: extra.forwarded } : {}),
+  }
   data.messages.push(message)
   const dm = findDm(channelId)
   if (dm) dm.lastMessageAt = message.createdAt
@@ -523,6 +574,35 @@ export const findMessage = (messageId: string) => data.messages.find((m) => m.id
 
 export function deleteMessage(message: Message) {
   data.messages = data.messages.filter((m) => m !== message)
+  save()
+}
+
+/**
+ * Поставить / снять свою реакцию. 'limit' — на сообщении уже MAX_REACTIONS разных эмодзи.
+ * Пустые списки и пустой объект реакций не храним.
+ */
+export function toggleReaction(message: Message, emoji: string, userId: string): 'added' | 'removed' | 'limit' {
+  const reactions = message.reactions ?? {}
+  const list = reactions[emoji] ?? []
+  if (list.includes(userId)) {
+    const rest = list.filter((id) => id !== userId)
+    if (rest.length) reactions[emoji] = rest
+    else delete reactions[emoji]
+    if (Object.keys(reactions).length) message.reactions = reactions
+    else delete message.reactions
+    save()
+    return 'removed'
+  }
+  if (!reactions[emoji] && Object.keys(reactions).length >= MAX_REACTIONS) return 'limit'
+  reactions[emoji] = [...list, userId]
+  message.reactions = reactions
+  save()
+  return 'added'
+}
+
+export function editMessage(message: Message, content: string) {
+  message.content = content
+  message.editedAt = Date.now()
   save()
 }
 

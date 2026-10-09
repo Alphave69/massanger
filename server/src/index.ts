@@ -11,9 +11,9 @@ import * as store from './store.js'
 import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 import { createVoice } from './voice.js'
-import { on, reply } from './safe.js'
+import { on } from './safe.js'
 import { createBadges, eggsOf, EGGS } from './badges.js'
-import { runCommand } from './commands.js'
+import { createMessages } from './messages.js'
 import { registerAdminRoutes } from './admin.js'
 import { registerGuildRoutes } from './guilds.js'
 import { registerGroupRoutes } from './groups.js'
@@ -129,6 +129,8 @@ const canWriteDm = (fromId: string, to: store.User, dmId?: string) =>
 
 /** Собеседник в 1:1 личке */
 const otherIn = (dm: store.Dm, userId: string) => store.findUser(dm.memberIds.find((id) => id !== userId) ?? '')
+
+const messages = createMessages({ io, badges, dmView, canWriteDm, emitTo })
 
 const voice = createVoice(io, {
   canCall: (fromId, dm) => {
@@ -577,58 +579,13 @@ io.on('connection', (socket) => {
   if (me && typeof tz === 'number' && Number.isInteger(tz) && Math.abs(tz) <= 840 && tz !== me.tz) store.updateUser(me, { tz })
   if (me) badges.sync(me)
 
-  on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown }, ack?: unknown) => {
-    const answer = reply(ack)
-    const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
-    const content = typeof payload?.content === 'string' ? payload.content.trim().slice(0, 4000) : ''
-    const access = channelId ? store.channelAccess(channelId, userId) : undefined
-    if (!content || !access || (access.kind === 'guild' && access.channel.type !== 'text')) {
-      answer({ error: 'Не удалось отправить сообщение' })
-      return
-    }
-    if (access.kind === 'guild' && !hasChannelPermission(access.guild, access.channel, userId, 'SEND_MESSAGES')) {
-      answer({ error: 'Нет прав писать в этом канале' })
-      return
-    }
-    if (access.kind === 'dm' && access.dm.kind === 'dm') {
-      const other = otherIn(access.dm, userId)
-      if (!other || !canWriteDm(userId, other, access.dm.id)) {
-        answer({ error: 'Собеседник принимает сообщения только от друзей' })
-        return
-      }
-    }
-    // Команды: /roll, /flip, /8ball, /me…
-    const author = store.findUser(userId)
-    const command = runCommand(content)
-    if (command && 'error' in command) {
-      answer({ error: command.error })
-      return
-    }
-    const message = store.addMessage(channelId, userId, command ? command.content : content, command?.flavor)
-    if (author) {
-      badges.onMessage(author, message.createdAt)
-      if (command) {
-        author.stats.commands++
-        badges.findEgg(author, 'commands', true)
-      }
-    }
-    // серверный канал — только тем, кто его видит; личка — её участникам
-    emitTo(store.viewersOf(access), 'message:new', message)
-    if (access.kind === 'dm') {
-      for (const id of access.dm.memberIds) io.to(`user:${id}`).emit('dm:update', dmView(access.dm, id))
-    }
-    answer({ message })
-  })
+  // отправка, ответы, реакции, правка и пересылка — messages.ts
+  messages.attach(socket, userId)
 
   on(socket, 'typing', (payload: { channelId?: unknown }) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''
     const access = channelId ? store.channelAccess(channelId, userId) : undefined
-    if (!access) return
-    if (access.kind === 'guild' && !hasChannelPermission(access.guild, access.channel, userId, 'SEND_MESSAGES')) return
-    if (access.kind === 'dm' && access.dm.kind === 'dm') {
-      const other = otherIn(access.dm, userId)
-      if (!other || !canWriteDm(userId, other, access.dm.id)) return
-    }
+    if (!access || messages.writeProblem(access, userId)) return
     emitTo(store.viewersOf(access), 'typing', { channelId, userId }, socket)
   })
 

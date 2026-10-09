@@ -1,0 +1,885 @@
+/* =====================================================================
+   Действия с сообщениями: меню по правому клику, реакции, ответы,
+   пересылка, правка. Подключается последним — уточняет стили чата.
+   ===================================================================== */
+
+:root {
+  --emoji: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', sans-serif;
+}
+
+/* ============ строка сообщения: цитата + пузырь + реакции ============ */
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mgroup--mine .msg {
+  align-items: flex-end;
+}
+
+.msg--sys {
+  align-self: center;
+  align-items: center;
+}
+
+/* открыто меню этого сообщения — держим его «под курсором» */
+.msg.is-active > .bubble {
+  border-color: var(--line-3);
+}
+
+.mgroup--mine .msg.is-active > .bubble {
+  box-shadow: 0 0 32px rgba(255, 255, 255, 0.3);
+}
+
+.msg.is-active .msg-actions,
+.msg-actions.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* меню открыто с этих кнопок — их подсказки не лезут поверх меню */
+.msg-actions.is-open [data-tip]::before {
+  display: none;
+}
+
+/* прыгнули к сообщению по цитате — короткая вспышка */
+.msg.is-flash > .bubble::before,
+.msg.is-flash .sysmsg::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: msg-flash 1.7s var(--ease-out) forwards;
+}
+
+@keyframes msg-flash {
+  0%,
+  25% {
+    box-shadow:
+      0 0 0 2px #fff,
+      0 0 40px rgba(255, 255, 255, 0.6);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      0 0 40px transparent;
+  }
+}
+
+/* ============ кнопки при наведении ============ */
+
+.msg-actions {
+  gap: 0;
+}
+
+.msg-actions__bar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 11px;
+  border: 1px solid var(--line-2);
+  background: #070707;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.65);
+}
+
+.mgroup--mine .msg-actions__bar {
+  flex-direction: row-reverse;
+}
+
+.msg-actions__bar .msg-actions__btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.msg-actions__bar .msg-actions__btn:hover,
+.msg-actions__bar .msg-actions__btn.is-on {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.msg-actions__bar .msg-actions__btn--danger:hover,
+.msg-actions__bar .msg-actions__btn--danger.is-armed {
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+}
+
+.msg-actions__bar .msg-actions__btn--danger.is-armed {
+  padding: 0 9px 0 7px;
+}
+
+/* ============ контекстное меню ============ */
+
+.msg-menu-layer {
+  position: relative;
+  z-index: 300;
+}
+
+.msg-menu {
+  position: fixed;
+  width: 236px;
+  padding: 6px;
+  border-radius: 16px;
+  background: #040404;
+  border: 1px solid var(--line-2);
+  box-shadow:
+    0 22px 54px rgba(0, 0, 0, 0.85),
+    0 0 34px rgba(255, 255, 255, 0.07);
+  animation: msg-menu-in 0.18s var(--ease-out);
+}
+
+@keyframes msg-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.msg-menu--picker {
+  width: auto;
+  padding: 4px 2px 4px 4px;
+}
+
+.msg-menu__reacts {
+  display: flex;
+  gap: 2px;
+  padding: 0 0 6px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.msg-menu__react {
+  flex: 1;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font: 19px/1 var(--emoji);
+  transition:
+    background-color 0.12s ease,
+    box-shadow 0.2s ease,
+    transform 0.25s var(--ease-spring);
+}
+
+.msg-menu__react:hover,
+.msg-menu__react:focus-visible {
+  outline: none;
+  background: var(--hover);
+  transform: scale(1.2);
+}
+
+.msg-menu__react:active {
+  transform: scale(0.92);
+}
+
+.msg-menu__react.is-mine {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 0 14px rgba(255, 255, 255, 0.28);
+}
+
+.msg-menu__react--more {
+  color: var(--text-2);
+}
+
+.msg-menu__react--more:hover,
+.msg-menu__react--more:focus-visible {
+  color: var(--text);
+  transform: rotate(90deg);
+}
+
+.msg-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.msg-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-1);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.2s ease;
+}
+
+.msg-menu__item > svg {
+  flex: none;
+  color: var(--text-3);
+  transition: color 0.12s ease;
+}
+
+.msg-menu__item:hover,
+.msg-menu__item:focus-visible {
+  outline: none;
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.28);
+}
+
+.msg-menu__item:hover > svg,
+.msg-menu__item:focus-visible > svg {
+  color: var(--black);
+}
+
+.msg-menu__item.is-done {
+  color: var(--text);
+}
+
+.msg-menu__item.is-done > svg {
+  color: var(--text);
+  animation: pop-in 0.3s var(--ease-spring);
+}
+
+/* удалить: в монохроме «опасное» — белый текст, а взведённое — инверсия со свечением */
+.msg-menu__item--danger {
+  color: var(--text);
+}
+
+.msg-menu__item--danger > svg {
+  color: var(--text-2);
+}
+
+.msg-menu__item--danger.is-armed {
+  background: var(--text);
+  color: var(--black);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.5);
+  animation: pop-in 0.3s var(--ease-spring);
+}
+
+.msg-menu__item--danger.is-armed > svg {
+  color: var(--black);
+}
+
+.msg-menu__item--dev {
+  font: 500 12px var(--mono);
+  color: var(--text-3);
+}
+
+.msg-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+
+/* ============ выбор эмодзи ============ */
+
+.emoji-picker {
+  width: 300px;
+  max-height: min(312px, calc(100vh / var(--ui-zoom, 1) - 40px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.emoji-picker__title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 6px 5px;
+  background: #040404;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+
+.emoji-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 0 2px 4px;
+}
+
+.emoji-picker__btn {
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font: 20px/1 var(--emoji);
+  transition:
+    background-color 0.12s ease,
+    transform 0.25s var(--ease-spring);
+}
+
+.emoji-picker__btn:hover,
+.emoji-picker__btn:focus-visible {
+  outline: none;
+  background: var(--hover);
+  transform: scale(1.18);
+}
+
+.emoji-picker__btn:active {
+  transform: scale(0.9);
+}
+
+.emoji-picker__btn.is-mine {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+/* ============ реакции под сообщением ============ */
+
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  margin: 4px 2px 2px;
+}
+
+.mgroup--mine .reactions {
+  justify-content: flex-end;
+}
+
+.msg--sys .reactions {
+  justify-content: center;
+  margin-top: -2px;
+}
+
+.reaction {
+  position: relative;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px 0 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font: 600 12px/1 var(--mono);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s var(--ease-spring);
+}
+
+.reaction:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.reaction:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.reaction:disabled {
+  cursor: default;
+}
+
+/* своя реакция — белая рамка и свечение */
+.reaction.is-mine {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.25),
+    0 0 16px rgba(255, 255, 255, 0.35);
+}
+
+.reaction.is-new {
+  animation: pop-in 0.45s var(--ease-spring);
+}
+
+.reaction__emoji {
+  font: 15px/1 var(--emoji);
+}
+
+.reaction__count {
+  display: inline-block;
+  min-width: 7px;
+  text-align: center;
+}
+
+.reaction__count.is-bump {
+  animation: reaction-bump 0.4s var(--ease-spring);
+}
+
+@keyframes reaction-bump {
+  from {
+    transform: translateY(-6px) scale(1.3);
+    opacity: 0.4;
+  }
+}
+
+.reaction--add {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+  color: var(--text-3);
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.msg:hover .reaction--add,
+.reaction--add:focus-visible,
+.reaction--add.is-open {
+  opacity: 1;
+}
+
+.reaction--add.is-open {
+  border-color: var(--line-3);
+  color: var(--text);
+}
+
+/* кто поставил — подсказка над реакцией */
+.reaction__tip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  z-index: 50;
+  width: max-content;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 11px;
+  border-radius: var(--r-s);
+  background: var(--text);
+  color: var(--black);
+  font: 600 12px/1.35 var(--font);
+  text-align: center;
+  white-space: normal;
+  translate: -50% 4px;
+  opacity: 0;
+  pointer-events: none;
+  /* тёмное кольцо — чтобы подсказка не сливалась со своим (белым) пузырём */
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 2px rgba(255, 255, 255, 0.25),
+    0 0 20px rgba(255, 255, 255, 0.35);
+  transition:
+    opacity 0.15s ease,
+    translate 0.2s var(--ease-out);
+}
+
+.reaction:hover .reaction__tip {
+  opacity: 1;
+  translate: -50% 0;
+  transition-delay: 0.3s;
+}
+
+.reaction__tip-emoji {
+  font: 24px/1 var(--emoji);
+}
+
+/* ============ ответ: цитата над пузырём ============ */
+
+.reply-quote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 2px 0 3px;
+  padding: 0 6px 0 12px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  border-radius: 8px;
+  transition: color 0.15s ease;
+}
+
+/* «крючок» от пузыря к цитате */
+.reply-quote__spine {
+  flex: none;
+  align-self: flex-end;
+  width: 14px;
+  height: 9px;
+  margin-right: 1px;
+  border: solid var(--line-3);
+  border-width: 2px 0 0 2px;
+  border-top-left-radius: 8px;
+  translate: 0 1px;
+}
+
+/* у своих сообщений цитата справа: читается так же слева направо, «крючок» — с правого края */
+.mgroup--mine .reply-quote {
+  padding: 0 12px 0 6px;
+}
+
+.mgroup--mine .reply-quote__spine {
+  order: 1;
+  margin: 0 0 0 1px;
+  border-width: 2px 2px 0 0;
+  border-radius: 0 8px 0 0;
+}
+
+.reply-quote .avatar {
+  flex: none;
+}
+
+.reply-quote__dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px dashed var(--line-3);
+}
+
+.reply-quote__name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.reply-quote__text {
+  color: var(--text-3);
+  transition: color 0.15s ease;
+}
+
+.reply-quote:hover .reply-quote__text {
+  color: var(--text-1);
+}
+
+.reply-quote:hover .reply-quote__spine {
+  border-color: var(--text-2);
+}
+
+/* ============ пересланное ============ */
+
+.bubble--fwd {
+  align-items: flex-end;
+}
+
+.fwd {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fwd__head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.fwd__head > svg {
+  flex: none;
+}
+
+.fwd__head b {
+  color: var(--text-1);
+}
+
+.fwd__dot {
+  opacity: 0.7;
+}
+
+.fwd__quote {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid var(--line-3);
+}
+
+.fwd__quote--me {
+  font-style: italic;
+  color: var(--text-2);
+}
+
+.fwd__quote--me b {
+  font-style: normal;
+  color: var(--text);
+}
+
+.fwd__from {
+  font: 10px/1.3 var(--mono);
+  color: var(--text-3);
+}
+
+.mgroup--mine .fwd__head,
+.mgroup--mine .fwd__from {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.mgroup--mine .fwd__head b,
+.mgroup--mine .fwd__quote--me b {
+  color: var(--black);
+}
+
+.mgroup--mine .fwd__quote {
+  border-left-color: rgba(0, 0, 0, 0.35);
+}
+
+.mgroup--mine .fwd__quote--me {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* ============ «(изменено)» и правка ============ */
+
+.bubble__edited {
+  margin-left: 6px;
+  font: 10px var(--mono);
+  color: var(--text-3);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.mgroup--mine .bubble__edited {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.bubble.bubble--editing,
+.mgroup--mine .bubble.bubble--editing {
+  display: block;
+  width: 540px;
+  max-width: 100%;
+  padding: 8px 12px 7px;
+  border-radius: 16px;
+  background: var(--raise);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: var(--text);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.05),
+    0 0 30px rgba(255, 255, 255, 0.12);
+  animation: fade-in 0.2s ease;
+}
+
+.msg-editor__field {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  padding: 2px 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  line-height: 1.42;
+}
+
+.msg-editor__hint {
+  margin-top: 6px;
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+}
+
+.msg-editor__hint kbd {
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--line-2);
+  font: inherit;
+  color: var(--text-2);
+}
+
+.msg-editor__hint button {
+  color: var(--text-1);
+  font: inherit;
+}
+
+.msg-editor__hint button:hover:not(:disabled) {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.msg-editor__hint button:disabled {
+  color: var(--text-3);
+}
+
+.msg-editor__warn {
+  color: var(--text-2);
+}
+
+/* ============ плашка «Ответ …» над полем ввода ============ */
+
+.reply-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 16px -1px;
+  padding: 6px 7px 7px 14px;
+  border: 1px solid var(--line-2);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12.5px;
+  color: var(--text-3);
+  animation: reply-bar-in 0.25s var(--ease-out);
+}
+
+@keyframes reply-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.reply-bar__icon {
+  flex: none;
+  color: var(--text-2);
+}
+
+.reply-bar__text {
+  flex: 1;
+}
+
+.reply-bar b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.reply-bar__close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--text-2);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.reply-bar__close:hover {
+  background: var(--text);
+  color: var(--black);
+}
+
+.reply-bar__close[data-tip]::before {
+  left: auto;
+  right: 0;
+  translate: 0 4px;
+}
+
+.reply-bar__close[data-tip]:hover::before {
+  translate: 0 0;
+}
+
+/* ============ окно «Переслать» ============ */
+
+.fwd-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fwd-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--line-3);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.fwd-preview__icon {
+  flex: none;
+  color: var(--text-3);
+}
+
+.fwd-preview__name {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.fwd-modal__list {
+  max-height: min(320px, calc(100vh / var(--ui-zoom, 1) - 380px));
+}
+
+.fwd-modal__row {
+  display: contents;
+}
+
+.fwd-modal__head {
+  padding: 10px 8px 6px;
+}
+
+.fwd-modal__row:first-child .fwd-modal__head {
+  padding-top: 2px;
+}
+
+.fwd-target {
+  width: 100%;
+}
+
+.fwd-target.is-active {
+  background: var(--hover);
+}
+
+.fwd-target:disabled {
+  cursor: default;
+}
+
+.fwd-target__hash {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--raise-2);
+  font: 700 16px/1 var(--mono);
+  color: var(--text);
+}
+
+.fwd-target__go {
+  flex: none;
+  padding: 6px 11px;
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--black);
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0;
+  transform: translateX(6px);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+  transition:
+    opacity 0.15s ease,
+    transform 0.25s var(--ease-out);
+}
+
+.fwd-target.is-active .fwd-target__go {
+  opacity: 1;
+  transform: none;
+}

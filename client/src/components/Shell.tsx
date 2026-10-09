@@ -4,6 +4,7 @@ import { connectRealtime } from '../lib/realtime'
 import { initVoice, resetVoice } from '../lib/voice'
 import { activeChannelId, chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
+import { msgUi } from '../lib/msgActions'
 import { Dock } from './Dock'
 import { HomeSidebar } from './HomeSidebar'
 import { GuildSidebar } from './GuildSidebar'
@@ -23,6 +24,8 @@ import { IncomingCall } from './voice/IncomingCall'
 import { VoiceChannelView } from './voice/VoiceChannelView'
 import { EggLayer } from './eggs/EggLayer'
 import { BadgeCelebration } from './badges/BadgeCelebration'
+import { MessageMenu } from './chat/MessageMenu'
+import { ForwardModal } from './chat/ForwardModal'
 
 interface Props {
   onLogout: () => void
@@ -79,6 +82,7 @@ export function Shell({ onLogout }: Props) {
       stop()
       chat.reset()
       ui.reset() // иначе после выхода и нового входа сразу открылись бы настройки
+      msgUi.reset()
     }
   }, [onLogout])
 
@@ -130,6 +134,7 @@ export function Shell({ onLogout }: Props) {
       {!connected && <div className="conn-banner">Переподключаемся к серверу…</div>}
       <Modals />
       <GroupModal />
+      <ForwardModal />
       <ProfileCard />
     </div>
     <Settings onLogout={onLogout} />
@@ -138,6 +143,8 @@ export function Shell({ onLogout }: Props) {
     <div className="modal-layer zoomed">
       <ChannelModal />
     </div>
+    {/* меню сообщения (правый клик) — порталом поверх всего */}
+    <MessageMenu />
     <IncomingCall />
     {/* уведомления — поверх всего, в том числе поверх настроек */}
     <Toasts />

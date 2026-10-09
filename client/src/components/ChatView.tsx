@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
-import { api, SYSTEM_AUTHOR, type Message, type MessageFlavor, type User, type VoiceMember } from '../lib/api'
-import { findEgg, introClick, isAprilFools, isWishTime } from '../lib/eggs'
-import { formatDay, formatStamp, formatTime, MEMBERS, plural, sameDay } from '../lib/format'
+import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
+import { findEgg, introClick, isAprilFools } from '../lib/eggs'
+import { formatDay, formatStamp, MEMBERS, plural, sameDay } from '../lib/format'
+import { messageRights, msgUi, useMsgUi } from '../lib/msgActions'
 import { can, roleColor } from '../lib/perms'
 import { sendMessage, sendTyping } from '../lib/realtime'
 import { STATUS_LABEL } from '../lib/status'
@@ -13,7 +14,8 @@ import { joinVoice, toggleCamera, useVoice } from '../lib/voice'
 import { Avatar } from './Avatar'
 import { UserTags } from './UserTags'
 import { GroupAvatar } from './groups/GroupAvatar'
-import { MessageActions } from './guild/MessageActions'
+import { MessageItem, SystemItem } from './chat/MessageItem'
+import { ReplyBar } from './chat/ReplyQuote'
 import { VoiceStage } from './voice/VoiceStage'
 
 const GROUP_WINDOW = 7 * 60 * 1000
@@ -21,9 +23,6 @@ const UNKNOWN: User = { id: 'unknown', username: 'unknown', displayName: 'Неи
 const NO_MEMBERS: VoiceMember[] = []
 /** Столько секунд «печатает…» без перерыва — уже не сообщение, а поэма (пасхалка) */
 const POEM_AFTER = 40_000
-
-/** Подписи у результатов команд */
-const CMD_LABEL: Record<Exclude<MessageFlavor, 'me'>, string> = { roll: '/roll', flip: '/flip', ball: '/8ball' }
 
 interface Command {
   name: string
@@ -88,12 +87,32 @@ export function ChatView() {
   if (!baseline.current.ids && messages) baseline.current.ids = new Set(messages.map((m) => m.id))
   const known = baseline.current.ids
 
+  // К своему сообщению прокручиваем, только когда оно новое — а не когда поставили реакцию где-то выше
+  const lastId = useRef<string | undefined>(undefined)
+  // Пока открыто меню сообщения, ленту не дёргаем (иначе оно закрылось бы) — докрутим, когда закроют
+  const pendingScroll = useRef(false)
+  const menuOpen = useMsgUi((s) => s.menu !== null)
+
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el || !messages) return
     const last = messages[messages.length - 1]
-    if (stickToBottom.current || last?.authorId === meId) el.scrollTo({ top: el.scrollHeight, behavior: known && known.size < messages.length ? 'smooth' : 'auto' })
+    const appended = last?.id !== lastId.current
+    lastId.current = last?.id
+    if (!stickToBottom.current && !(appended && last?.authorId === meId)) return
+    if (useMsgUi.getState().menu) {
+      pendingScroll.current = true
+      return
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: known && known.size < messages.length ? 'smooth' : 'auto' })
   }, [messages, meId, known])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (menuOpen || !pendingScroll.current || !el) return
+    pendingScroll.current = false
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [menuOpen])
 
   const onScroll = () => {
     const el = scrollRef.current
@@ -229,12 +248,7 @@ export function ChatView() {
                   </div>
                 )}
                 {g.messages.map((m) => (
-                  <div key={m.id} className={`sysmsg${known && !known.has(m.id) ? ' sysmsg--fresh' : ''}`}>
-                    <span className="sysmsg__text">{m.content}</span>
-                    <time>{formatTime(m.createdAt)}</time>
-                    {isWishTime(m.createdAt) && <Wish />}
-                    <MessageActions message={m} />
-                  </div>
+                  <SystemItem key={m.id} message={m} fresh={Boolean(known && !known.has(m.id))} />
                 ))}
               </Fragment>
             )
@@ -271,7 +285,7 @@ export function ChatView() {
                     </div>
                   )}
                   {g.messages.map((m) => (
-                    <Bubble key={m.id} message={m} fresh={Boolean(known && !known.has(m.id))} name={author.displayName} color={color} />
+                    <MessageItem key={m.id} message={m} fresh={Boolean(known && !known.has(m.id))} name={author.displayName} color={color} />
                   ))}
                 </div>
               </div>
@@ -356,39 +370,6 @@ function Welcome({ channelId, visual, title, tag, text }: { channelId: string; v
   )
 }
 
-/** Звёздочка у времени 11:11 и 22:22 */
-function Wish() {
-  return (
-    <span className="wish" data-tip="Загадай желание" aria-label="Загадай желание">
-      ✦
-    </span>
-  )
-}
-
-/** Одно сообщение: обычное, «/me» (курсивом от третьего лица) или результат команды */
-function Bubble({ message: m, fresh, name, color }: { message: Message; fresh: boolean; name: string; color: string | null }) {
-  const flavor = m.flavor
-  const kind = flavor === 'me' ? ' bubble--me' : flavor ? ' bubble--cmd' : ''
-  return (
-    <div className={`bubble${kind}${fresh ? ' bubble--fresh' : ''}`}>
-      {flavor && flavor !== 'me' && <span className="bubble__cmd">{CMD_LABEL[flavor] ?? '/'}</span>}
-      <span className="bubble__text">
-        {flavor === 'me' && (
-          <>
-            <b style={color ? { color } : undefined}>{name}</b>{' '}
-          </>
-        )}
-        {m.content}
-      </span>
-      <time className="bubble__time" title={formatStamp(m.createdAt)}>
-        {formatTime(m.createdAt)}
-      </time>
-      {isWishTime(m.createdAt) && <Wish />}
-      <MessageActions message={m} />
-    </div>
-  )
-}
-
 /** «печатает…»; кто печатает без перерыва 40 секунд — «пишет поэму…» */
 function TypingBar({ ids }: { ids: string[] }) {
   const users = useChat((s) => s.users)
@@ -465,17 +446,33 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
     ref.current?.focus()
   }
 
+  const replyId = useMsgUi((s) => s.replies[channelId])
+
   const send = async () => {
     const content = value.trim()
     if (!content || sending) return
     setSending(true)
-    const ok = await sendMessage(channelId, content)
+    const ok = await sendMessage(channelId, content, replyId)
     setSending(false)
     if (ok) {
       setValue('')
       setBurst((n) => n + 1)
+      msgUi.cancelReply(channelId)
     }
     ref.current?.focus()
+  }
+
+  /** ↑ в пустом поле — изменить своё последнее сообщение (как в Discord) */
+  const editLast = () => {
+    const st = useChat.getState()
+    const list = st.messages[channelId] ?? []
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (messageRights(st, list[i]).canEdit) {
+        msgUi.edit(list[i].id)
+        return true
+      }
+    }
+    return false
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -504,7 +501,19 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.nativeEvent.isComposing) return
+    // Esc — передумали отвечать
+    if (e.key === 'Escape' && replyId) {
+      e.preventDefault()
+      e.stopPropagation()
+      msgUi.cancelReply(channelId)
+      return
+    }
+    if (e.key === 'ArrowUp' && !value && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (editLast()) e.preventDefault()
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void send()
     }
@@ -541,6 +550,7 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
           </div>
         </div>
       )}
+      <ReplyBar channelId={channelId} />
       <div className="composer__box glow">
         <textarea
           ref={ref}

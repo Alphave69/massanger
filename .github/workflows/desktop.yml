@@ -1,5 +1,6 @@
-# Сборка Nuntius для Windows: Actions → «Nuntius для Windows» → Run workflow → вписать адрес сервера.
-# Готовые файлы — в Releases (ссылку можно кидать друзьям) и внизу страницы запуска, в Artifacts.
+# Сборка Nuntius для Windows: Actions → «Nuntius для Windows» → Run workflow (адрес сервера можно не менять).
+# Готовые файлы — в релизе desktop-latest по постоянным ссылкам (их можно кидать друзьям),
+# а уже установленные приложения сами скачают новую версию и предложат «Обновить».
 name: Nuntius для Windows
 
 on:
@@ -11,6 +12,11 @@ on:
         default: ''
   push:
     tags: ['desktop-v*']
+
+# Две сборки сразу не запускаем — иначе они удалят файлы релиза друг у друга
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -29,6 +35,12 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
+
+      # каждая сборка новее прошлой (1.1.<номер запуска>) — по этому номеру приложения и понимают, что пора обновиться
+      - name: 'Версия 1.1.${{ github.run_number }}'
+        shell: bash
+        run: npm version "1.1.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+
       - name: Адрес сервера
         if: ${{ inputs.server_url != '' }}
         shell: bash
@@ -36,22 +48,58 @@ jobs:
           URL: ${{ inputs.server_url }}
         run: |
           node -e "require('fs').writeFileSync('nuntius.config.json', JSON.stringify({ url: process.env.URL }, null, 2))"
-      - run: npx electron-builder --win nsis portable --x64 --publish never
+
+      - name: Сборка
+        run: npx electron-builder --win nsis portable --x64 --publish never
+
+      # latest.yml — «паспорт» новой версии, по нему установленные приложения находят обновление
+      - name: Проверка файлов
+        shell: bash
+        run: |
+          ls -l dist/Nuntius-Setup.exe dist/Nuntius-Portable.exe dist/latest.yml dist/*.blockmap
+          cat dist/latest.yml
+
       - uses: actions/upload-artifact@v4
         with:
           name: Nuntius-Windows
           path: |
-            desktop/dist/*.exe
-      - name: Ссылка на скачивание (релиз «Nuntius для Windows»)
+            desktop/dist/Nuntius-Setup.exe
+            desktop/dist/Nuntius-Portable.exe
+            desktop/dist/latest.yml
+
+      # в релизе остаются только файлы этой сборки (старые Nuntius-Setup-1.0.0.exe и т.п. убираем)
+      - name: Убрать старые файлы из релиза
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names=$(gh release view desktop-latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          while IFS= read -r name; do
+            name="${name%$'\r'}"
+            [ -z "$name" ] && continue
+            echo "удаляю $name"
+            gh release delete-asset desktop-latest "$name" --repo "$GITHUB_REPOSITORY" --yes || true
+          done <<< "$names"
+
+      - name: Ссылки на скачивание (релиз «Nuntius для Windows»)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: desktop-latest
           name: Nuntius для Windows
           make_latest: true
           overwrite_files: true
+          fail_on_unmatched_files: true
           body: |
-            **Nuntius-Setup-….exe** — установщик: скачай, запусти, готово.
-            **Nuntius-Portable-….exe** — запускается без установки.
+            **Nuntius-Setup.exe** — установщик: скачай, запусти, готово. Дальше приложение обновляется само.
+            **Nuntius-Portable.exe** — запускается без установки (сам не обновляется — новую версию качай отсюда же).
+
+            Постоянные ссылки — всегда на самую свежую версию:
+            https://github.com/${{ github.repository }}/releases/download/desktop-latest/Nuntius-Setup.exe
+            https://github.com/${{ github.repository }}/releases/download/desktop-latest/Nuntius-Portable.exe
 
             Если Windows покажет синее окно «Windows защитила ваш компьютер» — нажми «Подробнее» → «Выполнить в любом случае».
-          files: desktop/dist/*.exe
+          files: |
+            desktop/dist/Nuntius-Setup.exe
+            desktop/dist/Nuntius-Portable.exe
+            desktop/dist/latest.yml
+            desktop/dist/*.blockmap

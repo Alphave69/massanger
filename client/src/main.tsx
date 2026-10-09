@@ -20,6 +20,7 @@ import './styles/roles.css'
 import './styles/badges.css'
 import './styles/admin.css'
 import './styles/eggs.css'
+import './styles/messages.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
