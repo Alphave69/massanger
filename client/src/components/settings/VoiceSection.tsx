@@ -133,11 +133,18 @@ export function VoiceSection() {
 }
 
 /** Проверка микрофона: живой индикатор уровня + (по желанию) слышать себя */
+const STUCK =
+  'Микрофон не отвечает. Скорее всего, его держит другая программа или Windows не пускает к нему: Параметры → Конфиденциальность и защита → Микрофон → «Разрешить классическим приложениям доступ к микрофону»'
+const SILENT =
+  'Микрофон открылся, но звука от него нет совсем. Так бывает, когда приложение не пускает антивирус (например, у Kaspersky есть защита микрофона — разреши в ней Nuntius) или Windows (Параметры → Конфиденциальность и защита → Микрофон). Ещё проверь, что выше выбран нужный микрофон'
+
 function MicTest({ onError }: { onError: (text: string | null) => void }) {
   const s = useSettings()
   const [testing, setTesting] = useState(false)
   const [loopback, setLoopback] = useState(false)
   const meterRef = useRef<HTMLDivElement>(null)
+  // Какой микрофон на самом деле открылся — чтобы было видно, тот ли
+  const [opened, setOpened] = useState<string | null>(null)
   // Громкость и порог меняются на лету — без перезапуска микрофона
   const live = useRef({ inputVolume: s.inputVolume, outputVolume: s.outputVolume, sensitivity: s.sensitivity })
   live.current = { inputVolume: s.inputVolume, outputVolume: s.outputVolume, sensitivity: s.sensitivity }
@@ -148,6 +155,11 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
     let raf = 0
     let stream: MediaStream | null = null
     let ctx: AudioContext | null = null
+
+    // Windows иногда не отдаёт микрофон и молчит — без ответа не висим
+    const slow = window.setTimeout(() => {
+      if (!cancelled && !stream) onError(STUCK)
+    }, 8000)
 
     const start = async () => {
       try {
@@ -160,16 +172,19 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
           },
         })
       } catch (err) {
+        window.clearTimeout(slow)
         if (cancelled) return
         onError(micProblem(err))
         setTesting(false)
         return
       }
+      window.clearTimeout(slow)
       if (cancelled) {
         stream.getTracks().forEach((t) => t.stop())
         return
       }
       onError(null)
+      setOpened(stream.getAudioTracks()[0]?.label || 'микрофон без названия')
       ctx = new AudioContext()
       if (s.outputDeviceId && (ctx as SinkCapable).setSinkId) await (ctx as SinkCapable).setSinkId!(s.outputDeviceId).catch(() => {})
       // Пока ждали устройство вывода, проверку могли остановить — тогда всё уже закрыто
@@ -184,6 +199,11 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
 
       const buf = new Float32Array(analyser.fftSize)
       let shown = 0
+      // Живой микрофон всегда хоть чуть-чуть шумит. Ровные нули несколько секунд —
+      // значит, звук не пускают (Windows, антивирус) или открылось не то устройство
+      const since = performance.now()
+      let heard = false
+      let warned = false
       const tick = () => {
         if (cancelled) return
         inGain.gain.value = live.current.inputVolume / 100
@@ -191,6 +211,14 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
         analyser.getFloatTimeDomainData(buf)
         let sum = 0
         for (const v of buf) sum += v * v
+        if (sum > 0 && !heard) {
+          heard = true
+          if (warned) onError(null)
+        }
+        if (!heard && !warned && performance.now() - since > 4000) {
+          warned = true
+          onError(SILENT)
+        }
         const db = 20 * Math.log10(Math.sqrt(sum / buf.length) + 1e-8)
         const level = Math.min(1, Math.max(0, (db + 60) / 60)) // −60 дБ … 0 дБ → 0 … 1
         shown = level > shown ? level : shown * 0.9 + level * 0.1 // быстро вверх, плавно вниз
@@ -207,6 +235,8 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
 
     return () => {
       cancelled = true
+      window.clearTimeout(slow)
+      setOpened(null)
       cancelAnimationFrame(raf)
       stream?.getTracks().forEach((t) => t.stop())
       void ctx?.close()
@@ -230,6 +260,7 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
         </button>
       </div>
       <p className="muted">{testing ? 'Скажи что-нибудь — полоска должна прыгать. Белая черта — порог голосовой активации.' : 'Нажми «Проверить» и скажи что-нибудь.'}</p>
+      {testing && opened && <p className="muted">Слушаем: {opened}</p>}
       <Toggle label="Слышать себя" hint="Только в наушниках — иначе будет свист" checked={loopback} onChange={setLoopback} />
     </Group>
   )
