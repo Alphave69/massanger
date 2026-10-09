@@ -5,7 +5,9 @@ import { initials, MEMBERS, plural } from '../../lib/format'
 import { can, isPrivateChannel, PERMISSION_INFO, rolesOf } from '../../lib/perms'
 import { chat, useChat } from '../../lib/store'
 import { ui, useUi, type ServerSection } from '../../lib/ui'
+import { useIsMobile } from '../../lib/mobile'
 import { Group, SectionHead } from '../settings/controls'
+import { MobileBar, MobileTop } from '../settings/Settings'
 import { MembersSection } from './MembersSection'
 import { RoleChip } from './RoleBits'
 import { RolesSection } from './RolesSection'
@@ -17,6 +19,8 @@ export function ServerSettings() {
   const state = useUi((s) => s.serverSettings)
   const guild = useChat((s) => (state ? s.guilds.find((g) => g.id === state.guildId) : undefined))
   const meId = useChat((s) => s.me?.id)
+  const list = useUi((s) => s.settingsList)
+  const mobile = useIsMobile()
 
   useEffect(() => {
     if (!state) return
@@ -65,9 +69,10 @@ export function ServerSettings() {
   ]
 
   return (
-    <div className="settings zoomed" role="dialog" aria-modal="true" aria-label="Настройки сервера">
+    <div className={`settings zoomed${mobile ? (list ? ' is-list' : ' is-section') : ''}`} role="dialog" aria-modal="true" aria-label="Настройки сервера">
       <nav className="settings__nav">
         <div className="settings__nav-inner">
+          {mobile && <MobileTop title="Настройки сервера" onClose={ui.closeServerSettings} />}
           <div className="server-badge">
             <span className="server-badge__icon">{initials(guild.name)}</span>
             <span className="settings__me-text">
@@ -94,6 +99,7 @@ export function ServerSettings() {
       </nav>
 
       <main className="settings__content">
+        {mobile && <MobileBar back={guild.name} onClose={ui.closeServerSettings} />}
         <div className="settings__content-inner" key={section}>
           {section === 'overview' && <Overview guild={guild} isOwner={isOwner} />}
           {section === 'roles' && <RolesSection guild={guild} />}

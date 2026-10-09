@@ -4,6 +4,7 @@ import { Fullscreen, HeadphoneOff, Lock, Maximize2, Mic, MicOff, Minimize2, Moni
 import type { Guild, VoiceMember } from '../../lib/api'
 import { plural } from '../../lib/format'
 import { can, guildOfChannel, outranks } from '../../lib/perms'
+import { useIsMobile } from '../../lib/mobile'
 import { uiZoom } from '../../lib/settings'
 import { useChat } from '../../lib/store'
 import { joinVoice, moderateVoice, setUserVolume, toggleCamera, toggleLocalMute, useVoice } from '../../lib/voice'
@@ -33,6 +34,7 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   const guild = useChat((s) => guildOfChannel(s.guilds, roomId))
   const [focus, setFocus] = useState<string | null>(null)
   const inRoom = myRoom === roomId
+  const mobile = useIsMobile()
 
   // Пока сервер не подтвердил вход — показываем себя заранее
   const list = inRoom && !members.some((m) => m.userId === meId) ? [...members, placeholder(meId)] : members
@@ -43,7 +45,8 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   const focused = tiles.find((t) => t.key === focus)
   const gridCount = tiles.length - (focused ? 1 : 0)
   // Звонок в личке — сцена низкая и широкая: до трёх плиток в ряд, дальше — в два ряда
-  const cols = variant === 'call' ? (gridCount <= 3 ? Math.max(gridCount, 1) : Math.ceil(gridCount / 2)) : undefined
+  // На телефоне экран узкий — не больше двух в ряд
+  const cols = variant === 'call' ? (mobile ? Math.min(Math.max(gridCount, 1), 2) : gridCount <= 3 ? Math.max(gridCount, 1) : Math.ceil(gridCount / 2)) : undefined
 
   const tileKeys = tiles.map((t) => t.key).join('|')
   const screenKey = tiles.find((t) => t.kind === 'screen')?.key ?? null

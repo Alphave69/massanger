@@ -20,7 +20,10 @@ import './styles/roles.css'
 import './styles/badges.css'
 import './styles/admin.css'
 import './styles/eggs.css'
+import './styles/landing.css'
 import './styles/messages.css'
+// последним: правки для телефона перекрывают остальное
+import './styles/mobile.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

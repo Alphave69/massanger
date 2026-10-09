@@ -8,6 +8,7 @@ import { reactToMessage } from '../../lib/realtime'
 import { uiZoom, useSettings } from '../../lib/settings'
 import { activeChannelId, useChat } from '../../lib/store'
 import { useUi } from '../../lib/ui'
+import { useIsMobile } from '../../lib/mobile'
 import { EmojiPicker } from './EmojiPicker'
 
 /**
@@ -20,6 +21,7 @@ export function MessageMenu() {
   const message = useChat((s) => (menu ? findLoaded(s, menu.channelId, menu.messageId) : undefined))
   const activeId = useChat((s) => activeChannelId(s))
   const overlay = useUi((s) => s.settings !== null || s.serverSettings !== null)
+  const sheet = useIsMobile()
 
   // Сообщение удалили, ушли в другой канал или открыли настройки — меню больше не к чему
   const stale = menu !== null && (!message || menu.channelId !== activeId || overlay)
@@ -30,10 +32,16 @@ export function MessageMenu() {
   if (!menu || !message || stale) return null
   return createPortal(
     <div className="zoomed msg-menu-layer">
+      {sheet && <SheetBackdrop />}
       <MenuPop key={menu.seq} menu={menu} message={message} />
     </div>,
     document.body,
   )
+}
+
+/** Телефон: меню выезжает снизу на всю ширину, под ним — затемнение (нажатие закрывает) */
+function SheetBackdrop() {
+  return <div className="msg-sheet-backdrop" onClick={() => msgUi.closeMenu()} aria-hidden="true" />
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(v, max))
@@ -48,13 +56,16 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
   const rights = useChat(useShallow((s) => messageRights(s, message)))
   const meId = useChat((s) => s.me?.id ?? '')
   const devMode = useSettings((s) => s.devMode)
+  const sheet = useIsMobile()
+  const sheetRef = useRef(sheet)
+  sheetRef.current = sheet
 
   const isMine = (emoji: string) => Boolean(message.reactions?.[emoji]?.includes(meId))
 
   // У курсора (или у кнопки), но целиком в окне. Координаты окна → CSS-пиксели масштабированного слоя
   useLayoutEffect(() => {
     const el = popRef.current
-    if (!el) return
+    if (!el || sheet) return
     const k = uiZoom()
     const w = el.offsetWidth
     const h = el.offsetHeight
@@ -78,19 +89,20 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
     const ax = a.kind === 'point' ? a.x / k : a.right / k
     const ay = a.kind === 'point' ? a.y / k : a.top / k
     setPos({ left: fx, top: fy, origin: `${ax > fx + w / 2 ? 'right' : 'left'} ${ay > fy + h / 2 ? 'bottom' : 'top'}` })
-  }, [mode, menu.anchor])
+  }, [mode, menu.anchor, sheet])
 
-  // Фокус — на первый пункт (выбор эмодзи фокусируется сам)
+  // Фокус — на первый пункт (выбор эмодзи фокусируется сам). Снизу на телефоне фокус не нужен — там пальцем
   const placed = pos !== null
   useEffect(() => {
-    if (placed && mode === 'menu') popRef.current?.querySelector<HTMLElement>('[data-mi]')?.focus({ preventScroll: true })
-  }, [placed, mode])
+    if (placed && mode === 'menu' && !sheet) popRef.current?.querySelector<HTMLElement>('[data-mi]')?.focus({ preventScroll: true })
+  }, [placed, mode, sheet])
 
   // Закрыть: клик мимо, прокрутка, Esc, смена размера окна, уход из окна
   useEffect(() => {
     const inside = (t: EventTarget | null) => t instanceof Node && Boolean(popRef.current?.contains(t))
     const onDown = (e: PointerEvent) => {
-      if (inside(e.target)) return
+      // затемнение под меню на телефоне закрывает его само — по «клику», чтобы касание не провалилось в чат
+      if (inside(e.target) || (e.target instanceof Element && e.target.closest('.msg-sheet-backdrop'))) return
       // кнопки «ещё» и «реакция» у сообщения сами открывают и закрывают меню
       if (e.target instanceof Element && e.target.closest(`[data-menu-for="${CSS.escape(menu.messageId)}"]`)) return
       msgUi.closeMenu()
@@ -99,7 +111,8 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
     const feed = document.querySelector(`[data-mid="${CSS.escape(menu.messageId)}"]`)?.closest('.chat__scroll')
     const feedTop = feed?.scrollTop ?? 0
     const onScroll = (e: Event) => {
-      if (inside(e.target)) return
+      // меню снизу (телефон) закрывает ленту затемнением — прокрутки под ним не бывает, а сдвиг от ушедшей клавиатуры не в счёт
+      if (inside(e.target) || sheetRef.current) return
       if (feed && e.target === feed && Math.abs(feed.scrollTop - feedTop) < 3) return
       msgUi.closeMenu()
     }
@@ -111,16 +124,19 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
       msgUi.closeMenu(true)
     }
     const shut = () => msgUi.closeMenu()
+    // На телефоне окно меняет высоту, когда прячется клавиатура, — закрываем только при смене ширины (поворот)
+    const width = window.innerWidth
+    const onResize = () => (!sheetRef.current || window.innerWidth !== width) && shut()
     window.addEventListener('pointerdown', onDown, true)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('keydown', onKey, true)
-    window.addEventListener('resize', shut)
+    window.addEventListener('resize', onResize)
     window.addEventListener('blur', shut)
     return () => {
       window.removeEventListener('pointerdown', onDown, true)
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('keydown', onKey, true)
-      window.removeEventListener('resize', shut)
+      window.removeEventListener('resize', onResize)
       window.removeEventListener('blur', shut)
     }
   }, [menu.messageId])
@@ -209,13 +225,14 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
   return (
     <div
       ref={popRef}
-      className={`msg-menu${mode === 'picker' ? ' msg-menu--picker' : ''}`}
+      className={`msg-menu${mode === 'picker' ? ' msg-menu--picker' : ''}${sheet ? ' msg-menu--sheet' : ''}`}
       role="menu"
       aria-label={mode === 'picker' ? 'Выбрать реакцию' : 'Действия с сообщением'}
-      style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0, transformOrigin: pos?.origin }}
+      style={sheet ? undefined : { left: pos?.left ?? -9999, top: pos?.top ?? 0, transformOrigin: pos?.origin }}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {sheet && <span className="msg-menu__grip" aria-hidden="true" />}
       {mode === 'picker' ? (
         <EmojiPicker isMine={isMine} onPick={react} />
       ) : (

@@ -1,6 +1,7 @@
 import { useEffect, type ComponentType } from 'react'
-import { Award, Bell, Crown, FlaskConical, IdCard, LogOut, Mic, Palette, ShieldCheck, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Award, Bell, Crown, FlaskConical, IdCard, LogOut, Mic, Palette, ShieldCheck, UserRound, X } from 'lucide-react'
 import { versionClick } from '../../lib/eggs'
+import { useIsMobile } from '../../lib/mobile'
 import { useSettings } from '../../lib/settings'
 import { selfPresence } from '../../lib/status'
 import { useChat } from '../../lib/store'
@@ -60,6 +61,8 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const section = useUi((s) => s.settings)
   const me = useChat((s) => s.me)
   const devMode = useSettings((s) => s.devMode)
+  const list = useUi((s) => s.settingsList)
+  const mobile = useIsMobile()
 
   useEffect(() => {
     if (!section) return
@@ -75,9 +78,10 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const nav = [...NAV, ...(devMode ? [LAB] : []), ...(me.admin ? [ADMIN] : [])]
 
   return (
-    <div className="settings zoomed" role="dialog" aria-modal="true" aria-label="Настройки">
+    <div className={`settings zoomed${mobile ? (list ? ' is-list' : ' is-section') : ''}`} role="dialog" aria-modal="true" aria-label="Настройки">
       <nav className="settings__nav">
         <div className="settings__nav-inner">
+          {mobile && <MobileTop title="Настройки" onClose={ui.closeSettings} />}
           <button className="settings__me" onClick={() => ui.openSettings('profile')}>
             <Avatar user={me} size={40} status={selfPresence(me.status)} />
             <span className="settings__me-text">
@@ -116,6 +120,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
       </nav>
 
       <main className="settings__content">
+        {mobile && <MobileBar back="Настройки" onClose={ui.closeSettings} />}
         <div className="settings__content-inner" key={section}>
           <Content />
         </div>
@@ -128,6 +133,33 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
       </main>
+    </div>
+  )
+}
+
+/** Телефон: шапка списка разделов — название и «закрыть» */
+export function MobileTop({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <div className="settings__mtop">
+      <h2 className="settings__mtitle truncate">{title}</h2>
+      <button className="icon-btn settings__mclose" onClick={onClose} aria-label="Закрыть">
+        <X size={22} />
+      </button>
+    </div>
+  )
+}
+
+/** Телефон: шапка раздела — «← к списку» и «закрыть» */
+export function MobileBar({ back, onClose }: { back: string; onClose: () => void }) {
+  return (
+    <div className="settings__mbar">
+      <button className="settings__mback" onClick={ui.settingsBack}>
+        <ArrowLeft size={20} />
+        <span className="truncate">{back}</span>
+      </button>
+      <button className="icon-btn settings__mclose" onClick={onClose} aria-label="Закрыть">
+        <X size={22} />
+      </button>
     </div>
   )
 }

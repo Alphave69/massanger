@@ -82,7 +82,13 @@ export function GuildSidebar({ guildId, onLogout }: { guildId: string; onLogout:
             const count = unread[c.id] ?? 0
             return (
               <div key={c.id} className={`channel${c.id === activeId ? ' is-active' : ''}${count ? ' has-unread' : ''}`}>
-                <button className="channel__main" onClick={() => chat.openGuildChannel(guild.id, c.id)}>
+                <button
+                  className="channel__main"
+                  onClick={() => {
+                    chat.openGuildChannel(guild.id, c.id)
+                    ui.showMain()
+                  }}
+                >
                   <ChannelGlyph guild={guild} channel={c} />
                   <span className="truncate">{c.name}</span>
                 </button>
@@ -141,6 +147,7 @@ function VoiceChannelRow({ guild, channel, active, canTune }: { guild: Guild; ch
           className="channel__main"
           onClick={() => {
             chat.openGuildChannel(guild.id, channel.id)
+            ui.showMain()
             if (noConnect) chat.toast({ title: 'Нет доступа', text: `У тебя нет права подключаться к «${channel.name}»` })
             else void joinVoice(channel.id)
           }}

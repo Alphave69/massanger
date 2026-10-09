@@ -2,13 +2,21 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Nuntius — мессенджер для своих: чаты, голос, видео и серверы." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Установка на телефон (PWA): значок на главном экране, открывается без браузера -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Nuntius" />
     <title>Nuntius</title>
     <style>
       html, body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
-      .boot { height: 100vh; display: grid; place-items: center; color: #777; font-size: 14px; }
+      .boot { height: 100vh; height: 100dvh; display: grid; place-items: center; color: #777; font-size: 14px; }
       .boot-error { position: fixed; inset: auto 16px 16px; z-index: 9999; padding: 14px 16px; border-radius: 10px;
         background: #fff; color: #000; font: 13px/1.4 monospace; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
     </style>

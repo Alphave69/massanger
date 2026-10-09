@@ -7,6 +7,8 @@ import { ui } from '../lib/ui'
 import { Avatar } from './Avatar'
 import { MiniSphere } from './MiniSphere'
 import { UserTags } from './UserTags'
+import { BackButton } from './ChatView'
+import { useIsMobile } from '../lib/mobile'
 
 const TABS: { id: FriendsTab; label: string }[] = [
   { id: 'online', label: 'В сети' },
@@ -51,6 +53,7 @@ export function FriendsPage({ tab }: { tab: FriendsTab }) {
   const myName = useChat((s) => s.me?.displayName ?? '')
   const requests = friends.filter((f) => f.state === 'incoming').length
   const firstName = myName.trim().split(/\s+/)[0]
+  const mobile = useIsMobile()
 
   const setTab = (t: FriendsTab) => chat.setView({ kind: 'home', tab: t })
 
@@ -69,7 +72,8 @@ export function FriendsPage({ tab }: { tab: FriendsTab }) {
 
   return (
     <section className="main panel glow">
-      <header className="main__head">
+      <header className="main__head friends-head">
+        <BackButton />
         <div className="main__title">
           <Users size={20} />
           <h2>Друзья</h2>
@@ -83,7 +87,7 @@ export function FriendsPage({ tab }: { tab: FriendsTab }) {
             </button>
           ))}
           <button className={`tab tab--accent${tab === 'add' ? ' is-active' : ''}`} onClick={() => setTab('add')}>
-            <UserPlus size={15} /> Добавить в друзья
+            <UserPlus size={15} /> {mobile ? 'Добавить' : 'Добавить в друзья'}
           </button>
         </nav>
         {firstName && (

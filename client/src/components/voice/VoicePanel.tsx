@@ -3,6 +3,9 @@ import { describeRoom, openRoom } from '../../lib/rooms'
 import { useChat } from '../../lib/store'
 import { leaveVoice, toggleCamera, toggleScreen, useVoice } from '../../lib/voice'
 
+/** Показ экрана: телефоны (iPhone, Android) так не умеют — там кнопку не показываем */
+const canShare = typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+
 /** Плашка «Голос подключён» над своей панелью — видна, где бы ты ни был в приложении */
 export function VoicePanel() {
   const roomId = useVoice((s) => s.roomId)
@@ -38,13 +41,15 @@ export function VoicePanel() {
           <PhoneOff size={18} />
         </button>
       </div>
-      <div className="voice-panel__actions">
+      <div className={`voice-panel__actions${canShare ? '' : ' voice-panel__actions--one'}`}>
         <button className={`voice-panel__btn${camera ? ' is-on' : ''}`} onClick={() => void toggleCamera()}>
           <Video size={16} /> Камера
         </button>
-        <button className={`voice-panel__btn${screen ? ' is-on' : ''}`} onClick={() => void toggleScreen()}>
-          <MonitorUp size={16} /> Экран
-        </button>
+        {canShare && (
+          <button className={`voice-panel__btn${screen ? ' is-on' : ''}`} onClick={() => void toggleScreen()}>
+            <MonitorUp size={16} /> Экран
+          </button>
+        )}
       </div>
     </div>
   )

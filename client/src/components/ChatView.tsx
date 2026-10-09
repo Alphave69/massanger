@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
 import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
 import { findEgg, introClick, isAprilFools } from '../lib/eggs'
 import { formatDay, formatStamp, MEMBERS, plural, sameDay } from '../lib/format'
@@ -11,6 +11,7 @@ import { STATUS_LABEL } from '../lib/status'
 import { activeChannelId, chat, dmTitle, presenceOf, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { joinVoice, toggleCamera, useVoice } from '../lib/voice'
+import { isMobile, useIsMobile } from '../lib/mobile'
 import { Avatar } from './Avatar'
 import { UserTags } from './UserTags'
 import { GroupAvatar } from './groups/GroupAvatar'
@@ -48,6 +49,22 @@ async function startCall(roomId: string, video: boolean) {
   if (video && !useVoice.getState().localCamera) void toggleCamera()
 }
 
+/** Телефон: «назад» к списку каналов и личек — слева в шапке. Точка — есть непрочитанное в других чатах */
+export function BackButton() {
+  const mobile = useIsMobile()
+  const elsewhere = useChat((s) => {
+    const here = activeChannelId(s)
+    return Object.entries(s.unread).some(([id, n]) => n > 0 && id !== here)
+  })
+  if (!mobile) return null
+  return (
+    <button className="icon-btn main__back" onClick={ui.showNav} aria-label="Назад к списку">
+      <ArrowLeft size={22} />
+      {elsewhere && <span className="main__back-dot" />}
+    </button>
+  )
+}
+
 export function ChatView() {
   const view = useChat((s) => s.view)
   const channelId = useChat((s) => activeChannelId(s))
@@ -64,6 +81,7 @@ export function ChatView() {
   const meId = useChat((s) => s.me!.id)
   const typingIds = useChat(useShallow((s) => (channelId ? Object.keys(s.typing[channelId] ?? {}) : [])))
   const asideOpen = useUi((s) => s.asideOpen)
+  const mobile = useIsMobile()
 
   const channel = guild?.channels.find((c) => c.id === channelId)
 
@@ -119,8 +137,33 @@ export function ChatView() {
     if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
   }
 
+  // Лента стала ниже (выехала клавиатура телефона, над полем ввода появился ответ, поле выросло) —
+  // если читали самый низ, он и остаётся на виду
+  const hasFeed = Boolean(channelId) && !(view.kind === 'guild' && !channel) && !(view.kind === 'dm' && !dmUser && !group)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!hasFeed || !el || typeof ResizeObserver === 'undefined') return
+    let height = el.clientHeight
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight
+      if (h < height && stickToBottom.current) el.scrollTop = el.scrollHeight
+      height = h
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [hasFeed, channelId])
+
   if (!channelId || (view.kind === 'guild' && !channel) || (view.kind === 'dm' && !dmUser && !group)) {
-    return <section className="main panel" />
+    // На телефоне и пустой экран (например, удалили все текстовые каналы) — с кнопкой «назад» к списку
+    return (
+      <section className="main panel">
+        {mobile && (
+          <header className="main__head">
+            <BackButton />
+          </header>
+        )}
+      </section>
+    )
   }
 
   const placeholder = group ? `Написать в «${groupTitle}»` : dmUser ? `Написать @${dmUser.username}` : `Написать в #${channel!.name}`
@@ -133,6 +176,7 @@ export function ChatView() {
   return (
     <section className="main panel glow chat">
       <header className="main__head">
+        <BackButton />
         {group ? (
           <div className="main__title">
             <GroupAvatar memberIds={group.memberIds} size={30} />
@@ -556,7 +600,8 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
           ref={ref}
           rows={1}
           value={value}
-          autoFocus
+          // на телефоне клавиатура не выскакивает сама при входе в чат — только по нажатию на поле
+          autoFocus={!isMobile()}
           placeholder={placeholder}
           aria-autocomplete="list"
           aria-expanded={matches.length > 0}

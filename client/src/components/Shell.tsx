@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../lib/api'
+import { api, ApiError, SYSTEM_AUTHOR } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { initVoice, resetVoice } from '../lib/voice'
 import { activeChannelId, chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
-import { msgUi } from '../lib/msgActions'
+import { msgUi, useMsgUi } from '../lib/msgActions'
+import { isMobile, trackBackButton, trackViewport, useIsMobile } from '../lib/mobile'
 import { Dock } from './Dock'
 import { HomeSidebar } from './HomeSidebar'
 import { GuildSidebar } from './GuildSidebar'
@@ -45,11 +46,40 @@ const QUOTES: [string, string][] = [
   ['Nuntius', 'Вестник — это ты'],
 ]
 
+/** Телефон: открыто что-то, что закрывает кнопка «Назад» (окно, шторка, настройки, панель справа, сам чат) */
+function hasOpenLayer() {
+  const u = useUi.getState()
+  const m = useMsgUi.getState()
+  return Boolean(
+    m.menu || m.forward || u.channelModal || u.groupModal || u.modal || u.profile || u.settings || u.serverSettings || u.asideOpen || u.mobileMain,
+  )
+}
+
+/** «Назад» на телефоне: закрываем то, что лежит сверху */
+function closeTopLayer() {
+  const u = useUi.getState()
+  const m = useMsgUi.getState()
+  if (m.menu) msgUi.closeMenu()
+  else if (m.forward) msgUi.closeForward()
+  else if (u.channelModal) ui.closeChannelModal()
+  else if (u.groupModal) ui.closeGroupModal()
+  else if (u.modal) ui.closeModal()
+  else if (u.profile) ui.hideProfile()
+  // в настройках — сначала из раздела к списку разделов, потом закрыть
+  else if ((u.serverSettings || u.settings) && !u.settingsList) ui.settingsBack()
+  else if (u.serverSettings) ui.closeServerSettings()
+  else if (u.settings) ui.closeSettings()
+  else if (u.asideOpen) ui.closeAside()
+  else ui.showNav()
+}
+
 export function Shell({ onLogout }: Props) {
   const ready = useChat((s) => s.ready)
   const view = useChat((s) => s.view)
   const connected = useChat((s) => s.connected)
   const asideOpen = useUi((s) => s.asideOpen)
+  const mobileMain = useUi((s) => s.mobileMain)
+  const mobile = useIsMobile()
   const settingsOpen = useUi((s) => s.settings !== null || s.serverSettings !== null)
   // Открыт голосовой канал сервера — в середине «сцена» звонка вместо чата
   const voiceChannel = useChat((s) => {
@@ -88,7 +118,8 @@ export function Shell({ onLogout }: Props) {
 
   // Вернулся во вкладку — открытый канал считается прочитанным
   useEffect(() => {
-    const onVisible = () => !document.hidden && chat.markRead()
+    // (на телефоне — только если на экране сам чат, а не список)
+    const onVisible = () => !document.hidden && (!isMobile() || useUi.getState().mobileMain) && chat.markRead()
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
@@ -96,6 +127,48 @@ export function Shell({ onLogout }: Props) {
   useEffect(() => {
     document.title = totalUnread ? `(${totalUnread}) Nuntius` : 'Nuntius'
   }, [totalUnread])
+
+  // Телефон: место над клавиатурой и кнопка «Назад» (закрывает открытое, из чата — к списку, а не уводит с сайта)
+  useEffect(() => trackViewport(), [])
+  useEffect(() => {
+    const back = trackBackButton(hasOpenLayer, closeTopLayer)
+    const offUi = useUi.subscribe(back.sync)
+    const offMsg = useMsgUi.subscribe(back.sync)
+    return () => {
+      offUi()
+      offMsg()
+      back.stop()
+    }
+  }, [])
+
+  useEffect(
+    () =>
+      useChat.subscribe((s, prev) => {
+        if (!isMobile() || !s.ready || !prev.ready) return
+        // Телефон, открыт список: чат не виден — новые сообщения «открытого» канала тоже непрочитанные
+        const here = activeChannelId(s)
+        const list = here ? s.messages[here] : undefined
+        const old = here ? prev.messages[here] : undefined
+        // (вкладка в фоне — addMessage уже посчитал их сам, второй раз не считаем)
+        const counted = here !== null && s.unread[here] !== prev.unread[here]
+        if (here && list && old && list.length > old.length && !counted && !useUi.getState().mobileMain) {
+          const fresh = list.slice(old.length).filter((m) => m.authorId !== s.me?.id && m.authorId !== SYSTEM_AUTHOR)
+          for (let i = 0; i < fresh.length; i++) chat.bumpUnread(here)
+        }
+        // Открыли личку или канал откуда угодно (профиль, пересылка, новый канал) — показываем сам чат.
+        // Щелчок по серверу в доке меняет только сервер — тогда остаёмся в списке его каналов
+        const v = s.view
+        const p = prev.view
+        if (v.kind === 'dm' && (p.kind !== 'dm' || p.dmId !== v.dmId)) ui.showMain()
+        else if (v.kind === 'guild' && s.channelByGuild !== prev.channelByGuild) ui.showMain()
+      }),
+    [],
+  )
+
+  // Окно сузилось до телефонного — правая колонка не должна сразу закрывать чат
+  useEffect(() => {
+    if (mobile) ui.closeAside()
+  }, [mobile])
 
   if (!ready) {
     return (
@@ -115,7 +188,11 @@ export function Shell({ onLogout }: Props) {
 
   return (
     <>
-    <div className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}`} aria-hidden={settingsOpen} inert={settingsOpen}>
+    <div
+      className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}${mobileMain ? ' shell--main' : ' shell--nav'}`}
+      aria-hidden={settingsOpen}
+      inert={settingsOpen}
+    >
       <Dock />
       {view.kind === 'guild' ? <GuildSidebar guildId={view.guildId} onLogout={onLogout} /> : <HomeSidebar onLogout={onLogout} />}
       {view.kind === 'home' ? (
@@ -130,6 +207,8 @@ export function Shell({ onLogout }: Props) {
           {view.kind === 'guild' ? <MemberList guildId={view.guildId} /> : <DmProfile dmId={view.dmId} />}
         </div>
       )}
+      {/* телефон: затемнение под выехавшей правой панелью — нажатие закрывает её */}
+      {mobile && hasAside && <div className={`aside-backdrop${asideOpen ? ' is-open' : ''}`} onClick={ui.closeAside} aria-hidden="true" />}
 
       {!connected && <div className="conn-banner">Переподключаемся к серверу…</div>}
       <Modals />

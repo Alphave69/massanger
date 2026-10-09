@@ -1,10 +1,15 @@
 import { useState, type ReactNode } from 'react'
-import { Compass, Plus } from 'lucide-react'
+import { Compass, Download, Plus } from 'lucide-react'
 import { sphereTileClick } from '../lib/eggs'
 import { initials } from '../lib/format'
+import { isInstalledApp } from '../lib/platform'
 import { chat, useChat } from '../lib/store'
 import { ui } from '../lib/ui'
 import { MiniSphere } from './MiniSphere'
+import { navigate } from './landing/route'
+
+// В приложении для Windows и на значке с главного экрана скачивать уже нечего
+const SHOW_DOWNLOAD = !isInstalledApp()
 
 /** Плавающая колонка слева: «Личное» + серверы */
 export function Dock() {
@@ -63,6 +68,14 @@ export function Dock() {
           <Compass size={20} />
         </DockItem>
       </div>
+
+      {SHOW_DOWNLOAD && (
+        <div className="dock__foot">
+          <DockItem tip="Скачать приложение" onClick={() => navigate('download')} className="dock__tile--download">
+            <Download size={19} />
+          </DockItem>
+        </div>
+      )}
     </nav>
   )
 }

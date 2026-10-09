@@ -4,6 +4,7 @@ import { CornerUpRight } from 'lucide-react'
 import type { Message, MessageFlavor } from '../../lib/api'
 import { isWishTime } from '../../lib/eggs'
 import { formatStamp, formatTime } from '../../lib/format'
+import { useLongPress } from '../../lib/mobile'
 import { messageRights, msgUi, useMsgUi } from '../../lib/msgActions'
 import { useChat } from '../../lib/store'
 import { MessageActions } from '../guild/MessageActions'
@@ -25,6 +26,25 @@ function onContextMenu(e: MouseEvent<HTMLElement>, message: Message) {
   const sel = window.getSelection()
   const selection = sel && !sel.isCollapsed && sel.anchorNode && e.currentTarget.contains(sel.anchorNode) ? sel.toString().trim() : ''
   msgUi.openMenu(message, { kind: 'point', x: e.clientX, y: e.clientY }, 'menu', 'context', selection)
+}
+
+/**
+ * Долгое нажатие пальцем — то же меню (iPhone не присылает contextmenu).
+ * Android присылает и contextmenu — второй раз меню не открываем.
+ */
+function useTouchMenu(message: Message) {
+  const press = useLongPress((x, y) => {
+    // клавиатуру убираем — меню выезжает снизу на её место
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    window.getSelection()?.removeAllRanges()
+    msgUi.openMenu(message, { kind: 'point', x, y }, 'menu', 'context')
+  })
+  const onMenu = (e: MouseEvent<HTMLElement>) => {
+    press.cancel()
+    if (press.justFired()) return e.preventDefault()
+    onContextMenu(e, message)
+  }
+  return { ...press.handlers, onContextMenu: onMenu }
 }
 
 /** Подсветка и «активность» строки сообщения: прыгнули к нему по ответу / открыто его меню */
@@ -51,11 +71,12 @@ interface ItemProps {
 export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
   const { flash, active, editing } = useRowState(m.id)
   const canReact = useChat((s) => messageRights(s, m).canReact)
+  const touch = useTouchMenu(m)
   return (
     <div
       className={`msg${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}${editing ? ' is-editing' : ''}`}
       data-mid={m.id}
-      onContextMenu={(e) => onContextMenu(e, m)}
+      {...touch}
     >
       {m.replyTo && <ReplyQuote reply={m.replyTo} channelId={m.channelId} />}
       {editing ? (
@@ -74,8 +95,9 @@ export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
 export function SystemItem({ message: m, fresh }: { message: Message; fresh: boolean }) {
   const { flash, active } = useRowState(m.id)
   const canReact = useChat((s) => messageRights(s, m).canReact)
+  const touch = useTouchMenu(m)
   return (
-    <div className={`msg msg--sys${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}`} data-mid={m.id} onContextMenu={(e) => onContextMenu(e, m)}>
+    <div className={`msg msg--sys${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}`} data-mid={m.id} {...touch}>
       <div className={`sysmsg${fresh ? ' sysmsg--fresh' : ''}`}>
         <span className="sysmsg__text">{m.content}</span>
         <time>{formatTime(m.createdAt)}</time>

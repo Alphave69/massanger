@@ -2,6 +2,7 @@ import { Lock, Users, Volume2 } from 'lucide-react'
 import type { Channel, Guild } from '../../lib/api'
 import { can, isPrivateChannel } from '../../lib/perms'
 import { ui, useUi } from '../../lib/ui'
+import { BackButton } from '../ChatView'
 import { VoiceStage } from './VoiceStage'
 
 /** Середина экрана, когда открыт голосовой канал сервера */
@@ -10,6 +11,7 @@ export function VoiceChannelView({ guild, channel }: { guild: Guild; channel: Ch
   return (
     <section className="main panel glow">
       <header className="main__head">
+        <BackButton />
         <div className="main__title">
           <span className="hash-tile">
             <Volume2 size={17} />

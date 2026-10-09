@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, LoaderCircle, MailCheck } from 'lucide-react'
 import { api, ApiError, type Me } from '../lib/api'
+import { isMobile } from '../lib/mobile'
 import { MiniSphere } from './MiniSphere'
 import { CodeInput, useCountdown } from './CodeInput'
 
@@ -140,8 +141,6 @@ export function AuthPage({ onAuth, leaving }: Props) {
   return (
     <div className={`auth${leaving ? ' auth--leaving' : ''}`}>
       <div className="auth__tagline" aria-hidden="true">
-        <span>твой сервер.</span>
-        <span>твои люди.</span>
         <span className="auth__tagline-meta">// nuntius · v0.4</span>
       </div>
 
@@ -186,7 +185,8 @@ export function AuthPage({ onAuth, leaving }: Props) {
                 value={login}
                 onChange={setLogin}
                 autoComplete="username"
-                autoFocus
+                // на телефоне клавиатура сразу закрыла бы полэкрана — пусть сначала увидят страницу
+                autoFocus={!isMobile()}
               />
               <div className={`auth-card__collapsible${mode === 'register' ? ' is-open' : ''}`}>
                 <div>

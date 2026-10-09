@@ -1,0 +1,1114 @@
+/* =====================================================================
+   Телефон: один экран за раз — «список» (док + каналы/лички) или сам чат,
+   участники и профиль выезжают справа, меню и окна — снизу.
+   Подключается последним и перекрывает остальное. Тот же запрос — MOBILE_QUERY в lib/mobile.ts.
+   --vvh / --vvtop — видимая часть экрана над клавиатурой (их ставит trackViewport()).
+   ===================================================================== */
+
+/* голосовая панель без кнопки «Экран» (телефоны так не умеют) */
+.voice-panel__actions--one {
+  grid-template-columns: 1fr;
+}
+
+/* ============ сенсорные экраны: без наведения ============ */
+
+@media (hover: none) {
+  /* кнопки у сообщения появляются при наведении — пальцем их не вызвать, вместо них долгое нажатие */
+  .msg-actions {
+    display: none;
+  }
+
+  /* подсказки по наведению после касания «залипали» бы на экране */
+  [data-tip]::before {
+    display: none;
+  }
+
+  /* долгое нажатие открывает меню, а не выделение текста и системную лупу */
+  .bubble,
+  .sysmsg,
+  .reply-quote {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* громкость и «крупно» у плитки звонка — всегда видны */
+  .tile__tools {
+    opacity: 1;
+  }
+
+  .reaction {
+    min-height: 32px;
+  }
+}
+
+/* поля ввода не мельче 16px — иначе iPhone приближает страницу при касании */
+@media (max-width: 760px), (pointer: coarse) {
+  input:not([type='range']):not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ============ телефонная раскладка ============ */
+
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  html,
+  body {
+    /* без «резинки» и обновления страницы жестом вниз */
+    overscroll-behavior: none;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* --- каркас: экраны лежат друг на друге и выезжают --- */
+
+  .shell {
+    display: block;
+    top: calc(var(--vvtop, 0px) / var(--ui-zoom, 1));
+    bottom: auto;
+    height: calc(var(--vvh, 100dvh) / var(--ui-zoom, 1));
+    padding: 0;
+    /* clip, а не hidden: иначе браузер сам «прокручивал» бы экраны вбок, показывая поле ввода */
+    overflow: hidden;
+    overflow: clip;
+  }
+
+  .shell > .dock,
+  .shell > .side {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 8px);
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    transition:
+      translate 0.42s var(--ease-out),
+      opacity 0.42s ease,
+      visibility 0s;
+  }
+
+  .shell > .dock {
+    left: calc(env(safe-area-inset-left) + 6px);
+    width: 64px;
+    padding: 10px 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+
+  .shell > .dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shell > .side {
+    left: calc(env(safe-area-inset-left) + 76px);
+    right: calc(env(safe-area-inset-right) + 8px);
+    width: auto;
+  }
+
+  /* середина — на весь экран, без рамки; приезжает справа поверх списка */
+  .shell > .main {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    border: 0;
+    border-radius: 0;
+    background: rgba(3, 3, 3, 0.9);
+    box-shadow: none;
+    transition:
+      translate 0.42s var(--ease-out),
+      visibility 0s;
+  }
+
+  .shell--nav > .main {
+    translate: 100% 0;
+    visibility: hidden;
+    transition:
+      translate 0.42s var(--ease-out),
+      visibility 0s 0.42s;
+  }
+
+  .shell--main > .dock,
+  .shell--main > .side {
+    translate: -22% 0;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      translate 0.42s var(--ease-out),
+      opacity 0.42s ease,
+      visibility 0s 0.42s;
+  }
+
+  /* --- док --- */
+
+  .dock__item {
+    padding: 3px 0;
+  }
+
+  .dock__tile {
+    width: 46px;
+    height: 46px;
+  }
+
+  .dock__badge {
+    right: 2px;
+  }
+
+  /* --- список каналов / личек --- */
+
+  .side__head {
+    padding: 16px 16px 12px;
+  }
+
+  .side__scroll {
+    padding: 6px 8px 10px;
+    overscroll-behavior: contain;
+  }
+
+  .side__label {
+    margin-top: 18px;
+  }
+
+  .channel {
+    height: 44px;
+  }
+
+  .nav-item {
+    height: 48px;
+  }
+
+  .channel__gear,
+  .chgroup__add {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+
+  .channel__gear {
+    margin-right: -4px;
+  }
+
+  .chgroup__add {
+    margin-top: 4px;
+  }
+
+  .dm-row {
+    min-height: 54px;
+    padding: 8px;
+  }
+
+  .voice-user {
+    min-height: 36px;
+  }
+
+  .menu__item {
+    padding: 12px;
+    font-size: 15px;
+  }
+
+  .userbar {
+    margin: 6px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .voice-panel__btn {
+    height: 38px;
+  }
+
+  /* --- шапка середины: ← назад, название, кнопки --- */
+
+  .main__head {
+    gap: 4px;
+    height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 6px 0 4px;
+  }
+
+  .main__back {
+    flex: none;
+    color: var(--text);
+  }
+
+  .main__back-dot {
+    position: absolute;
+    top: 8px;
+    right: 7px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text);
+    box-shadow:
+      0 0 0 2px var(--black),
+      0 0 10px #fff;
+    animation: pop-in 0.4s var(--ease-spring);
+  }
+
+  .main__title {
+    flex: 1;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .main__title h2 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 16px;
+  }
+
+  .main__title--user {
+    margin-left: 0;
+    padding: 4px 8px 4px 4px;
+  }
+
+  .main__sub,
+  .main__divider,
+  .friends-greet {
+    display: none;
+  }
+
+  .hash-tile {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    font-size: 16px;
+  }
+
+  .main__actions {
+    flex: none;
+    gap: 0;
+  }
+
+  /* друзья: вкладки — второй строкой, листаются вбок */
+  .friends-head {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    height: auto;
+    padding-bottom: 10px;
+    row-gap: 2px;
+  }
+
+  .friends-head > .main__back,
+  .friends-head > .main__title {
+    height: 56px;
+  }
+
+  .friends-head > .tabs {
+    order: 3;
+    flex: 1 0 100%;
+    padding: 0 6px;
+  }
+
+  .tab {
+    height: 38px;
+  }
+
+  /* --- чат --- */
+
+  .chat__scroll {
+    padding: 0 12px 14px;
+    overscroll-behavior: contain;
+  }
+
+  .welcome {
+    padding-top: 24px;
+  }
+
+  .welcome__hash {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 14px;
+    border-radius: 20px;
+    font-size: 34px;
+  }
+
+  .welcome h3 {
+    font-size: 23px;
+  }
+
+  .mgroup {
+    gap: 8px;
+  }
+
+  .mgroup__body {
+    max-width: 84%;
+  }
+
+  /* поле ввода — над «полоской» iPhone; с клавиатурой отступ не нужен */
+  .chat > .composer {
+    order: 2;
+  }
+
+  .composer {
+    padding: 0 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  html.kb-open .composer {
+    padding-bottom: 8px;
+  }
+
+  .composer__box {
+    gap: 6px;
+    padding: 4px 4px 4px 14px;
+    border-radius: 22px;
+  }
+
+  .composer textarea {
+    max-height: 140px;
+    padding: 9px 0;
+  }
+
+  .composer__send {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+  }
+
+  .reply-bar {
+    margin: 0 12px -1px;
+  }
+
+  /* крестик «не отвечать» — крупнее, но плашку не раздувает */
+  .reply-bar__close {
+    width: 36px;
+    height: 36px;
+    margin: -8px -4px -8px 0;
+  }
+
+  .cmd-hints {
+    left: 10px;
+    right: 10px;
+    max-height: 42vh;
+  }
+
+  .cmd-hints__keys {
+    display: none;
+  }
+
+  /* «печатает…» — плашкой над полем ввода, а не отдельной строкой под ним */
+  .chat > .typing {
+    order: 1;
+    position: relative;
+    z-index: 2;
+    align-self: flex-start;
+    max-width: calc(100% - 28px);
+    height: 24px;
+    margin: -26px 0 2px 14px;
+    padding: 0 10px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.88);
+    font-size: 12px;
+    pointer-events: none;
+  }
+
+  .chat > .typing:not(.is-visible) {
+    visibility: hidden;
+  }
+
+  .call-banner {
+    margin: 8px 10px 0;
+    gap: 10px;
+    padding-left: 12px;
+  }
+
+  .call-banner__avatars {
+    display: none;
+  }
+
+  /* --- правая колонка: выезжает поверх чата --- */
+
+  .aside-wrap,
+  .aside-wrap.is-open {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    width: min(340px, 88vw);
+    margin: 0;
+  }
+
+  .aside-wrap {
+    translate: 104% 0;
+    visibility: hidden;
+    transition:
+      translate 0.4s var(--ease-out),
+      visibility 0s 0.4s;
+  }
+
+  .aside-wrap.is-open {
+    translate: 0 0;
+    visibility: visible;
+    transition:
+      translate 0.4s var(--ease-out),
+      visibility 0s;
+  }
+
+  .aside {
+    width: 100%;
+    padding: calc(env(safe-area-inset-top) + 6px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 14px) 10px;
+    border-right: 0;
+    border-radius: 24px 0 0 24px;
+    background: rgba(5, 5, 5, 0.97);
+    overscroll-behavior: contain;
+  }
+
+  .aside--profile {
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) 0;
+  }
+
+  .profile__banner {
+    border-radius: 23px 0 0 0;
+  }
+
+  .member {
+    min-height: 50px;
+  }
+
+  .aside-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+  }
+
+  .aside-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* --- друзья --- */
+
+  .friends {
+    padding: 4px 10px calc(env(safe-area-inset-bottom) + 20px);
+  }
+
+  .friend {
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .friend__tag {
+    display: none;
+  }
+
+  .friend__actions {
+    gap: 6px;
+  }
+
+  .round-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 21px;
+  }
+
+  .round-btn--confirm {
+    width: 80px;
+  }
+
+  .add-friend {
+    padding: 18px 2px;
+  }
+
+  .add-friend h3 {
+    font-size: 21px;
+  }
+
+  .add-friend__box {
+    flex-wrap: wrap;
+    padding: 6px 6px 6px 14px;
+  }
+
+  .add-friend__box input {
+    flex: 1 1 160px;
+  }
+
+  .add-friend__box .btn {
+    flex: 1 1 100%;
+  }
+
+  .add-friend__hero {
+    margin-top: 36px;
+  }
+
+  .empty {
+    padding: 28px 16px;
+  }
+
+  /* --- голос: сцена во весь экран, кнопки внизу --- */
+
+  .stage--channel {
+    padding: 10px 10px calc(env(safe-area-inset-bottom) + 12px);
+  }
+
+  .stage__grid,
+  .stage__grid--1,
+  .stage__grid--2 {
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* троих и больше — по двое в ряд, плитки квадратные */
+  .stage--channel .stage__grid:not(.stage__grid--1):not(.stage__grid--2) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stage--channel .stage__grid:not(.stage__grid--1):not(.stage__grid--2) .tile {
+    aspect-ratio: 1;
+  }
+
+  .stage--call {
+    height: clamp(210px, 36dvh, 340px);
+    padding: 8px 10px;
+  }
+
+  .stage--call.has-focus {
+    height: 58dvh;
+  }
+
+  .stage__strip {
+    height: 84px;
+  }
+
+  .stage--lobby {
+    padding: 20px 16px calc(env(safe-area-inset-bottom) + 20px);
+  }
+
+  .stage__lobby {
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .stage__lobby h3 {
+    font-size: 21px;
+  }
+
+  .stage__lobby-actions {
+    flex-direction: column;
+    align-self: stretch;
+  }
+
+  .stage__lobby-actions .btn,
+  .stage__lobby-tip {
+    width: 100%;
+  }
+
+  .vc {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 12px;
+  }
+
+  .vc__btn {
+    width: 50px;
+    height: 50px;
+  }
+
+  .vc--compact .vc__btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tile__tool {
+    width: 38px;
+    height: 38px;
+  }
+
+  .incoming-call {
+    top: calc(env(safe-area-inset-top) + 10px);
+    gap: 12px;
+    width: calc(100vw - 20px);
+    padding: 12px 12px 12px 14px;
+  }
+
+  .incoming-call__avatar {
+    margin: -6px -4px;
+    scale: 0.82;
+  }
+
+  .incoming-call__text b {
+    font-size: 16px;
+  }
+
+  .call-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  /* --- уведомления — сверху, во всю ширину (снизу они закрывали бы поле ввода) --- */
+
+  .toasts {
+    top: calc(env(safe-area-inset-top) + 8px);
+    right: 10px;
+    bottom: auto;
+    left: 10px;
+    align-items: stretch;
+  }
+
+  .toast {
+    width: auto;
+    animation: toast-drop 0.5s var(--ease-spring);
+  }
+
+  .conn-banner {
+    top: env(safe-area-inset-top);
+  }
+
+  /* --- карточка профиля — снизу, во всю ширину --- */
+
+  .profile-card {
+    top: auto !important;
+    right: 0;
+    bottom: 0;
+    left: 0 !important;
+    width: auto !important;
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-bottom: 0;
+    border-radius: 26px 26px 0 0;
+    animation: sheet-up 0.4s var(--ease-out);
+  }
+
+  .profile-card .profile__banner {
+    border-radius: 25px 25px 0 0;
+  }
+
+  /* --- окна — снизу, над клавиатурой --- */
+
+  .modal-backdrop {
+    top: calc(var(--vvtop, 0px) / var(--ui-zoom, 1));
+    bottom: auto;
+    height: calc(var(--vvh, 100dvh) / var(--ui-zoom, 1));
+    place-items: end stretch;
+    padding: calc(env(safe-area-inset-top) + 24px) 0 0;
+  }
+
+  .modal {
+    max-width: none;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 30px 18px calc(env(safe-area-inset-bottom) + 18px);
+    border-bottom: 0;
+    border-radius: 26px 26px 0 0;
+    animation: sheet-up 0.42s var(--ease-out);
+  }
+
+  html.kb-open .modal {
+    padding-bottom: 18px;
+  }
+
+  /* «ручка» сверху — как у шторки */
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 2px;
+    background: var(--line-3);
+  }
+
+  .modal__close {
+    top: 14px;
+    right: 10px;
+  }
+
+  .modal h2 {
+    font-size: 20px;
+  }
+
+  .modal__actions {
+    margin-top: 20px;
+  }
+
+  .modal__actions .btn {
+    flex: 1;
+  }
+
+  .invite {
+    flex-wrap: wrap;
+  }
+
+  .invite__code {
+    flex: 1 1 100%;
+    padding: 10px;
+  }
+
+  .invite__copy {
+    flex: 1;
+  }
+
+  /* --- меню сообщения — шторкой снизу --- */
+
+  .msg-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    animation: fade-in 0.2s ease;
+  }
+
+  .msg-menu.msg-menu--sheet {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 20px 12px calc(env(safe-area-inset-bottom) + 12px);
+    border-bottom: 0;
+    border-radius: 26px 26px 0 0;
+    animation: sheet-up 0.34s var(--ease-out);
+  }
+
+  .msg-menu__grip {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 2px;
+    background: var(--line-3);
+  }
+
+  .msg-menu--sheet .msg-menu__reacts {
+    gap: 6px;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+  }
+
+  .msg-menu--sheet .msg-menu__react {
+    height: 48px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 24px;
+  }
+
+  .msg-menu--sheet .msg-menu__react:hover {
+    transform: none;
+  }
+
+  .msg-menu--sheet .msg-menu__item {
+    padding: 14px 12px;
+    border-radius: 12px;
+    font-size: 15.5px;
+  }
+
+  .msg-menu--sheet .msg-menu__item > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .msg-menu--sheet.msg-menu--picker {
+    padding: 20px 6px calc(env(safe-area-inset-bottom) + 8px) 8px;
+  }
+
+  .msg-menu--sheet .emoji-picker {
+    width: 100%;
+    max-height: min(52dvh, 400px);
+  }
+
+  .msg-menu--sheet .emoji-picker__title {
+    padding: 8px 6px 6px;
+  }
+
+  .msg-menu--sheet .emoji-picker__btn {
+    height: 44px;
+    font-size: 25px;
+  }
+
+  /* --- настройки: сначала список разделов, раздел — отдельным экраном --- */
+
+  .settings {
+    display: block;
+    top: calc(var(--vvtop, 0px) / var(--ui-zoom, 1));
+    bottom: auto;
+    height: calc(var(--vvh, 100dvh) / var(--ui-zoom, 1));
+    overflow: hidden;
+    overflow: clip;
+  }
+
+  .settings__nav,
+  .settings__content {
+    position: absolute;
+    inset: 0;
+    overscroll-behavior: contain;
+    transition:
+      translate 0.4s var(--ease-out),
+      opacity 0.4s ease,
+      visibility 0s;
+  }
+
+  .settings__nav {
+    justify-content: stretch;
+    border-right: 0;
+    background: rgba(4, 4, 4, 0.97);
+  }
+
+  .settings__nav-inner {
+    width: 100%;
+    padding: env(safe-area-inset-top) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 28px)
+      calc(env(safe-area-inset-left) + 12px);
+  }
+
+  .settings__content {
+    display: block;
+    background: rgba(2, 2, 2, 0.97);
+  }
+
+  .settings.is-list .settings__content {
+    translate: 100% 0;
+    visibility: hidden;
+    transition:
+      translate 0.4s var(--ease-out),
+      visibility 0s 0.4s;
+  }
+
+  .settings.is-section .settings__nav {
+    translate: -22% 0;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      translate 0.4s var(--ease-out),
+      opacity 0.4s ease,
+      visibility 0s 0.4s;
+  }
+
+  .settings__tools {
+    display: none;
+  }
+
+  .settings__content-inner {
+    padding: 18px calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 48px) calc(env(safe-area-inset-left) + 16px);
+  }
+
+  .settings__mtop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 60px;
+    margin-bottom: 4px;
+    padding-left: 6px;
+  }
+
+  .settings__mtitle {
+    margin: 0;
+    font: 700 22px/1.2 var(--display);
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .settings__mclose {
+    flex: none;
+    border: 1px solid var(--line-2);
+    border-radius: 50%;
+    color: var(--text);
+  }
+
+  .settings__mbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) calc(env(safe-area-inset-right) + 10px) 0 calc(env(safe-area-inset-left) + 4px);
+    border-bottom: 1px solid var(--line);
+    background: rgba(2, 2, 2, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .settings__mback {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 44px;
+    padding: 0 12px 0 8px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .settings__mback:active {
+    background: var(--hover);
+  }
+
+  .settings__me {
+    padding: 10px;
+  }
+
+  .settings__item {
+    height: 50px;
+    padding: 0 12px;
+    font-size: 15.5px;
+  }
+
+  .settings__item:hover {
+    padding-left: 12px;
+  }
+
+  /* в списке разделов — стрелочки «внутрь», без подсветки выбранного */
+  .settings__item:not(.settings__item--danger)::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    margin: 0 4px 0 auto;
+    border-top: 2px solid var(--text-3);
+    border-right: 2px solid var(--text-3);
+    rotate: 45deg;
+  }
+
+  .settings__item.is-active {
+    background: none;
+    color: var(--text-2);
+    box-shadow: none;
+  }
+
+  .settings__item:active {
+    background: var(--hover);
+  }
+
+  .set-head h2 {
+    font-size: 23px;
+  }
+
+  .account-card__head {
+    flex-wrap: wrap;
+    padding: 0 16px;
+  }
+
+  .account-card__rows {
+    margin: 16px 10px 10px;
+    padding: 4px 12px;
+  }
+
+  .account-card__name {
+    overflow-wrap: anywhere;
+  }
+
+  .set-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* редактор роли: кнопки «выше/ниже/удалить» — второй строкой, название целиком */
+  .roles__editor {
+    padding: 14px 12px 16px;
+  }
+
+  .role-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .role-head__tools {
+    flex: 1 0 100%;
+  }
+
+  .role-head__delete {
+    margin-left: auto;
+  }
+
+  /* обзор сервера: значок сверху, название под ним во всю ширину */
+  .server-overview {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .server-overview__icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    font-size: 22px;
+  }
+
+  .savebar {
+    bottom: calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* --- вход и регистрация: сфера сверху, карточка под ней целиком --- */
+
+  .auth__panel {
+    min-height: 100dvh;
+    padding: max(29dvh, calc(env(safe-area-inset-top) + 170px)) 14px calc(env(safe-area-inset-bottom) + 24px);
+  }
+
+  .auth-card {
+    padding: 22px 18px;
+    border-radius: 24px;
+  }
+
+  .auth-card__brand {
+    margin-bottom: 18px;
+  }
+
+  .auth-tabs {
+    margin-bottom: 20px;
+  }
+
+  .auth-tabs button {
+    height: 40px;
+  }
+
+  .auth-card__title {
+    font-size: 23px;
+  }
+}
+
+/* совсем узкие телефоны (320–360): док поуже, кнопки «я» плотнее — чтобы имя не превращалось в «Д…» */
+@media (max-width: 360px) {
+  .shell > .dock {
+    width: 58px;
+  }
+
+  .shell > .side {
+    left: calc(env(safe-area-inset-left) + 68px);
+  }
+
+  .dock__tile {
+    width: 42px;
+    height: 42px;
+  }
+
+  .userbar__actions .icon-btn {
+    width: 34px;
+  }
+}
+
+/* шторки и уведомления сверху */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes toast-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.96);
+  }
+}

@@ -31,7 +31,13 @@ export function HomeSidebar({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <div className="side__scroll">
-        <button className={`nav-item${view.kind === 'home' ? ' is-active' : ''}`} onClick={() => chat.setView({ kind: 'home', tab: 'online' })}>
+        <button
+          className={`nav-item${view.kind === 'home' ? ' is-active' : ''}`}
+          onClick={() => {
+            chat.setView({ kind: 'home', tab: 'online' })
+            ui.showMain()
+          }}
+        >
           <Users size={18} />
           <span>Друзья</span>
           {requests > 0 && <span className="count-badge">{requests}</span>}
@@ -83,7 +89,10 @@ function DmRow({ dm, active, index }: { dm: DmRef; active: boolean; index: numbe
     <button
       className={`dm-row${active ? ' is-active' : ''}${unread ? ' has-unread' : ''}`}
       style={{ animationDelay: `${index * 40}ms` }}
-      onClick={() => chat.setView({ kind: 'dm', dmId: dm.id })}
+      onClick={() => {
+        chat.setView({ kind: 'dm', dmId: dm.id })
+        ui.showMain()
+      }}
     >
       {dm.kind === 'group' ? <GroupAvatar memberIds={dm.memberIds} size={34} /> : user && <Avatar user={user} size={34} status={status} />}
       <span className="dm-row__text">
