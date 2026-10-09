@@ -89,6 +89,7 @@ export function VoiceSection() {
               />
             </div>
             {!canPickOutput && <p className="muted">Этот браузер не даёт выбрать устройство вывода — звук идёт в системное по умолчанию.</p>}
+            <FindMic onFound={refresh} />
             <div className="set-grid">
               <Slider label="Громкость микрофона" value={s.inputVolume} min={0} max={200} step={5} format={(v) => `${v}%`} onChange={(v) => setSetting('inputVolume', v)} />
               <Slider label="Громкость звука" value={s.outputVolume} min={0} max={200} step={5} format={(v) => `${v}%`} onChange={(v) => setSetting('outputVolume', v)} />
@@ -263,6 +264,93 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
       {testing && opened && <p className="muted">Слушаем: {opened}</p>}
       <Toggle label="Слышать себя" hint="Только в наушниках — иначе будет свист" checked={loopback} onChange={setLoopback} />
     </Group>
+  )
+}
+
+const LISTEN_MS = 3500
+
+/**
+ * «Найти мой микрофон»: слушаем все микрофоны сразу, пока человек говорит, и выбираем тот,
+ * где голос громче всего. Спасает, когда по умолчанию открывается не тот (у приложения для Windows
+ * нет выбора микрофона из браузера). Если тишина везде — подсказываем, кто не пускает
+ */
+function FindMic({ onFound }: { onFound: () => Promise<void> }) {
+  const [left, setLeft] = useState(0)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const run = async () => {
+    setResult(null)
+    const streams: { label: string; id: string; stream: MediaStream }[] = []
+    let ctx: AudioContext | null = null
+    try {
+      // без разрешения браузер не покажет устройства — спрашиваем один раз
+      const first = await navigator.mediaDevices.getUserMedia({ audio: true })
+      first.getTracks().forEach((t) => t.stop())
+      const list = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications',
+      )
+      const opened = await Promise.allSettled(
+        list.map((d) =>
+          navigator.mediaDevices
+            .getUserMedia({ audio: { deviceId: { exact: d.deviceId }, noiseSuppression: false, echoCancellation: false, autoGainControl: false } })
+            .then((stream) => ({ label: d.label || 'Микрофон', id: d.deviceId, stream })),
+        ),
+      )
+      for (const o of opened) if (o.status === 'fulfilled') streams.push(o.value)
+      if (!streams.length) {
+        setResult({ ok: false, text: 'Не открылся ни один микрофон. Проверь, что он подключён и что Windows и антивирус пускают к нему Nuntius' })
+        return
+      }
+      ctx = new AudioContext()
+      const c = ctx
+      const meters = streams.map((x) => {
+        const analyser = c.createAnalyser()
+        analyser.fftSize = 1024
+        c.createMediaStreamSource(x.stream).connect(analyser)
+        return { ...x, analyser, buf: new Float32Array(analyser.fftSize), loudest: -Infinity, any: false }
+      })
+      const until = performance.now() + LISTEN_MS
+      while (performance.now() < until) {
+        setLeft(Math.ceil((until - performance.now()) / 1000))
+        for (const m of meters) {
+          m.analyser.getFloatTimeDomainData(m.buf)
+          let sum = 0
+          for (const v of m.buf) sum += v * v
+          if (sum > 0) m.any = true
+          m.loudest = Math.max(m.loudest, 20 * Math.log10(Math.sqrt(sum / m.buf.length) + 1e-12))
+        }
+        await new Promise((r) => window.setTimeout(r, 50))
+      }
+      const best = meters.reduce((a, b) => (b.loudest > a.loudest ? b : a))
+      if (!meters.some((m) => m.any)) {
+        setResult({
+          ok: false,
+          text: 'Все микрофоны дают полную тишину — звук не пускают. Чаще всего это антивирус (у Kaspersky есть защита микрофона — разреши в ней Nuntius) или Windows: Параметры → Конфиденциальность и защита → Микрофон',
+        })
+      } else if (best.loudest < -55) {
+        setResult({ ok: false, text: `Голоса не слышно ни в одном микрофоне (громче всех «${best.label}»). Проверь, что микрофон включён — на гарнитуре бывает кнопка выключения` })
+      } else {
+        setSetting('inputDeviceId', best.id)
+        setResult({ ok: true, text: `Нашёл: «${best.label}» — выбран. Нажми «Проверить» ниже, полоска должна прыгать` })
+        await onFound()
+      }
+    } catch (err) {
+      setResult({ ok: false, text: micProblem(err) })
+    } finally {
+      for (const x of streams) x.stream.getTracks().forEach((t) => t.stop())
+      void ctx?.close()
+      setLeft(0)
+    }
+  }
+
+  return (
+    <div className="find-mic">
+      <button className="btn btn--outline btn--sm" disabled={left > 0} onClick={() => void run()}>
+        <Mic size={15} /> {left > 0 ? `Говори что-нибудь… ${left}` : 'Найти мой микрофон'}
+      </button>
+      {!result && left === 0 && <span className="muted">Не слышно? Нажми и говори 3 секунды — сам выберу микрофон, в котором тебя слышно</span>}
+      {result && <div className={`notice${result.ok ? '' : ' notice--error'}`}>{result.text}</div>}
+    </div>
   )
 }
 

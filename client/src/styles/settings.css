@@ -1119,6 +1119,25 @@ p.muted {
   color: #fff;
 }
 
+/* --- «найти мой микрофон» --- */
+
+.find-mic {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+
+.find-mic > .btn {
+  flex: none;
+}
+
+.find-mic > .notice {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 /* --- проверка микрофона --- */
 
 .mic-test {
