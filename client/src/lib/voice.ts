@@ -1096,16 +1096,11 @@ useSettings.subscribe((s, prev) => {
   }
   if (s.outputDeviceId !== prev.outputDeviceId) void applySink()
   if (s.screenMode !== prev.screenMode) applyScreenMode(get().localScreen)
-  // Переключили «через сервер» посреди звонка — пересобираем пути со всеми, не выходя из голоса
+  // Переключили «через сервер» посреди звонка — соединения со всеми строим заново (как после обрыва):
+  // перезапуск ICE на старом соединении оставлял прямой путь. Экран, камера и микрофон остаются
   if (s.forceRelay !== prev.forceRelay) {
-    for (const peer of peers.values()) {
-      try {
-        peer.pc.setConfiguration(rtcConfig())
-        peer.pc.restartIce()
-      } catch {
-        // соединение уже закрыто
-      }
-    }
+    const roomId = get().roomId
+    if (roomId && get().status === 'connected') rejoin(roomId)
   }
   applyGate()
   applyVolumes()
