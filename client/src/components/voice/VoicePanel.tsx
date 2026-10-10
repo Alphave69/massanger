@@ -12,6 +12,11 @@ export function VoicePanel() {
   const roomId = useVoice((s) => s.roomId)
   const status = useVoice((s) => s.status)
   const ping = useVoice((s) => s.ping)
+  // через сервер идёт связь хотя бы с одним — пусть будет видно в подсказке к пингу
+  const relay = useVoice((s) => {
+    const paths = Object.values(s.links).map((l) => l.path)
+    return paths.includes('relay-tcp') ? 'через сервер (TCP)' : paths.includes('relay-udp') ? 'через сервер' : paths.includes('direct') ? 'напрямую' : null
+  })
   const camera = useVoice((s) => Boolean(s.localCamera))
   const screen = useVoice((s) => Boolean(s.localScreen))
   // подписка на чат нужна, чтобы название обновлялось при переименовании
@@ -22,7 +27,8 @@ export function VoicePanel() {
   const quality = ping === null ? 'unknown' : ping < 120 ? 'good' : ping < 300 ? 'ok' : 'bad'
   // немного юмора на крайних значениях
   const pingTip =
-    ping === null ? 'Пинг измеряется…' : ping <= 5 ? `Пинг ${ping} мс · ⚡ скорость света` : ping >= 400 ? `Пинг ${ping} мс · 🐢 черепашья почта` : `Пинг ${ping} мс`
+    (ping === null ? 'Пинг измеряется…' : ping <= 5 ? `Пинг ${ping} мс · ⚡ скорость света` : ping >= 400 ? `Пинг ${ping} мс · 🐢 черепашья почта` : `Пинг ${ping} мс`) +
+    (relay ? ` · ${relay}` : '')
 
   return (
     <div className={`voice-panel voice-panel--${status}`}>

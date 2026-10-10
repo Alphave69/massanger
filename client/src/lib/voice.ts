@@ -41,9 +41,28 @@ interface VoiceState {
   calling: string | null
   noMic: boolean
   ping: number | null
+  /** Как идёт связь с каждым: напрямую или через сервер, и что с демонстрацией экрана */
+  links: Record<string, PeerLink>
   /** Громкость каждого человека для меня (0…200 %) и «заглушить для себя» */
   volumes: Record<string, number>
   localMutes: Record<string, boolean>
+}
+
+/** Сколько реально доходит видео: кадры в секунду, размер, килобиты */
+export interface VideoStat {
+  fps: number
+  width: number
+  height: number
+  kbps: number
+}
+
+export interface PeerLink {
+  /** direct — напрямую; relay-* — через наш сервер (TURN): по UDP или по TCP (хуже всего для видео) */
+  path: 'direct' | 'relay-udp' | 'relay-tcp' | null
+  /** Чужой экран, который я смотрю */
+  screenIn?: VideoStat
+  /** Мой экран этому человеку; limit — во что упирается кодировщик */
+  screenOut?: VideoStat & { limit: string }
 }
 
 const VOLUMES_KEY = 'nuntius.volumes'
@@ -68,6 +87,7 @@ const IDLE: Omit<VoiceState, 'rooms' | 'incoming' | 'volumes' | 'localMutes'> = 
   calling: null,
   noMic: false,
   ping: null,
+  links: {},
 }
 
 export const useVoice = create<VoiceState>(() => ({ ...IDLE, rooms: {}, incoming: [], ...loadVolumes() }))
@@ -584,19 +604,57 @@ function stopLoops() {
   timers = []
 }
 
+/** Прошлые счётчики байт — чтобы посчитать скорость за последние секунды */
+const lastBytes = new Map<string, { bytes: number; ts: number }>()
+
+function kbpsFor(key: string, bytes: number, ts: number) {
+  const prev = lastBytes.get(key)
+  lastBytes.set(key, { bytes, ts })
+  return prev && ts > prev.ts ? Math.round(((bytes - prev.bytes) * 8) / (ts - prev.ts)) : 0
+}
+
+/** Пинг, путь (напрямую или через сервер) и сколько реально идёт видео экрана — раз в пару секунд */
 async function measurePing() {
   const rtts: number[] = []
+  const links: Record<string, PeerLink> = {}
+  const { roomId, rooms, remoteStreams, localScreen } = get()
+  const myScreenTrack = localScreen?.getVideoTracks()[0]?.id
   for (const peer of peers.values()) {
     try {
       const stats = await peer.pc.getStats()
+      const link: PeerLink = { path: null }
+      const member = roomId ? rooms[roomId]?.find((m) => m.userId === peer.userId) : undefined
+      const theirScreenTrack = member?.screenStream ? remoteStreams[member.screenStream]?.getVideoTracks()[0]?.id : undefined
       stats.forEach((r) => {
-        if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') rtts.push(r.currentRoundTripTime * 1000)
+        if (r.type === 'transport' && r.selectedCandidatePairId) {
+          const pair = stats.get(r.selectedCandidatePairId)
+          if (typeof pair?.currentRoundTripTime === 'number') rtts.push(pair.currentRoundTripTime * 1000)
+          const local = pair && stats.get(pair.localCandidateId)
+          const remote = pair && stats.get(pair.remoteCandidateId)
+          if (local && remote) {
+            const relayed = local.candidateType === 'relay' || remote.candidateType === 'relay'
+            link.path = !relayed ? 'direct' : local.candidateType === 'relay' && local.relayProtocol && local.relayProtocol !== 'udp' ? 'relay-tcp' : 'relay-udp'
+          }
+        }
+        if (r.type === 'inbound-rtp' && r.kind === 'video' && theirScreenTrack && r.trackIdentifier === theirScreenTrack) {
+          link.screenIn = { fps: Math.round(r.framesPerSecond ?? 0), width: r.frameWidth ?? 0, height: r.frameHeight ?? 0, kbps: kbpsFor(`${peer.userId}:${r.id}`, r.bytesReceived ?? 0, r.timestamp) }
+        }
+        if (r.type === 'outbound-rtp' && r.kind === 'video' && myScreenTrack && r.mediaSourceId && stats.get(r.mediaSourceId)?.trackIdentifier === myScreenTrack) {
+          link.screenOut = {
+            fps: Math.round(r.framesPerSecond ?? 0),
+            width: r.frameWidth ?? 0,
+            height: r.frameHeight ?? 0,
+            kbps: kbpsFor(`${peer.userId}:${r.id}`, r.bytesSent ?? 0, r.timestamp),
+            limit: r.qualityLimitationReason ?? 'none',
+          }
+        }
       })
+      links[peer.userId] = link
     } catch {
       // соединение закрылось — пропускаем
     }
   }
-  set({ ping: rtts.length ? Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length) : null })
+  set({ ping: rtts.length ? Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length) : null, links })
 }
 
 function updateCalling() {
@@ -662,7 +720,8 @@ export async function joinVoice(roomId: string) {
 function rejoin(roomId: string) {
   stopLoops()
   for (const userId of [...peers.keys()]) closePeer(userId)
-  set({ status: 'connecting', speaking: {}, ping: null })
+  lastBytes.clear()
+  set({ status: 'connecting', speaking: {}, ping: null, links: {} })
   sendJoin(roomId, ++joinSeq, true)
 }
 
@@ -795,6 +854,7 @@ export async function toggleScreen() {
     } as DisplayMediaStreamOptions
     const stream = await navigator.mediaDevices.getDisplayMedia(options)
     if (!get().roomId || get().localScreen) return stream.getTracks().forEach((t) => t.stop())
+    applyScreenMode(stream)
     set({ localScreen: stream })
     sendState({ screen: true, screenStream: stream.id })
     for (const peer of peers.values()) for (const t of stream.getTracks()) peer.screenSenders.push(peer.pc.addTrack(t, stream))
@@ -806,6 +866,16 @@ export async function toggleScreen() {
   } finally {
     screenBusy = false
   }
+}
+
+/**
+ * «Плавно» (motion): когда интернета или процессора не хватает, браузер снижает разрешение и держит кадры —
+ * для игр и видео, и через узкий канал (в том числе через наш сервер) не превращается в слайд-шоу.
+ * «Чётко» (detail): держит резкость и роняет кадры — для текста и кода
+ */
+function applyScreenMode(stream: MediaStream | null) {
+  const track = stream?.getVideoTracks()[0]
+  if (track) track.contentHint = useSettings.getState().screenMode === 'sharp' ? 'detail' : 'motion'
 }
 
 /** Модерация голоса на сервере: заглушить / снять заглушение / отключить человека (нужны права в канале) */
@@ -1015,6 +1085,7 @@ useSettings.subscribe((s, prev) => {
     if (get().roomId) void acquireMic()
   }
   if (s.outputDeviceId !== prev.outputDeviceId) void applySink()
+  if (s.screenMode !== prev.screenMode) applyScreenMode(get().localScreen)
   applyGate()
   applyVolumes()
   updateCalling()

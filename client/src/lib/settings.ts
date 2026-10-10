@@ -32,6 +32,8 @@ export interface Settings {
   autoGain: boolean
   muted: boolean
   deafened: boolean
+  /** Демонстрация экрана: smooth — держим кадры (игры, видео), sharp — держим резкость (текст, код) */
+  screenMode: 'smooth' | 'sharp'
 
   // секретное: открывается пасхалкой (7 кликов по версии в настройках)
   devMode: boolean
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoGain: true,
   muted: false,
   deafened: false,
+  screenMode: 'smooth',
 
   devMode: false,
   labNegative: false,

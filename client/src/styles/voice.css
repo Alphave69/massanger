@@ -519,6 +519,23 @@
   animation: live 1.4s ease-in-out infinite;
 }
 
+/* сколько реально идёт демонстрация: кадры, размер, скорость, путь */
+.tile__stats {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  max-width: calc(100% - 64px);
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.72);
+  font: 10.5px var(--mono);
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 .tile__tools {
   position: absolute;
   top: 8px;

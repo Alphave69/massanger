@@ -144,6 +144,33 @@ interface TileProps {
   onToggleFocus: () => void
 }
 
+const PATH_LABEL: Record<string, string> = { direct: 'напрямую', 'relay-udp': 'через сервер', 'relay-tcp': 'через сервер (TCP)' }
+const LIMIT_LABEL: Record<string, string> = { bandwidth: 'не хватает интернета', cpu: 'не хватает процессора' }
+
+/**
+ * Сколько реально идёт демонстрация: кадры, размер, скорость и путь (напрямую или через наш сервер).
+ * Свой экран — по самому медленному зрителю и во что упирается кодировщик
+ */
+function ScreenStats({ userId, isMe }: { userId: string; isMe: boolean }) {
+  const text = useVoice((s) => {
+    if (isMe) {
+      const outs = Object.values(s.links).filter((l) => l.screenOut)
+      if (!outs.length) return null
+      const worst = outs.reduce((a, b) => (b.screenOut!.fps < a.screenOut!.fps ? b : a))
+      const o = worst.screenOut!
+      const relayed = outs.some((l) => l.path?.startsWith('relay'))
+      const limit = LIMIT_LABEL[o.limit]
+      return `отдаю ${o.fps} к/с · ${o.height}p · ${(o.kbps / 1000).toFixed(1)} Мбит/с${relayed ? ' · через сервер' : ''}${limit ? ` · ${limit}` : ''}`
+    }
+    const link = s.links[userId]
+    const i = link?.screenIn
+    if (!i) return null
+    return `${i.fps} к/с · ${i.height}p · ${(i.kbps / 1000).toFixed(1)} Мбит/с${link.path ? ` · ${PATH_LABEL[link.path]}` : ''}`
+  })
+  if (!text) return null
+  return <span className="tile__stats">{text}</span>
+}
+
 function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
   const { member, kind } = info
   const meId = useChat((s) => s.me!.id)
@@ -170,6 +197,7 @@ function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
           {kind === 'screen' && <span className="tile__wait">Ждём картинку…</span>}
         </div>
       )}
+      {kind === 'screen' && stream && <ScreenStats userId={member.userId} isMe={isMe} />}
       <div className="tile__label">
         {kind === 'screen' && <MonitorUp size={14} />}
         <span className="truncate">{kind === 'screen' ? `Экран · ${name}` : isMe ? `${name} (ты)` : name}</span>

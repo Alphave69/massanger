@@ -124,6 +124,17 @@ export function VoiceSection() {
         )}
       </Group>
 
+      <Group title="Демонстрация экрана">
+        <Choice
+          value={s.screenMode}
+          onChange={(v) => setSetting('screenMode', v)}
+          options={[
+            { value: 'smooth', label: 'Плавно', hint: 'Для игр и видео: если интернета не хватает, картинка станет мягче, но не будет дёргаться' },
+            { value: 'sharp', label: 'Чётко', hint: 'Для текста и кода: резкость сохраняется, но на слабом интернете кадров будет меньше' },
+          ]}
+        />
+      </Group>
+
       <Group title="Обработка голоса">
         <Toggle label="Шумоподавление" hint="Убирает гул, клавиатуру и вентилятор" checked={s.noiseSuppression} onChange={(v) => setSetting('noiseSuppression', v)} />
         <Toggle label="Эхоподавление" hint="Чтобы друзья не слышали себя из твоих колонок" checked={s.echoCancellation} onChange={(v) => setSetting('echoCancellation', v)} />
