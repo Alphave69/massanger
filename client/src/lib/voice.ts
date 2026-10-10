@@ -131,6 +131,16 @@ let micStream: MediaStream | null = null
 let micSource: MediaStreamAudioSourceNode | null = null
 let selfLevel = { level: 0, open: false }
 let iceServers: RTCIceServer[] = []
+
+/**
+ * «Связь через сервер»: только TURN-кандидаты — всё идёт через наш сервер, а не напрямую.
+ * Нужно, когда прямой канал между людьми душат по дороге (видели 0,2 Мбит/с напрямую при свободном сервере).
+ * Без TURN в настройках сервера так не соединиться вообще — тогда остаёмся на обычном режиме
+ */
+function rtcConfig(): RTCConfiguration {
+  const hasTurn = iceServers.some((x) => [x.urls].flat().some((u) => /^turns?:/.test(u)))
+  return { iceServers, iceTransportPolicy: useSettings.getState().forceRelay && hasTurn ? 'relay' : 'all' }
+}
 const peers = new Map<string, Peer>()
 let timers: number[] = []
 let stopRingback: (() => void) | null = null
@@ -364,7 +374,7 @@ function setPeerState(userId: string, state: RTCPeerConnectionState | null) {
 
 function createPeer(userId: string, joinedAt: number, initiator: boolean): Peer {
   closePeer(userId)
-  const pc = new RTCPeerConnection({ iceServers })
+  const pc = new RTCPeerConnection(rtcConfig())
   const peer: Peer = {
     userId,
     joinedAt,
@@ -1086,6 +1096,17 @@ useSettings.subscribe((s, prev) => {
   }
   if (s.outputDeviceId !== prev.outputDeviceId) void applySink()
   if (s.screenMode !== prev.screenMode) applyScreenMode(get().localScreen)
+  // Переключили «через сервер» посреди звонка — пересобираем пути со всеми, не выходя из голоса
+  if (s.forceRelay !== prev.forceRelay) {
+    for (const peer of peers.values()) {
+      try {
+        peer.pc.setConfiguration(rtcConfig())
+        peer.pc.restartIce()
+      } catch {
+        // соединение уже закрыто
+      }
+    }
+  }
   applyGate()
   applyVolumes()
   updateCalling()

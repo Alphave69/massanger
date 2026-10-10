@@ -135,6 +135,15 @@ export function VoiceSection() {
         />
       </Group>
 
+      <Group title="Соединение">
+        <Toggle
+          label="Связь через сервер"
+          hint="Если демонстрация или голос тормозят «напрямую» (видно на плашке экрана) — пустить всё через сервер Nuntius. Хватит, чтобы включил один из двоих"
+          checked={s.forceRelay}
+          onChange={(v) => setSetting('forceRelay', v)}
+        />
+      </Group>
+
       <Group title="Обработка голоса">
         <Toggle label="Шумоподавление" hint="Убирает гул, клавиатуру и вентилятор" checked={s.noiseSuppression} onChange={(v) => setSetting('noiseSuppression', v)} />
         <Toggle label="Эхоподавление" hint="Чтобы друзья не слышали себя из твоих колонок" checked={s.echoCancellation} onChange={(v) => setSetting('echoCancellation', v)} />

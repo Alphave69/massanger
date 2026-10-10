@@ -4,8 +4,10 @@ fingerprint
 lt-cred-mech
 user=__TURN_USER__:__TURN_PASS__
 realm=__DOMAIN__
-min-port=49160
-max-port=49200
+# порты ретрансляции: по 1–2 на каждое соединение в звонке, узкий диапазон кончался
+min-port=49152
+max-port=65535
+no-tcp-relay
 no-cli
 no-tls
 no-dtls

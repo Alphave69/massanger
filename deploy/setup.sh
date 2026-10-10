@@ -199,7 +199,7 @@ run ufw allow 443/tcp
 run ufw allow 443/udp
 run ufw allow 3478/tcp
 run ufw allow 3478/udp
-run ufw allow 49160:49200/udp
+run ufw allow 49152:65535/udp
 run ufw --force enable
 ok "Открыты только нужные порты (сайт, голос, SSH)"
 

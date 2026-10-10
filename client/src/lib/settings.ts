@@ -34,6 +34,8 @@ export interface Settings {
   deafened: boolean
   /** Демонстрация экрана: smooth — держим кадры (игры, видео), sharp — держим резкость (текст, код) */
   screenMode: 'smooth' | 'sharp'
+  /** Голос и видео — только через наш сервер (TURN): когда прямой канал между людьми режут или он узкий */
+  forceRelay: boolean
 
   // секретное: открывается пасхалкой (7 кликов по версии в настройках)
   devMode: boolean
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   deafened: false,
   screenMode: 'smooth',
+  forceRelay: false,
 
   devMode: false,
   labNegative: false,
