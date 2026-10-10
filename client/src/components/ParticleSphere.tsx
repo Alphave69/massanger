@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useSettings } from '../lib/settings'
+import { useVoice } from '../lib/voice'
 
 /**
  * Вращающаяся сфера из точек — живёт на фоне всего приложения.
@@ -34,7 +35,9 @@ function layoutFor(mode: SphereMode, w: number, h: number): Layout {
   const wide = w >= 900
   // В приложении яркость берётся из настроек («Внешний вид»), можно и совсем выключить
   const { sphere, sphereBrightness } = useSettings.getState()
-  const ambientA = sphere ? sphereBrightness : 0
+  // Показываем экран или камеру — сфера гаснет: процессор нужнее кодировщику видео
+  const { localScreen, localCamera } = useVoice.getState()
+  const ambientA = sphere && !localScreen && !localCamera ? sphereBrightness : 0
   if (mode === 'hero') {
     return wide
       ? { cx: w * 0.34, cy: h / 2, r: Math.min(w * 0.22, h * 0.36), a: 1 }
@@ -190,6 +193,7 @@ export function ParticleSphere({ mode, className }: Props) {
     let tiltX = 0.38
     let last = performance.now()
     let raf = 0
+    let blank = false // холст уже очищен — пока сфера погашена, не трогаем его
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 16.667, 3)
@@ -207,12 +211,14 @@ export function ParticleSphere({ mode, className }: Props) {
       // Катится: поворот в плоскости экрана ровно на пройденный путь / радиус
       rotZ += (cur.cx - prevCx) / Math.max(cur.r, 1)
 
-      // Сфера выключена в настройках и уже погасла — не тратим процессор
+      // Сфера выключена (или идёт видео) и уже погасла — не тратим процессор, холст чистим один раз
       if (target.a === 0 && cur.a < 0.004) {
-        ctx.clearRect(0, 0, w, h)
+        if (!blank) ctx.clearRect(0, 0, w, h)
+        blank = true
         raf = requestAnimationFrame(frame)
         return
       }
+      blank = false
       const reduceMotion = reduced()
 
       spin *= Math.pow(0.95, dt)

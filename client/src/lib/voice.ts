@@ -378,8 +378,51 @@ function createPeer(userId: string, joinedAt: number, initiator: boolean): Peer 
     setPeerState(userId, pc.connectionState)
     if (pc.connectionState === 'failed') pc.restartIce()
   }
+  // договорились (в том числе после включения экрана посреди звонка) — потолки для экрана
+  pc.onsignalingstatechange = () => pc.signalingState === 'stable' && tunePeerScreen(peer)
   if (initiator) addLocalTracks(peer)
+  tuneScreenSenders() // зрителей стало больше — всем потолок пониже
   return peer
+}
+
+/**
+ * Демонстрация экрана: потолок разрешения и битрейта для каждого зрителя.
+ * Связь «каждый с каждым» — экран кодируется отдельно для каждого, а Chromium при нехватке сил
+ * держит резкость и роняет кадры: без потолка у 3–5 зрителей выходило 1–2 кадра в секунду.
+ * 1–2 зрителя — до 1080p, больше — до 720p; общий исходящий поток ~6 Мбит/с делим на всех
+ */
+function screenLimits() {
+  const viewers = Math.max(1, peers.size)
+  return {
+    maxHeight: viewers >= 3 ? 720 : 1080,
+    maxBitrate: Math.max(800_000, Math.min(2_500_000, Math.floor(6_000_000 / viewers))),
+  }
+}
+
+function tunePeerScreen(peer: Peer) {
+  const limits = screenLimits()
+  for (const sender of peer.screenSenders) void tuneScreenSender(sender, limits)
+}
+
+function tuneScreenSenders() {
+  for (const peer of peers.values()) tunePeerScreen(peer)
+}
+
+async function tuneScreenSender(sender: RTCRtpSender, { maxHeight, maxBitrate }: ReturnType<typeof screenLimits>) {
+  const track = sender.track
+  if (track?.kind !== 'video') return
+  const { width = 0, height = 0 } = track.getSettings()
+  const scaleResolutionDownBy = Math.max(1, height / maxHeight, width / ((maxHeight * 16) / 9))
+  try {
+    const params = sender.getParameters()
+    if (!params.encodings?.length) return // ещё не договорились — настроим, когда соединение встанет
+    const [first] = params.encodings
+    if (first.scaleResolutionDownBy === scaleResolutionDownBy && first.maxBitrate === maxBitrate && first.maxFramerate === 30) return
+    params.encodings[0] = { ...first, scaleResolutionDownBy, maxBitrate, maxFramerate: 30 }
+    await sender.setParameters(params)
+  } catch {
+    // соединение закрылось или занято договорённостью — настроим при следующей
+  }
 }
 
 /**
@@ -500,7 +543,9 @@ function closePeer(userId: string) {
   peer.pc.onicecandidate = null
   peer.pc.ontrack = null
   peer.pc.onconnectionstatechange = null
+  peer.pc.onsignalingstatechange = null
   peer.pc.close()
+  tuneScreenSenders() // зрителей меньше — остальным можно почётче
   dropRemoteAudio(peer.voice)
   dropRemoteAudio(peer.screenAudio)
   setPeerState(userId, null)
@@ -742,8 +787,9 @@ export async function toggleScreen() {
   screenBusy = true
   try {
     // Звук системы — без звука самого Nuntius: иначе собеседники услышали бы себя с задержкой
+    // Больше 1080p30 не снимаем: 1440p и 4K в разы дороже кодировать, а смотрят всё равно в окошке
     const options = {
-      video: { frameRate: { ideal: 30 } },
+      video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 30, max: 30 } },
       audio: { restrictOwnAudio: true, suppressLocalAudioPlayback: false },
       systemAudio: 'include',
     } as DisplayMediaStreamOptions
@@ -752,6 +798,7 @@ export async function toggleScreen() {
     set({ localScreen: stream })
     sendState({ screen: true, screenStream: stream.id })
     for (const peer of peers.values()) for (const t of stream.getTracks()) peer.screenSenders.push(peer.pc.addTrack(t, stream))
+    tuneScreenSenders()
     // «Прекратить доступ» в панели браузера
     stream.getVideoTracks()[0]?.addEventListener('ended', () => get().localScreen === stream && void toggleScreen())
   } catch {
