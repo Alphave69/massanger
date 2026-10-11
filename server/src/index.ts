@@ -8,7 +8,7 @@ import express, { type Response } from 'express'
 import { Server, type Socket } from 'socket.io'
 import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
-import { checkCode, cooldownLeft, dropCode, issueCode, pendingData, RESEND_AFTER } from './codes.js'
+import { checkCode, cooldownLeft, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 import { createVoice } from './voice.js'
 import { on } from './safe.js'
@@ -187,19 +187,18 @@ function passwordProblem(password: unknown): string | null {
 
 /**
  * Отправить письмо с кодом. code === null — прошлый код ещё свежий, письмо не шлём.
- * Если почта не ушла — забываем код и отвечаем понятной ошибкой (false).
+ * Почта недоступна (хостинг закрыл почтовые порты и т. п.) — код не теряем: печатаем его в журнал сервера,
+ * владелец передаст его сам; клиенту — manual, чтобы сказать человеку, у кого спросить код
  */
-async function mailCode(res: Response, key: string, email: string, code: string | null, purpose: CodePurpose) {
-  if (code === null) return true
+async function mailCode(email: string, code: string | null, purpose: CodePurpose): Promise<{ manual?: true }> {
+  if (code === null) return {}
   try {
     await sendCode(email, code, purpose)
-    return true
+    return {}
   } catch (err) {
-    dropCode(key)
-    const why = explainMailError(err)
-    console.error(`  ✖ Письмо на ${email} не ушло: ${why}`)
-    fail(res, 502, `Не получилось отправить письмо: ${why}`)
-    return false
+    console.error(`  ✖ Письмо на ${email} не ушло: ${explainMailError(err)}`)
+    console.log(`  ✉  Почта недоступна — код для ${email}: ${code} (передай его человеку сам)`)
+    return { manual: true }
   }
 }
 
@@ -225,8 +224,8 @@ app.post('/api/auth/register', async (req, res) => {
   const key = `register:${email}`
   const data: PendingRegistration = { email, username, displayName: name, passwordHash: await hashPassword(password) }
   const { code, resendIn } = issueCode(key, data)
-  if (!(await mailCode(res, key, email, code, 'register'))) return
-  res.json({ email, resendIn })
+  const sent = await mailCode(email, code, 'register')
+  res.json({ email, resendIn, ...sent })
 })
 
 /** Регистрация, шаг 2: код из письма верный — создаём аккаунт */
@@ -264,8 +263,8 @@ app.post('/api/auth/reset', async (req, res) => {
   if (!user) return res.json({ email, resendIn: RESEND_AFTER / 1000 })
   const key = `reset:${email}`
   const { code, resendIn } = issueCode(key, { userId: user.id })
-  if (!(await mailCode(res, key, email, code, 'reset'))) return
-  res.json({ email, resendIn })
+  const sent = await mailCode(email, code, 'reset')
+  res.json({ email, resendIn, ...sent })
 })
 
 /** Забыл пароль, шаг 2: код + новый пароль → входим, остальные сеансы выкидываем */
@@ -392,8 +391,8 @@ app.post('/api/me/email', requireAuth, async (req, res) => {
     return fail(res, 429, `Подожди ${wait} с — потом можно отправить код на другой адрес`)
   }
   const { code, resendIn } = issueCode(key, { email })
-  if (!(await mailCode(res, key, email, code, 'bind'))) return
-  res.json({ email, resendIn })
+  const sent = await mailCode(email, code, 'bind')
+  res.json({ email, resendIn, ...sent })
 })
 
 /** Привязать почту, шаг 2: код из письма */

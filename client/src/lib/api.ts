@@ -324,7 +324,8 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
 
 type AuthResponse = { token: string; user: Me }
 /** Код отправлен на почту; resendIn — через сколько секунд можно запросить новый */
-type CodeSent = { email: string; resendIn: number }
+/** manual — почта на сервере недоступна: код не ушёл письмом, он у владельца сервера (в журнале) */
+type CodeSent = { email: string; resendIn: number; manual?: boolean }
 type FriendsResponse = { friends: FriendEntry[] }
 
 export const api = {

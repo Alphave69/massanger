@@ -163,6 +163,7 @@ function EmailBind({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [resendIn, setResendIn] = useCountdown()
+  const [manual, setManual] = useState(false)
 
   const send = async () => {
     if (busy) return
@@ -171,6 +172,7 @@ function EmailBind({ onDone }: { onDone: () => void }) {
     try {
       const res = await api.startEmailBind(email.trim(), password)
       setResendIn(res.resendIn)
+      setManual(Boolean(res.manual))
       setStage('code')
       setCode('')
     } catch (err) {
@@ -237,7 +239,13 @@ function EmailBind({ onDone }: { onDone: () => void }) {
       ) : (
         <>
           <span className="muted">
-            Код отправлен на <b>{email.trim()}</b>. Письмо идёт до минуты — загляни и в «Спам».
+            {manual ? (
+              'Почта на сервере сейчас не работает — письмо не придёт. Код есть у владельца сервера: напиши ему, он пришлёт.'
+            ) : (
+              <>
+                Код отправлен на <b>{email.trim()}</b>. Письмо идёт до минуты — загляни и в «Спам».
+              </>
+            )}
           </span>
           <CodeInput value={code} onChange={setCode} onComplete={(v) => void verify(v)} autoFocus disabled={busy} />
           <div className="inline-edit__line">

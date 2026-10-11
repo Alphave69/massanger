@@ -26,6 +26,8 @@ export function AuthPage({ onAuth, leaving }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [resendIn, setResendIn] = useCountdown()
+  // почта на сервере недоступна — код не письмом, а у владельца сервера
+  const [manual, setManual] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   const fail = (err: unknown) => {
@@ -69,6 +71,7 @@ export function AuthPage({ onAuth, leaving }: Props) {
       const res = await api.register(email, login, displayName, password)
       setEmail(res.email)
       setResendIn(res.resendIn)
+      setManual(Boolean(res.manual))
       if (step !== 'verify') go('verify')
     })
 
@@ -83,6 +86,7 @@ export function AuthPage({ onAuth, leaving }: Props) {
       const res = await api.requestReset(email)
       setEmail(res.email)
       setResendIn(res.resendIn)
+      setManual(Boolean(res.manual))
       if (step !== 'reset') go('reset')
     })
 
@@ -112,13 +116,17 @@ export function AuthPage({ onAuth, leaving }: Props) {
 
   const subtitle = {
     form: mode === 'register' ? 'Пара секунд — и ты в чате с друзьями.' : 'Рады видеть тебя снова.',
-    verify: (
+    verify: manual ? (
+      'Почта на сервере сейчас не работает — письмо не придёт. Код есть у владельца сервера: напиши ему, он пришлёт.'
+    ) : (
       <>
         Мы отправили 6-значный код на <b>{email}</b>. Введи его ниже — письмо идёт до минуты, загляни и в «Спам».
       </>
     ),
     forgot: 'Введи почту, привязанную к аккаунту, — пришлём код для нового пароля.',
-    reset: (
+    reset: manual ? (
+      'Почта на сервере сейчас не работает — письмо не придёт. Код есть у владельца сервера: напиши ему, он пришлёт.'
+    ) : (
       <>
         Если <b>{email}</b> привязана к аккаунту, код уже в почте. Введи его и придумай новый пароль.
       </>
