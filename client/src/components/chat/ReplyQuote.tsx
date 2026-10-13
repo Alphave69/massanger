@@ -4,6 +4,7 @@ import { SYSTEM_AUTHOR, type ReplyRef } from '../../lib/api'
 import { findLoaded, focusComposer, jumpToMessage, msgUi, useMsgUi } from '../../lib/msgActions'
 import { guildOfChannel, roleColor } from '../../lib/perms'
 import { chat, useChat } from '../../lib/store'
+import { readable } from '../../lib/mentions'
 import { Avatar } from '../Avatar'
 
 /** Текст для цитаты — в одну строку */
@@ -28,7 +29,7 @@ function useAuthor(authorId: string, channelId: string) {
 export function ReplyQuote({ reply, channelId }: { reply: ReplyRef; channelId: string }) {
   const { user, name, color } = useAuthor(reply.authorId, channelId)
   const live = useChat((s) => findLoaded(s, channelId, reply.id)?.content)
-  const text = oneLine(live ?? reply.content)
+  const text = oneLine(readable(live ?? reply.content, channelId))
 
   const jump = () => {
     if (!jumpToMessage(reply.id)) chat.toast({ title: 'Сообщение не найдено', text: 'Его удалили — или оно слишком далеко в истории' })
@@ -66,7 +67,7 @@ export function ReplyBar({ channelId }: { channelId: string }) {
       <CornerUpLeft size={15} className="reply-bar__icon" />
       <span className="reply-bar__text truncate">
         Ответ <b style={color ? { color } : undefined}>{name}</b>
-        <span className="reply-bar__snippet">: {oneLine(target.content)}</span>
+        <span className="reply-bar__snippet">: {oneLine(readable(target.content, channelId))}</span>
       </span>
       <button
         type="button"

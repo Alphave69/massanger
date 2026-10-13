@@ -7,7 +7,9 @@ import { formatStamp, formatTime } from '../../lib/format'
 import { useLongPress } from '../../lib/mobile'
 import { messageRights, msgUi, useMsgUi } from '../../lib/msgActions'
 import { useChat } from '../../lib/store'
+import { mentionsMe } from '../../lib/mentions'
 import { MessageActions } from '../guild/MessageActions'
+import { MentionText } from './MentionText'
 import { MessageEditor } from './MessageEditor'
 import { Reactions } from './Reactions'
 import { ReplyQuote } from './ReplyQuote'
@@ -71,10 +73,12 @@ interface ItemProps {
 export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
   const { flash, active, editing } = useRowState(m.id)
   const canReact = useChat((s) => messageRights(s, m).canReact)
+  // меня упомянули — полоска слева и мягкий фон (пересланное не в счёт: это чужой разговор)
+  const pinged = useChat((s) => !m.forwarded && mentionsMe(s, m))
   const touch = useTouchMenu(m)
   return (
     <div
-      className={`msg${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}${editing ? ' is-editing' : ''}`}
+      className={`msg${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}${editing ? ' is-editing' : ''}${pinged ? ' is-mention' : ''}`}
       data-mid={m.id}
       {...touch}
     >
@@ -146,7 +150,7 @@ function Body({ message: m, name, color }: { message: Message; name: string; col
             <b style={color ? { color } : undefined}>{name}</b>{' '}
           </>
         )}
-        {m.content}
+        <MentionText message={m} />
         {m.editedAt && (
           <span className="bubble__edited" data-tip={`Изменено: ${formatStamp(m.editedAt).toLowerCase()}`}>
             (изменено)

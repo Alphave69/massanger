@@ -5,6 +5,7 @@ import { Check, Copy, Forward, IdCard, Pencil, Plus, Reply, Trash2 } from 'lucid
 import type { Message } from '../../lib/api'
 import { copyText, deleteMessage, findLoaded, messageRights, msgUi, QUICK_REACTIONS, rememberEmoji, useMsgUi, type MenuState } from '../../lib/msgActions'
 import { reactToMessage } from '../../lib/realtime'
+import { readable } from '../../lib/mentions'
 import { uiZoom, useSettings } from '../../lib/settings'
 import { activeChannelId, useChat } from '../../lib/store'
 import { useUi } from '../../lib/ui'
@@ -155,7 +156,7 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
   }
 
   const copy = async (what: 'text' | 'id') => {
-    const ok = await copyText(what === 'id' ? message.id : menu.selection || message.content)
+    const ok = await copyText(what === 'id' ? message.id : menu.selection || readable(message.content, message.channelId))
     if (!ok) return msgUi.closeMenu(true)
     // коротко показываем «Скопировано» — и закрываем
     setCopied(what)

@@ -6,7 +6,8 @@ import { useUi } from './ui'
 
 export type FriendsTab = 'online' | 'all' | 'pending' | 'add'
 
-export type View = { kind: 'home'; tab: FriendsTab } | { kind: 'dm'; dmId: string } | { kind: 'guild'; guildId: string }
+/** channelId у сервера — только чтобы открыть нужный канал (из уведомления); в состоянии не хранится */
+export type View = { kind: 'home'; tab: FriendsTab } | { kind: 'dm'; dmId: string } | { kind: 'guild'; guildId: string; channelId?: string }
 
 export interface FriendRef {
   userId: string
@@ -43,6 +44,8 @@ interface ChatState {
   messages: Record<string, Message[]>
   typing: Record<string, Record<string, number>>
   unread: Record<string, number>
+  /** Сколько непрочитанных упоминаний меня в канале («@» у канала и сервера) */
+  mentions: Record<string, number>
   view: View
   channelByGuild: Record<string, string>
   connected: boolean
@@ -60,6 +63,7 @@ const initial: ChatState = {
   messages: {},
   typing: {},
   unread: {},
+  mentions: {},
   view: { kind: 'home', tab: 'online' },
   channelByGuild: {},
   connected: true,
@@ -78,12 +82,14 @@ function forgetChannels(st: ChatState, ids: string[]): Partial<ChatState> {
   const messages = { ...st.messages }
   const typing = { ...st.typing }
   const unread = { ...st.unread }
+  const mentions = { ...st.mentions }
   for (const id of ids) {
     delete messages[id]
     delete typing[id]
     delete unread[id]
+    delete mentions[id]
   }
-  return { messages, typing, unread }
+  return { messages, typing, unread, mentions }
 }
 
 function withUsers(users: Record<string, User>, list: (User | null | undefined)[]) {
@@ -169,6 +175,7 @@ export const chat = {
   },
 
   setView(view: View) {
+    if (view.kind === 'guild' && view.channelId) return chat.openGuildChannel(view.guildId, view.channelId)
     set({ view })
     chat.markRead()
   },
@@ -182,6 +189,7 @@ export const chat = {
   markRead() {
     const id = activeChannelId()
     if (id && get().unread[id]) set((st) => ({ unread: { ...st.unread, [id]: 0 } }))
+    if (id && get().mentions[id]) set((st) => ({ mentions: { ...st.mentions, [id]: 0 } }))
   },
 
   setConnected(connected: boolean) {
@@ -270,6 +278,11 @@ export const chat = {
       if (!list?.some((x) => x.id === m.id)) return {}
       return { messages: { ...st.messages, [m.channelId]: list.map((x) => (x.id === m.id ? m : x)) } }
     })
+  },
+
+  /** Меня упомянули в канале, который сейчас не на экране */
+  bumpMention(channelId: string) {
+    set((st) => ({ mentions: { ...st.mentions, [channelId]: (st.mentions[channelId] ?? 0) + 1 } }))
   },
 
   /** Пропущенный звонок — как непрочитанное в переписке */

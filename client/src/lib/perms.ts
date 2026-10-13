@@ -25,6 +25,10 @@ export const PERMISSION_INFO: Record<Permission, { label: string; description: s
   VIEW_CHANNEL: { label: 'Видеть каналы', description: 'Видеть канал и читать в нём сообщения. Без этого канала как будто нет.' },
   SEND_MESSAGES: { label: 'Отправлять сообщения', description: 'Писать в текстовых каналах.' },
   MANAGE_MESSAGES: { label: 'Управлять сообщениями', description: 'Удалять чужие сообщения.' },
+  MENTION_EVERYONE: {
+    label: 'Упоминать @everyone и @here',
+    description: 'Звать сразу всех (@everyone) или всех, кто сейчас в сети (@here). Без этого права такие слова — просто текст.',
+  },
   CONNECT: { label: 'Подключаться', description: 'Заходить в голосовые каналы.' },
   SPEAK: { label: 'Говорить', description: 'Без этого права в голосе можно только слушать.' },
   VIDEO: { label: 'Видео', description: 'Включать камеру и показывать экран.' },
@@ -35,13 +39,13 @@ export const PERMISSION_INFO: Record<Permission, { label: string; description: s
 /** Группы прав в настройках роли */
 export const PERMISSION_GROUPS: { title: string; perms: Permission[] }[] = [
   { title: 'Общие', perms: ['ADMINISTRATOR', 'MANAGE_SERVER', 'MANAGE_ROLES', 'MANAGE_CHANNELS', 'KICK_MEMBERS', 'CREATE_INVITE'] },
-  { title: 'Текст', perms: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES'] },
+  { title: 'Текст', perms: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'] },
   { title: 'Голос', perms: ['CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS'] },
 ]
 
 /** Какие права настраиваются в канале каждого типа */
 export const CHANNEL_PERMS_BY_TYPE: Record<Channel['type'], Permission[]> = {
-  text: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES'],
+  text: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'],
   voice: ['VIEW_CHANNEL', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS'],
 }
 

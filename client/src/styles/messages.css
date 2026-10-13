@@ -883,3 +883,227 @@
   opacity: 1;
   transform: none;
 }
+
+/* ============ упоминания ============ */
+
+/* @Имя, @Роль, @everyone — «плашка» прямо в тексте */
+.mention {
+  display: inline;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+button.mention {
+  font: inherit;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+button.mention:hover {
+  background: var(--line-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* роль — её цветом */
+.mention--role.has-color {
+  color: var(--mention);
+  background: color-mix(in srgb, var(--mention) 16%, transparent);
+}
+
+/* зовут меня — плашка ярче */
+.mention.is-me {
+  background: var(--line-2);
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+
+/* в своём (белом) пузыре — тёмные плашки */
+.mgroup--mine .mention {
+  background: rgba(0, 0, 0, 0.09);
+  color: var(--black);
+  box-shadow: none;
+}
+
+.mgroup--mine .mention--role.has-color {
+  color: color-mix(in srgb, var(--mention) 55%, black);
+  background: color-mix(in srgb, var(--mention) 22%, transparent);
+}
+
+/* сообщение, где упомянули меня: полоска слева и мягкий фон */
+.msg.is-mention {
+  position: relative;
+}
+
+.msg.is-mention::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--text);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.msg.is-mention > .bubble {
+  background: linear-gradient(var(--hover), var(--hover)), var(--bubble);
+  border-color: var(--line-3);
+}
+
+/* «@» у канала в списке и у сервера в колонке слева */
+.mention-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--text);
+  color: var(--black);
+  font: 700 10.5px/1 var(--mono);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  animation: pop-in 0.4s var(--ease-spring);
+}
+
+.dock__badge--mention {
+  font-size: 11px;
+}
+
+/* подсказка упоминаний — того же вида, что подсказка команд */
+.mention-hint {
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+}
+
+.mention-hint__name {
+  min-width: 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.mention-hint__sub {
+  min-width: 0;
+  margin-left: auto;
+  font: 12px var(--mono);
+  color: var(--text-3);
+}
+
+.mention-hint__icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raise-2);
+  color: var(--text-2);
+}
+
+/* ============ анти-спам: «Воу-воу, полегче» ============ */
+
+.slow-warn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 12px 8px;
+  padding: 9px 8px 9px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line-2);
+  background: var(--raise);
+  box-shadow: 0 0 28px rgba(255, 255, 255, 0.08);
+  animation: slow-in 0.45s var(--ease-spring);
+}
+
+@keyframes slow-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+.slow-warn__count {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  color: var(--text);
+  font: 700 14px/1 var(--mono);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+}
+
+.slow-warn__text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.slow-warn__text b {
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.slow-warn__close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--text-3);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.slow-warn__close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* пауза ещё идёт: кнопка отправки притушена, а попытка отправить — лёгкая дрожь */
+.composer__box.is-cooling .composer__send {
+  opacity: 0.45;
+}
+
+.composer__box.is-shake {
+  animation: slow-shake 0.4s ease;
+}
+
+@keyframes slow-shake {
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+.reduce-motion .composer__box.is-shake,
+.reduce-motion .slow-warn {
+  animation: none;
+}

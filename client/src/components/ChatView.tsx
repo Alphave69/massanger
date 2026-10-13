@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ArrowLeft, ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
 import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
@@ -17,6 +17,10 @@ import { UserTags } from './UserTags'
 import { GroupAvatar } from './groups/GroupAvatar'
 import { MessageItem, SystemItem } from './chat/MessageItem'
 import { ReplyBar } from './chat/ReplyQuote'
+import { MentionHints } from './chat/MentionHints'
+import { SlowWarning, useSlowLeft } from './chat/SlowWarning'
+import { mentionables, suggest, toTokens, type Suggestion } from '../lib/mentions'
+import { nudgeSlow, useSlow } from '../lib/antispam'
 import { VoiceStage } from './voice/VoiceStage'
 
 const GROUP_WINDOW = 7 * 60 * 1000
@@ -470,19 +474,64 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
   // подсказка команд: закрыли по Esc — не показываем, пока не сотрут «/»
   const [hintsClosed, setHintsClosed] = useState(false)
   const [sel, setSel] = useState(0)
+  // где курсор — от него ищем «@…» для подсказки упоминаний
+  const [caret, setCaret] = useState(0)
+  // подсказку упоминаний закрыли по Esc — не показываем для этого же «@»
+  const [mentionClosedAt, setMentionClosedAt] = useState(-1)
   const ref = useRef<HTMLTextAreaElement>(null)
+  // куда поставить курсор после вставки упоминания
+  const caretAfter = useRef<number | null>(null)
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = '0px'
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    if (caretAfter.current !== null) {
+      el.setSelectionRange(caretAfter.current, caretAfter.current)
+      caretAfter.current = null
+    }
   }, [value])
 
   // Пока набирают первое слово после «/», подсказываем команды
   const query = /^\/(\S*)$/.exec(value)?.[1]?.toLowerCase()
   const matches = query === undefined || hintsClosed ? [] : COMMANDS.filter((c) => c.name.startsWith(query))
   const active = Math.min(sel, Math.max(0, matches.length - 1))
+
+  // «@» в начале слова перед курсором — подсказываем, кого упомянуть
+  const mentionAt = /(^|[\s(«"'])@([^\s@]{0,32})$/.exec(value.slice(0, caret))
+  const mentionStart = mentionAt ? caret - mentionAt[2].length - 1 : -1
+  // список зависит от участников, ролей и того, кто в сети — на них и подписываемся
+  const guilds = useChat((s) => s.guilds)
+  const people = useChat((s) => s.users)
+  const presence = useChat((s) => s.presence)
+  const mentionList = useMemo(
+    () => (mentionAt && mentionStart !== mentionClosedAt && !matches.length ? suggest(useChat.getState(), channelId, mentionAt[2]) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mentionAt?.[2], mentionStart, mentionClosedAt, matches.length, channelId, guilds, people, presence],
+  )
+  const mentionActive = Math.min(sel, Math.max(0, mentionList.length - 1))
+
+  const pickMention = (s: Suggestion) => {
+    const head = value.slice(0, mentionStart) + s.label + ' '
+    caretAfter.current = head.length
+    setValue(head + value.slice(caret).replace(/^ /, ''))
+    setCaret(head.length)
+    setSel(0)
+    ref.current?.focus()
+  }
+
+  // Анти-спам: пока идёт пауза, не отправляем — поле только вздрагивает
+  const slowLeft = useSlowLeft()
+  const nudge = useSlow((s) => s.nudge)
+  const firstNudge = useRef(nudge)
+  const [shake, setShake] = useState(false)
+  useEffect(() => {
+    if (nudge === firstNudge.current) return
+    setShake(true)
+    const timer = window.setTimeout(() => setShake(false), 420)
+    return () => window.clearTimeout(timer)
+  }, [nudge])
 
   const complete = (c: Command) => {
     setValue(`/${c.name} `)
@@ -493,8 +542,14 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
   const replyId = useMsgUi((s) => s.replies[channelId])
 
   const send = async () => {
-    const content = value.trim()
-    if (!content || sending) return
+    const typed = value.trim()
+    if (!typed || sending) return
+    if (slowLeft > 0) {
+      nudgeSlow()
+      return
+    }
+    // «@логин» и «@Роль» → метки упоминаний (их проверит сервер)
+    const content = toTokens(typed, mentionables(useChat.getState(), channelId))
     setSending(true)
     const ok = await sendMessage(channelId, content, replyId)
     setSending(false)
@@ -520,6 +575,25 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionList.length > 0 && !e.nativeEvent.isComposing) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        setSel((mentionActive + step + mentionList.length) % mentionList.length)
+        return
+      }
+      if ((e.key === 'Tab' && !e.shiftKey) || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault()
+        pickMention(mentionList[mentionActive])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setMentionClosedAt(mentionStart)
+        return
+      }
+    }
     if (matches.length > 0 && !e.nativeEvent.isComposing) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
@@ -567,6 +641,7 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
 
   return (
     <div className="composer">
+      {mentionList.length > 0 && <MentionHints items={mentionList} active={mentionActive} onHover={setSel} onPick={pickMention} />}
       {matches.length > 0 && (
         <div className="cmd-hints" role="listbox" aria-label="Команды">
           <div className="cmd-hints__head">Команды</div>
@@ -594,8 +669,9 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
           </div>
         </div>
       )}
+      <SlowWarning left={slowLeft} />
       <ReplyBar channelId={channelId} />
-      <div className="composer__box glow">
+      <div className={`composer__box glow${shake ? ' is-shake' : ''}${slowLeft > 0 ? ' is-cooling' : ''}`}>
         <textarea
           ref={ref}
           rows={1}
@@ -604,10 +680,12 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
           autoFocus={!isMobile()}
           placeholder={placeholder}
           aria-autocomplete="list"
-          aria-expanded={matches.length > 0}
+          aria-expanded={matches.length > 0 || mentionList.length > 0}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onChange={(e) => {
             const v = e.target.value
             setValue(v)
+            setCaret(e.target.selectionStart ?? v.length)
             setSel(0)
             if (!v.startsWith('/')) setHintsClosed(false)
             if (v) sendTyping(channelId)
