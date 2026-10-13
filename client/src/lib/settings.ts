@@ -36,6 +36,8 @@ export interface Settings {
   screenMode: 'smooth' | 'sharp'
   /** Голос и видео — только через наш сервер (TURN): когда прямой канал между людьми режут или он узкий */
   forceRelay: boolean
+  /** Камера для звонков: '' — системная по умолчанию */
+  cameraDeviceId: string
 
   // секретное: открывается пасхалкой (7 кликов по версии в настройках)
   devMode: boolean
@@ -71,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   deafened: false,
   screenMode: 'smooth',
   forceRelay: false,
+  cameraDeviceId: '',
 
   devMode: false,
   labNegative: false,

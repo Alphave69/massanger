@@ -1,15 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import { createPortal } from 'react-dom'
-import { Fullscreen, HeadphoneOff, Lock, Maximize2, Mic, MicOff, Minimize2, MonitorUp, Phone, PhoneOff, Shield, SlidersHorizontal, Video } from 'lucide-react'
-import type { Guild, VoiceMember } from '../../lib/api'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { Fullscreen, HeadphoneOff, Lock, Maximize2, MicOff, Minimize2, MonitorUp, MoreHorizontal, Phone, Video, VolumeX } from 'lucide-react'
+import type { VoiceMember } from '../../lib/api'
 import { plural } from '../../lib/format'
-import { can, guildOfChannel, outranks } from '../../lib/perms'
-import { useIsMobile } from '../../lib/mobile'
-import { uiZoom } from '../../lib/settings'
+import { can, guildOfChannel } from '../../lib/perms'
+import { useIsMobile, useLongPress } from '../../lib/mobile'
 import { useChat } from '../../lib/store'
-import { joinVoice, moderateVoice, setUserVolume, toggleCamera, toggleLocalMute, useVoice } from '../../lib/voice'
+import { clearWatch, joinVoice, toggleCamera, useVoice } from '../../lib/voice'
+import { useVoiceMenu, voiceMenu } from '../../lib/voiceMenu'
 import { Avatar } from '../Avatar'
-import { Popover } from '../guild/Popover'
 import { VoiceControls } from './VoiceControls'
 
 const EMPTY: VoiceMember[] = []
@@ -33,6 +31,10 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   // Голосовой канал сервера (в личках и группах — undefined): от него зависят права
   const guild = useChat((s) => guildOfChannel(s.guilds, roomId))
   const [focus, setFocus] = useState<string | null>(null)
+  /** Плитка, которую развернуть во весь экран, как только она станет крупной (двойной клик) */
+  const [fullKey, setFullKey] = useState<string | null>(null)
+  // «Смотреть» по метке «в эфире» в списке канала — чью демонстрацию открыть крупно
+  const watch = useVoice((s) => (s.watch?.roomId === roomId ? s.watch.userId : null))
   const inRoom = myRoom === roomId
   const mobile = useIsMobile()
 
@@ -49,11 +51,44 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
   const cols = variant === 'call' ? (mobile ? Math.min(Math.max(gridCount, 1), 2) : gridCount <= 3 ? Math.max(gridCount, 1) : Math.ceil(gridCount / 2)) : undefined
 
   const tileKeys = tiles.map((t) => t.key).join('|')
-  const screenKey = tiles.find((t) => t.kind === 'screen')?.key ?? null
+  /** Чужие демонстрации, которые уже видели: новая выводится крупно сама (если крупно никого нет) */
+  const seenScreens = useRef(new Set<string>())
   useEffect(() => {
-    // Демонстрацию экрана сразу выводим крупно; ушедший участник — снимаем «крупно»
-    setFocus((f) => (f && tileKeys.split('|').includes(f) ? f : screenKey))
-  }, [tileKeys, screenKey])
+    const keys = tileKeys.split('|')
+    const screens = keys.filter((k) => k.endsWith(':screen') && k !== `${meId}:screen`)
+    const fresh = screens.find((k) => !seenScreens.current.has(k))
+    seenScreens.current = new Set(screens)
+    setFocus((f) => {
+      if (f && keys.includes(f)) return f
+      // крупная плитка ушла — показываем следующую демонстрацию, если есть; свернул сам — не навязываем
+      if (f) return fresh ?? screens[0] ?? null
+      return fresh ?? null
+    })
+  }, [tileKeys, meId])
+
+  // Пришли по метке «в эфире» — его экран крупно (когда мы в комнате и экран есть)
+  useEffect(() => {
+    if (!watch || !inRoom) return
+    const key = `${watch}:screen`
+    if (tileKeys.split('|').includes(key)) setFocus(key)
+    clearWatch()
+  }, [watch, inRoom, tileKeys])
+
+  // Щелчок по крупной плитке сворачивает её не сразу: вдруг это начало двойного щелчка (во весь экран)
+  const unfocusTimer = useRef(0)
+  useEffect(() => () => window.clearTimeout(unfocusTimer.current), [])
+  const toggleFocus = (key: string) => {
+    window.clearTimeout(unfocusTimer.current)
+    if (focus !== key) return setFocus(key)
+    unfocusTimer.current = window.setTimeout(() => setFocus((f) => (f === key ? null : f)), 250)
+  }
+  const fullscreen = (key: string) => {
+    window.clearTimeout(unfocusTimer.current)
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {})
+    if (!document.fullscreenEnabled) return setFocus(key)
+    setFocus(key)
+    setFullKey(key)
+  }
 
   if (!inRoom && variant === 'channel') {
     const canConnect = !guild || can(guild, 'CONNECT', roomId)
@@ -101,7 +136,18 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
       {status === 'connecting' && inRoom && <div className="stage__status">Подключаемся…</div>}
       {calling && <div className="stage__status stage__status--calling">Звоним…</div>}
       <div className="stage__tiles">
-        {focused && <Tile info={focused} guild={guild} roomId={roomId} focused onToggleFocus={() => setFocus(null)} />}
+        {focused && (
+          <Tile
+            info={focused}
+            roomId={roomId}
+            focused
+            onToggleFocus={() => toggleFocus(focused.key)}
+            onUnfocus={() => setFocus(null)}
+            onFullscreen={() => fullscreen(focused.key)}
+            wantFullscreen={fullKey === focused.key}
+            onFullscreenDone={() => setFullKey(null)}
+          />
+        )}
         <div
           className={focused ? 'stage__strip' : `stage__grid stage__grid--${Math.min(tiles.length, 9)}`}
           style={cols && !focused ? ({ '--cols': cols } as CSSProperties) : undefined}
@@ -109,7 +155,7 @@ export function VoiceStage({ roomId, variant }: { roomId: string; variant: 'chan
           {tiles
             .filter((t) => t.key !== focused?.key)
             .map((t) => (
-              <Tile key={t.key} info={t} guild={guild} roomId={roomId} onToggleFocus={() => setFocus(t.key)} />
+              <Tile key={t.key} info={t} roomId={roomId} onToggleFocus={() => toggleFocus(t.key)} onFullscreen={() => fullscreen(t.key)} />
             ))}
         </div>
       </div>
@@ -137,12 +183,21 @@ function LobbyAvatar({ userId }: { userId: string }) {
 
 interface TileProps {
   info: TileInfo
-  /** Сервер голосового канала (в личке — undefined) */
-  guild: Guild | undefined
   roomId: string
   focused?: boolean
+  /** Щелчок по плитке: крупно ↔ обратно в сетку */
   onToggleFocus: () => void
+  /** «Свернуть» кнопкой — сразу */
+  onUnfocus?: () => void
+  /** Двойной щелчок и кнопка: во весь экран (и обратно) */
+  onFullscreen: () => void
+  /** Крупная плитка должна развернуться во весь экран (попросили двойным щелчком) */
+  wantFullscreen?: boolean
+  onFullscreenDone?: () => void
 }
+
+/** По кнопкам, ползункам и ссылкам на плитке щелчок не значит «крупно» */
+const isControl = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest('button, input, a'))
 
 const PATH_LABEL: Record<string, string> = { direct: 'напрямую', 'relay-udp': 'через сервер', 'relay-tcp': 'через сервер (TCP)' }
 const LIMIT_LABEL: Record<string, string> = { bandwidth: 'не хватает интернета', cpu: 'не хватает процессора' }
@@ -171,7 +226,7 @@ function ScreenStats({ userId, isMe }: { userId: string; isMe: boolean }) {
   return <span className="tile__stats">{text}</span>
 }
 
-function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
+function Tile({ info, roomId, focused, onToggleFocus, onUnfocus, onFullscreen, wantFullscreen, onFullscreenDone }: TileProps) {
   const { member, kind } = info
   const meId = useChat((s) => s.me!.id)
   const isMe = member.userId === meId
@@ -182,15 +237,61 @@ function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
     if (!member.video) return null
     return isMe ? s.localCamera : (s.remoteStreams[member.cameraStream ?? ''] ?? null)
   })
+  // своя камера, переключённая на лету (та же MediaStream с новой дорожкой), — видео надо перезапустить
+  const rev = useVoice((s) => (isMe && kind === 'person' ? s.cameraRev : 0))
   const peerState = useVoice((s) => (isMe ? 'connected' : s.peerStates[member.userId]))
-  const localMuted = useVoice((s) => Boolean(s.localMutes[member.userId]))
+  const localMuted = useVoice((s) => Boolean(kind === 'person' ? s.localMutes[member.userId] : s.screenMutes[member.userId]))
+  const menuOpen = useVoiceMenu((s) => s.menu?.userId === member.userId && s.menu.roomId === roomId)
   const name = user?.displayName ?? '…'
   const tileRef = useRef<HTMLDivElement>(null)
 
+  // Двойной щелчок по плитке из сетки: она стала крупной — теперь во весь экран (жест пользователя ещё действует)
+  useEffect(() => {
+    if (!wantFullscreen) return
+    onFullscreenDone?.()
+    void tileRef.current?.requestFullscreen?.().catch(() => {})
+  }, [wantFullscreen, onFullscreenDone])
+
+  // Правый клик и долгое нажатие пальцем — меню человека (громкость, профиль, модерация)
+  const openMenu = (x: number, y: number) => voiceMenu.open(member.userId, roomId, { kind: 'point', x, y })
+  const press = useLongPress(openMenu)
+  /** Во весь экран меню не видно (оно живёт поверх страницы) — сначала выходим, потом открываем */
+  const afterFullscreen = (open: () => void) => {
+    if (!document.fullscreenElement) return open()
+    document.addEventListener('fullscreenchange', () => window.setTimeout(open, 150), { once: true })
+    void document.exitFullscreen().catch(() => {})
+  }
+  const onContextMenu = (e: MouseEvent) => {
+    press.cancel()
+    e.preventDefault()
+    if (press.justFired()) return
+    if (!document.fullscreenElement) return openMenu(e.clientX, e.clientY)
+    // из полноэкранного — у середины плитки, когда она вернётся на место
+    afterFullscreen(() => {
+      const r = tileRef.current?.getBoundingClientRect()
+      if (r) openMenu(r.left + r.width / 2, r.top + r.height / 2)
+    })
+  }
+
+  const canFullscreen = document.fullscreenEnabled && (focused || Boolean(stream))
+  const toggleFullscreen = () => (document.fullscreenElement ? void document.exitFullscreen().catch(() => {}) : onFullscreen())
+
   return (
-    <div ref={tileRef} className={`tile${speaking ? ' is-speaking' : ''}${kind === 'screen' ? ' tile--screen' : ''}${focused ? ' tile--focused' : ''}`}>
+    <div
+      ref={tileRef}
+      className={`tile${speaking ? ' is-speaking' : ''}${kind === 'screen' ? ' tile--screen' : ''}${focused ? ' tile--focused' : ''}${menuOpen ? ' is-menu' : ''}`}
+      data-tile={info.key}
+      {...press.handlers}
+      onClick={(e) => {
+        // второй щелчок двойного — не «крупно/обратно», а во весь экран (это сделает onDoubleClick)
+        if (e.detail > 1 || isControl(e.target) || document.fullscreenElement) return
+        onToggleFocus()
+      }}
+      onDoubleClick={(e) => !isControl(e.target) && toggleFullscreen()}
+      onContextMenu={onContextMenu}
+    >
       {stream ? (
-        <VideoView stream={stream} mirrored={isMe && kind === 'person'} contain={kind === 'screen' || Boolean(focused)} />
+        <VideoView stream={stream} rev={rev} mirrored={isMe && kind === 'person'} contain={kind === 'screen' || Boolean(focused)} />
       ) : (
         <div className="tile__face">
           {user && <Avatar user={user} size={focused ? 112 : 72} />}
@@ -198,6 +299,12 @@ function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
         </div>
       )}
       {kind === 'screen' && stream && <ScreenStats userId={member.userId} isMe={isMe} />}
+      {/* чужая демонстрация в сетке — подсказка, что её можно открыть щелчком */}
+      {kind === 'screen' && !focused && !isMe && (
+        <span className="tile__watch" aria-hidden="true">
+          <Maximize2 size={14} /> Смотреть
+        </span>
+      )}
       <div className="tile__label">
         {kind === 'screen' && <MonitorUp size={14} />}
         <span className="truncate">{kind === 'screen' ? `Экран · ${name}` : isMe ? `${name} (ты)` : name}</span>
@@ -208,25 +315,43 @@ function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
         )}
         {kind === 'person' && member.muted && !member.serverMuted && <MicOff size={14} />}
         {kind === 'person' && member.deafened && <HeadphoneOff size={14} />}
-        {kind === 'person' && localMuted && <span className="tile__tag">заглушён</span>}
+        {localMuted && (
+          <span className="tile__tag">
+            <VolumeX size={12} /> {kind === 'screen' ? 'без звука' : 'заглушён'}
+          </span>
+        )}
       </div>
       {!isMe && kind === 'person' && peerState && peerState !== 'connected' && (
         <span className="tile__state">{peerState === 'failed' ? 'нет связи' : 'подключаемся…'}</span>
       )}
       <div className="tile__tools">
-        {!isMe && kind === 'person' && guild && <ModMenu guild={guild} roomId={roomId} member={member} />}
-        {!isMe && kind === 'person' && <VolumeMenu userId={member.userId} />}
-        {focused && document.fullscreenEnabled && (
-          <button
-            className="tile__tool"
-            onClick={() => (document.fullscreenElement ? void document.exitFullscreen() : void tileRef.current?.requestFullscreen().catch(() => {}))}
-            data-tip="Во весь экран"
-            aria-label="Во весь экран"
-          >
+        {/* то же меню, что по правому клику, — чтобы его было видно */}
+        <button
+          className={`tile__tool${menuOpen ? ' is-active' : ''}`}
+          data-vmenu-trigger
+          onClick={(e) => {
+            const btn = e.currentTarget
+            if (menuOpen) voiceMenu.close()
+            else afterFullscreen(() => voiceMenu.openAt(member.userId, roomId, btn))
+          }}
+          data-tip={isMe ? 'Ещё' : 'Громкость и ещё'}
+          aria-label="Действия с участником"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <MoreHorizontal size={16} />
+        </button>
+        {canFullscreen && (
+          <button className="tile__tool" onClick={toggleFullscreen} data-tip="Во весь экран" aria-label="Во весь экран">
             <Fullscreen size={15} />
           </button>
         )}
-        <button className="tile__tool" onClick={onToggleFocus} data-tip={focused ? 'Свернуть' : 'Крупно'}>
+        <button
+          className="tile__tool"
+          onClick={focused ? onUnfocus : onToggleFocus}
+          data-tip={focused ? 'Свернуть' : 'Крупно'}
+          aria-label={focused ? 'Свернуть' : 'Крупно'}
+        >
           {focused ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
         </button>
       </div>
@@ -234,156 +359,15 @@ function Tile({ info, guild, roomId, focused, onToggleFocus }: TileProps) {
   )
 }
 
-/** Модерация на сервере: заглушить для всех / отключить от голоса — по правам в канале и старшинству ролей */
-function ModMenu({ guild, roomId, member }: { guild: Guild; roomId: string; member: VoiceMember }) {
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const name = useChat((s) => s.users[member.userId]?.displayName ?? 'участник')
-  const canMute = can(guild, 'MUTE_MEMBERS', roomId)
-  const canMove = can(guild, 'MOVE_MEMBERS', roomId)
-  if ((!canMute && !canMove) || !outranks(guild, member.userId)) return null
-
-  const act = async (action: 'mute' | 'unmute' | 'disconnect') => {
-    setBusy(true)
-    const ok = await moderateVoice(member.userId, action)
-    setBusy(false)
-    if (ok) setOpen(false)
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        className={`tile__tool${member.serverMuted ? ' is-server' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        data-tip="Модерация"
-        aria-label="Модерация"
-        aria-expanded={open}
-      >
-        <Shield size={15} />
-      </button>
-      {open && (
-        <Popover anchorRef={btnRef} onClose={() => setOpen(false)} align="end" className="mod-menu">
-          <div className="mod-menu__title">
-            <Shield size={13} /> <span className="truncate">{name}</span>
-          </div>
-          {canMute && (
-            <button className="mod-menu__item" disabled={busy} onClick={() => void act(member.serverMuted ? 'unmute' : 'mute')}>
-              {member.serverMuted ? <Mic size={15} /> : <MicOff size={15} />}
-              <span>
-                <b>{member.serverMuted ? 'Снять заглушение' : 'Заглушить на сервере'}</b>
-                <small>{member.serverMuted ? 'Сможет снова говорить' : 'Не сможет говорить, пока не снимут'}</small>
-              </span>
-            </button>
-          )}
-          {canMove && (
-            <button className="mod-menu__item mod-menu__item--danger" disabled={busy} onClick={() => void act('disconnect')}>
-              <PhoneOff size={15} />
-              <span>
-                <b>Отключить от голоса</b>
-                <small>Сможет зайти снова</small>
-              </span>
-            </button>
-          )}
-        </Popover>
-      )}
-    </>
-  )
-}
-
-function VideoView({ stream, mirrored, contain }: { stream: MediaStream; mirrored: boolean; contain: boolean }) {
+function VideoView({ stream, rev = 0, mirrored, contain }: { stream: MediaStream; rev?: number; mirrored: boolean; contain: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
-    if (ref.current && ref.current.srcObject !== stream) ref.current.srcObject = stream
-  }, [stream])
+    const el = ref.current
+    if (!el) return
+    // rev сменился — дорожку в потоке заменили: переподключаем, чтобы видео точно взяло новую
+    if (el.srcObject === stream && rev) el.srcObject = null
+    if (el.srcObject !== stream) el.srcObject = stream
+  }, [stream, rev])
   // Звук идёт через WebAudio, у видео он всегда выключен
   return <video ref={ref} className={`tile__video${mirrored ? ' is-mirrored' : ''}${contain ? ' is-contain' : ''}`} autoPlay playsInline muted />
-}
-
-/** Громкость человека «для себя» и «заглушить для себя» */
-function VolumeMenu({ userId }: { userId: string }) {
-  const [anchor, setAnchor] = useState<DOMRect | null>(null)
-  const volume = useVoice((s) => s.volumes[userId] ?? 100)
-  const muted = useVoice((s) => Boolean(s.localMutes[userId]))
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const popRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-
-  useEffect(() => {
-    if (!anchor) return
-    const close = (e: Event) => {
-      const t = e.target as Node
-      if (!popRef.current?.contains(t) && !btnRef.current?.contains(t)) setAnchor(null)
-    }
-    const shut = () => setAnchor(null)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && shut()
-    window.addEventListener('pointerdown', close)
-    window.addEventListener('resize', shut)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', close)
-      window.removeEventListener('resize', shut)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [anchor])
-
-  // Меню рисуем поверх всего (плитки обрезают своё содержимое) — у кнопки, но в пределах окна
-  useLayoutEffect(() => {
-    if (!anchor || !popRef.current) return setPos(null)
-    const k = uiZoom()
-    const w = popRef.current.offsetWidth
-    const h = popRef.current.offsetHeight
-    const vw = window.innerWidth / k
-    const vh = window.innerHeight / k
-    const left = Math.min(Math.max(8, anchor.right / k - w), vw - w - 8)
-    const below = anchor.bottom / k + 6
-    const top = below + h > vh - 8 ? Math.max(8, anchor.top / k - h - 6) : below
-    setPos({ left, top })
-  }, [anchor])
-
-  return (
-    <div className="volume-menu">
-      <button
-        ref={btnRef}
-        className="tile__tool"
-        onClick={() => setAnchor((a) => (a ? null : (btnRef.current?.getBoundingClientRect() ?? null)))}
-        data-tip="Громкость"
-        aria-label="Громкость"
-        aria-expanded={Boolean(anchor)}
-      >
-        <SlidersHorizontal size={15} />
-      </button>
-      {anchor &&
-        createPortal(
-          <div className="zoomed volume-layer">
-            <div
-              ref={popRef}
-              className="volume-menu__pop"
-              style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}
-            >
-              <div className="volume-menu__row">
-                <span>Громкость</span>
-                <b>{volume}%</b>
-              </div>
-              <input
-                className="slider"
-                type="range"
-                min={0}
-                max={200}
-                step={5}
-                value={volume}
-                aria-label="Громкость"
-                style={{ '--pct': `${volume / 2}%` } as CSSProperties}
-                onChange={(e) => setUserVolume(userId, Number(e.target.value))}
-              />
-              <button className={`volume-menu__mute${muted ? ' is-on' : ''}`} onClick={() => toggleLocalMute(userId)}>
-                {muted ? 'Включить звук для себя' : 'Заглушить для себя'}
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )}
-    </div>
-  )
 }

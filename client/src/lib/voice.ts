@@ -6,6 +6,7 @@ import { desktopNotify, tone, toneLoop } from './fx'
 import { ui } from './ui'
 import { can, guildOfChannel } from './perms'
 import { isDesktopApp } from './platform'
+import { askMedia, mediaDenied, showMediaHelp } from './mediaHelp'
 
 /**
  * Голосовой движок.
@@ -46,6 +47,13 @@ interface VoiceState {
   /** Громкость каждого человека для меня (0…200 %) и «заглушить для себя» */
   volumes: Record<string, number>
   localMutes: Record<string, boolean>
+  /** Звук демонстрации экрана — отдельно от голоса того, кто показывает (0…200 % и «заглушить для себя») */
+  screenVolumes: Record<string, number>
+  screenMutes: Record<string, boolean>
+  /** Камеру переключили на лету (та же MediaStream, новая дорожка) — своей плитке пора обновить видео */
+  cameraRev: number
+  /** «Смотреть демонстрацию» из списка канала: сцена этой комнаты покажет экран крупно, как только он будет */
+  watch: { roomId: string; userId: string } | null
 }
 
 /** Сколько реально доходит видео: кадры в секунду, размер, килобиты */
@@ -67,16 +75,18 @@ export interface PeerLink {
 
 const VOLUMES_KEY = 'nuntius.volumes'
 
-function loadVolumes(): Pick<VoiceState, 'volumes' | 'localMutes'> {
+type SavedVolumes = Pick<VoiceState, 'volumes' | 'localMutes' | 'screenVolumes' | 'screenMutes'>
+
+function loadVolumes(): SavedVolumes {
   try {
     const raw = JSON.parse(localStorage.getItem(VOLUMES_KEY) ?? '{}')
-    return { volumes: raw.volumes ?? {}, localMutes: raw.localMutes ?? {} }
+    return { volumes: raw.volumes ?? {}, localMutes: raw.localMutes ?? {}, screenVolumes: raw.screenVolumes ?? {}, screenMutes: raw.screenMutes ?? {} }
   } catch {
-    return { volumes: {}, localMutes: {} }
+    return { volumes: {}, localMutes: {}, screenVolumes: {}, screenMutes: {} }
   }
 }
 
-const IDLE: Omit<VoiceState, 'rooms' | 'incoming' | 'volumes' | 'localMutes'> = {
+const IDLE: Omit<VoiceState, 'rooms' | 'incoming' | keyof SavedVolumes | 'cameraRev' | 'watch'> = {
   roomId: null,
   status: 'idle',
   speaking: {},
@@ -90,7 +100,7 @@ const IDLE: Omit<VoiceState, 'rooms' | 'incoming' | 'volumes' | 'localMutes'> = 
   links: {},
 }
 
-export const useVoice = create<VoiceState>(() => ({ ...IDLE, rooms: {}, incoming: [], ...loadVolumes() }))
+export const useVoice = create<VoiceState>(() => ({ ...IDLE, rooms: {}, incoming: [], cameraRev: 0, watch: null, ...loadVolumes() }))
 
 const set = useVoice.setState
 const get = useVoice.getState
@@ -275,9 +285,11 @@ export async function openMic(onFallback?: (text: string) => void): Promise<Medi
 async function acquireMic(quiet = false) {
   if (!ctx || !inputGain) return
   try {
-    const stream = await openMic((text) => {
-      if (!quiet) chat.toast({ title: 'Микрофон', text })
-    })
+    const stream = await askMedia('mic', () =>
+      openMic((text) => {
+        if (!quiet) chat.toast({ title: 'Микрофон', text })
+      }),
+    )
     if (!get().roomId) {
       stream.getTracks().forEach((t) => t.stop())
       return
@@ -301,7 +313,9 @@ async function acquireMic(quiet = false) {
       set({ noMic: true })
       sendState({ muted: true })
     }
-    if (!quiet) chat.toast({ title: 'Нет доступа к микрофону', text: micProblem(err) })
+    // Запретили доступ — вместо короткого тоста окно с инструкцией; разрешат — сразу берём микрофон
+    if (!quiet && mediaDenied(err)) showMediaHelp('mic', { onGranted: () => get().roomId && get().noMic && void acquireMic() }, err)
+    else if (!quiet) chat.toast({ title: 'Нет доступа к микрофону', text: micProblem(err) })
   }
   applyGate()
 }
@@ -347,15 +361,15 @@ function applyGate() {
   if (inputGain) inputGain.gain.value = s.inputVolume / 100
 }
 
-/** Громкость: общая (и «выключить звук») + у каждого человека своя */
+/** Громкость: общая (и «выключить звук») + у каждого человека своя, и отдельно — у звука его демонстрации */
 function applyVolumes() {
   const s = useSettings.getState()
   if (master) master.gain.value = s.deafened ? 0 : s.outputVolume / 100
-  const { volumes, localMutes } = get()
+  const { volumes, localMutes, screenVolumes, screenMutes } = get()
   for (const peer of peers.values()) {
-    const v = localMutes[peer.userId] ? 0 : (volumes[peer.userId] ?? 100) / 100
-    if (peer.voice) peer.voice.gain.gain.value = v
-    if (peer.screenAudio) peer.screenAudio.gain.gain.value = v
+    const id = peer.userId
+    if (peer.voice) peer.voice.gain.gain.value = localMutes[id] ? 0 : (volumes[id] ?? 100) / 100
+    if (peer.screenAudio) peer.screenAudio.gain.gain.value = screenMutes[id] ? 0 : (screenVolumes[id] ?? 100) / 100
   }
 }
 
@@ -822,14 +836,95 @@ export async function toggleCamera() {
   if (!videoAllowed()) return chat.toast(NO_VIDEO)
   cameraBusy = true
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } })
+    const stream = await askMedia('camera', () => openCamera((text) => chat.toast({ title: 'Камера', text })))
     if (!get().roomId || get().localCamera) return stream.getTracks().forEach((t) => t.stop())
     set({ localCamera: stream })
     sendState({ video: true, cameraStream: stream.id })
     for (const peer of peers.values()) for (const t of stream.getTracks()) peer.cameraSenders.push(peer.pc.addTrack(t, stream))
-    stream.getVideoTracks()[0]?.addEventListener('ended', () => get().localCamera === stream && void toggleCamera())
-  } catch {
-    chat.toast({ title: 'Камера не включилась', text: 'Проверь, что камера подключена и браузеру разрешён доступ' })
+    watchCameraEnd(stream)
+  } catch (err) {
+    // Запретили — окно с инструкцией; разрешат, пока сидим в голосе, — камера включится сама
+    if (mediaDenied(err)) showMediaHelp('camera', { onGranted: () => get().roomId && !get().localCamera && void toggleCamera() }, err)
+    else chat.toast({ title: 'Камера не включилась', text: cameraProblem(err) })
+  } finally {
+    cameraBusy = false
+  }
+}
+
+/** Камеру выдернули или её забрала система — выключаем у всех (кроме дорожки, которую сменили сами) */
+function watchCameraEnd(stream: MediaStream) {
+  const track = stream.getVideoTracks()[0]
+  track?.addEventListener('ended', () => get().localCamera === stream && stream.getVideoTracks()[0] === track && void toggleCamera())
+}
+
+const CAMERA_QUALITY: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+
+/**
+ * Открыть камеру из настроек — как и микрофон, выбранную просим строго (exact).
+ * Не открылась (выдернули, занята) — берём системную, а onFallback говорит об этом
+ */
+export async function openCamera(onFallback?: (text: string) => void): Promise<MediaStream> {
+  const id = useSettings.getState().cameraDeviceId
+  if (id) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video: { ...CAMERA_QUALITY, deviceId: { exact: id } }, audio: false })
+    } catch (err) {
+      if (mediaDenied(err)) throw err
+      onFallback?.(`Выбранная камера не открылась${err instanceof DOMException ? ` (${err.name})` : ''} — взяли системную по умолчанию. Выбрать другую: Настройки → Голос и звук`)
+    }
+  }
+  return navigator.mediaDevices.getUserMedia({ video: CAMERA_QUALITY, audio: false })
+}
+
+/** Почему камера не включилась — по названию ошибки */
+export function cameraProblem(err: unknown): string {
+  const name = err instanceof DOMException ? err.name : ''
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return isDesktopApp()
+      ? 'Windows не пускает приложение к камере: Параметры → Конфиденциальность и защита → Камера → включи доступ для классических приложений'
+      : 'Браузер запретил камеру: нажми на значок слева от адреса сайта и разреши камеру'
+  }
+  if (name === 'NotReadableError' || name === 'AbortError') return 'Камера занята другой программой (Zoom, OBS, другая вкладка) или не отвечает. Закрой её и попробуй снова'
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'Камера не найдена. Подключи её или выбери другую в настройках → Голос и звук'
+  return `Проверь, что камера подключена${name ? ` (${name})` : ''}`
+}
+
+/**
+ * Сменили камеру в настройках, пока она включена, — переключаем на лету: новая дорожка встаёт на место старой
+ * у всех собеседников (replaceTrack, без новой договорённости) и в тот же поток — его id знают все, видео не мигает
+ */
+async function switchCamera() {
+  const stream = get().localCamera
+  if (!stream || cameraBusy) return
+  cameraBusy = true
+  const old = stream.getVideoTracks()
+  try {
+    let next: MediaStream
+    try {
+      next = await openCamera((text) => chat.toast({ title: 'Камера', text }))
+    } catch (err) {
+      // Некоторые камеры не открываются, пока занята другая, — отпускаем старую и пробуем ещё раз
+      if (mediaDenied(err)) throw err
+      old.forEach((t) => t.stop())
+      next = await openCamera((text) => chat.toast({ title: 'Камера', text }))
+    }
+    const track = next.getVideoTracks()[0]
+    if (get().localCamera !== stream || !track) return next.getTracks().forEach((t) => t.stop())
+    await Promise.all([...peers.values()].flatMap((peer) => peer.cameraSenders.filter((s) => s.track?.kind !== 'audio').map((s) => s.replaceTrack(track).catch(() => {}))))
+    for (const t of old) {
+      stream.removeTrack(t)
+      t.stop()
+    }
+    stream.addTrack(track)
+    watchCameraEnd(stream)
+    set((s) => ({ cameraRev: s.cameraRev + 1 }))
+  } catch (err) {
+    // Новую не открыть, а старую, может, уже отпустили — выключаем камеру совсем, чтобы у всех не висел чёрный квадрат
+    chat.toast({ title: 'Камера не переключилась', text: cameraProblem(err) })
+    if (get().localCamera === stream && stream.getVideoTracks().every((t) => t.readyState === 'ended')) {
+      cameraBusy = false
+      void toggleCamera()
+    }
   } finally {
     cameraBusy = false
   }
@@ -854,6 +949,7 @@ export async function toggleScreen() {
   if (screenBusy) return
   if (!videoAllowed()) return chat.toast(NO_VIDEO)
   screenBusy = true
+  const asked = performance.now()
   try {
     // Звук системы — без звука самого Nuntius: иначе собеседники услышали бы себя с задержкой
     // Больше 1080p30 не снимаем: 1440p и 4K в разы дороже кодировать, а смотрят всё равно в окошке
@@ -862,7 +958,7 @@ export async function toggleScreen() {
       audio: { restrictOwnAudio: true, suppressLocalAudioPlayback: false },
       systemAudio: 'include',
     } as DisplayMediaStreamOptions
-    const stream = await navigator.mediaDevices.getDisplayMedia(options)
+    const stream = await askMedia('screen', () => navigator.mediaDevices.getDisplayMedia(options))
     if (!get().roomId || get().localScreen) return stream.getTracks().forEach((t) => t.stop())
     applyScreenMode(stream)
     set({ localScreen: stream })
@@ -871,8 +967,18 @@ export async function toggleScreen() {
     tuneScreenSenders()
     // «Прекратить доступ» в панели браузера
     stream.getVideoTracks()[0]?.addEventListener('ended', () => get().localScreen === stream && void toggleScreen())
-  } catch {
-    // пользователь передумал в окне выбора экрана — это не ошибка
+  } catch (err) {
+    // Передумал в окне выбора экрана — это не ошибка. А вот отказ «системой» (macOS не дала записывать экран)
+    // или мгновенный, без окна выбора, — значит, не пускают: объясняем, где разрешить
+    const bySystem = err instanceof DOMException && /system/i.test(err.message)
+    if (mediaDenied(err) && !isDesktopApp() && (bySystem || performance.now() - asked < 400)) {
+      showMediaHelp('screen', {
+        retry: async () => {
+          await toggleScreen()
+          return Boolean(get().localScreen)
+        },
+      })
+    }
   } finally {
     screenBusy = false
   }
@@ -917,14 +1023,34 @@ export function toggleLocalMute(userId: string) {
   applyVolumes()
 }
 
+/** Громкость звука демонстрации экрана человека — отдельно от его микрофона */
+export function setScreenVolume(userId: string, volume: number) {
+  set((s) => ({ screenVolumes: { ...s.screenVolumes, [userId]: volume } }))
+  saveVolumes()
+  applyVolumes()
+}
+
+export function toggleScreenMute(userId: string) {
+  set((s) => ({ screenMutes: { ...s.screenMutes, [userId]: !s.screenMutes[userId] } }))
+  saveVolumes()
+  applyVolumes()
+}
+
 function saveVolumes() {
   try {
-    const { volumes, localMutes } = get()
-    localStorage.setItem(VOLUMES_KEY, JSON.stringify({ volumes, localMutes }))
+    const { volumes, localMutes, screenVolumes, screenMutes } = get()
+    localStorage.setItem(VOLUMES_KEY, JSON.stringify({ volumes, localMutes, screenVolumes, screenMutes }))
   } catch {
     // нет доступа к хранилищу — не страшно
   }
 }
+
+/** Открыть демонстрацию человека крупно (метка «в эфире» в списке канала) — сцена комнаты сделает это сама */
+export function watchScreen(roomId: string, userId: string) {
+  set({ watch: { roomId, userId } })
+}
+
+export const clearWatch = () => get().watch && set({ watch: null })
 
 /** Системные уведомления о входящих звонках — закрываем, когда звонок уже не актуален */
 const ringNotes = new Map<string, Notification>()
@@ -957,7 +1083,7 @@ export function initVoice(rooms: Record<string, VoiceMember[]>, rings: { roomId:
 
 export function resetVoice() {
   if (get().roomId) teardown()
-  set({ ...IDLE, rooms: {}, incoming: [] })
+  set({ ...IDLE, rooms: {}, incoming: [], watch: null })
 }
 
 export function attachVoice(s: Socket) {
@@ -1096,6 +1222,7 @@ useSettings.subscribe((s, prev) => {
   }
   if (s.outputDeviceId !== prev.outputDeviceId) void applySink()
   if (s.screenMode !== prev.screenMode) applyScreenMode(get().localScreen)
+  if (s.cameraDeviceId !== prev.cameraDeviceId && get().localCamera) void switchCamera()
   // Переключили «через сервер» посреди звонка — соединения со всеми строим заново (как после обрыва):
   // перезапуск ICE на старом соединении оставлял прямой путь. Экран, камера и микрофон остаются
   if (s.forceRelay !== prev.forceRelay) {

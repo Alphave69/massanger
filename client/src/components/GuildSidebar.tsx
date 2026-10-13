@@ -5,7 +5,9 @@ import { can, isPrivateChannel, roleColor } from '../lib/perms'
 import { isOnline } from '../lib/status'
 import { activeChannelId, chat, useChat } from '../lib/store'
 import { ui } from '../lib/ui'
-import { joinVoice, useVoice } from '../lib/voice'
+import { useLongPress } from '../lib/mobile'
+import { joinVoice, useVoice, watchScreen } from '../lib/voice'
+import { useVoiceMenu, voiceMenu } from '../lib/voiceMenu'
 import { Avatar } from './Avatar'
 import { UserBar } from './UserBar'
 import { VoicePanel } from './voice/VoicePanel'
@@ -173,21 +175,47 @@ function VoiceUser({ guild, member, roomId }: { guild: Guild; member: VoiceMembe
   const user = useChat((s) => s.users[member.userId])
   // Кто говорит — знаем только про свою комнату
   const speaking = useVoice((s) => s.roomId === roomId && Boolean(s.speaking[member.userId]))
+  const menuOpen = useVoiceMenu((s) => s.menu?.userId === member.userId && s.menu.roomId === roomId)
+  // Правый клик и долгое нажатие пальцем — меню человека: громкость, профиль, модерация
+  const press = useLongPress((x, y) => voiceMenu.open(member.userId, roomId, { kind: 'point', x, y }))
   if (!user) return null
   const color = roleColor(guild, member.userId)
+
+  // «В эфире»: открыть канал и его экран крупно (если мы в этом голосе — сразу, если нет — как только зайдём)
+  const watch = () => {
+    watchScreen(roomId, member.userId)
+    chat.openGuildChannel(guild.id, roomId)
+    ui.showMain()
+  }
+
   return (
-    <button className={`voice-user${speaking ? ' is-speaking' : ''}`} onClick={(e) => ui.showProfile(member.userId, e.currentTarget)}>
-      <Avatar user={user} size={22} />
-      <span className="truncate" style={color ? { color } : undefined}>
-        {user.displayName}
-      </span>
-      <span className="voice-user__icons">
-        {member.screen && <MonitorUp size={13} />}
-        {member.video && <Video size={13} />}
-        {member.serverMuted ? <MicOff size={13} className="is-server" aria-label="заглушён на сервере" /> : member.muted && <MicOff size={13} />}
-        {member.deafened && <HeadphoneOff size={13} />}
-      </span>
-    </button>
+    <div className={`voice-user-row${menuOpen ? ' is-menu' : ''}`}>
+      <button
+        className={`voice-user${speaking ? ' is-speaking' : ''}`}
+        onClick={(e) => ui.showProfile(member.userId, e.currentTarget)}
+        {...press.handlers}
+        onContextMenu={(e) => {
+          press.cancel()
+          e.preventDefault()
+          if (!press.justFired()) voiceMenu.open(member.userId, roomId, { kind: 'point', x: e.clientX, y: e.clientY })
+        }}
+      >
+        <Avatar user={user} size={22} />
+        <span className="truncate" style={color ? { color } : undefined}>
+          {user.displayName}
+        </span>
+        <span className="voice-user__icons">
+          {member.video && <Video size={13} />}
+          {member.serverMuted ? <MicOff size={13} className="is-server" aria-label="заглушён на сервере" /> : member.muted && <MicOff size={13} />}
+          {member.deafened && <HeadphoneOff size={13} />}
+        </span>
+      </button>
+      {member.screen && (
+        <button className="voice-live" onClick={watch} data-tip="Смотреть демонстрацию" aria-label={`Смотреть демонстрацию: ${user.displayName}`}>
+          <MonitorUp size={11} strokeWidth={2.6} /> в эфире
+        </button>
+      )}
+    </div>
   )
 }
 

@@ -55,3 +55,48 @@ export function isPhoneOs(os: Os): boolean {
 export function isIosSafari(): boolean {
   return detectOs() === 'ios' && !/crios|fxios|edgios|opios|yabrowser|gsa\//i.test(navigator.userAgent)
 }
+
+export type Browser = 'yandex' | 'edge' | 'opera' | 'samsung' | 'firefox' | 'chrome' | 'safari' | 'other'
+
+/** Какой браузер: от него зависит, где искать разрешения (порядок важен — почти все притворяются Chrome и Safari) */
+export function detectBrowser(): Browser {
+  const ua = navigator.userAgent
+  if (/yabrowser/i.test(ua)) return 'yandex'
+  if (/edg(e|a|ios)?\//i.test(ua)) return 'edge'
+  if (/opr\/|opera|opios/i.test(ua)) return 'opera'
+  if (/samsungbrowser/i.test(ua)) return 'samsung'
+  if (/firefox|fxios/i.test(ua)) return 'firefox'
+  if (/chrome|chromium|crios/i.test(ua)) return 'chrome'
+  if (/safari/i.test(ua)) return 'safari'
+  return 'other'
+}
+
+export const BROWSER_NAME: Record<Browser, string> = {
+  yandex: 'Яндекс Браузер',
+  edge: 'Edge',
+  opera: 'Opera',
+  samsung: 'Samsung Internet',
+  firefox: 'Firefox',
+  chrome: 'Chrome',
+  safari: 'Safari',
+  other: 'браузер',
+}
+
+/**
+ * Где спрашивают доступ к микрофону и камере — от этого зависит инструкция:
+ * app — приложение для Windows (разрешает само, запретить может только Windows),
+ * chromium — Chrome, Edge, Яндекс, Opera на компьютере; firefox; safari — на Mac; android; ios — любой браузер на iPhone/iPad
+ */
+export type MediaEnv = 'app' | 'chromium' | 'firefox' | 'safari' | 'android' | 'ios' | 'other'
+
+export function detectMediaEnv(): MediaEnv {
+  if (isDesktopApp()) return 'app'
+  const os = detectOs()
+  if (os === 'ios') return 'ios'
+  if (os === 'android') return 'android'
+  const browser = detectBrowser()
+  if (browser === 'firefox') return 'firefox'
+  if (browser === 'safari') return os === 'mac' ? 'safari' : 'other'
+  if (browser === 'other') return 'other'
+  return 'chromium'
+}

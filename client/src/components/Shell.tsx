@@ -27,6 +27,10 @@ import { EggLayer } from './eggs/EggLayer'
 import { BadgeCelebration } from './badges/BadgeCelebration'
 import { MessageMenu } from './chat/MessageMenu'
 import { ForwardModal } from './chat/ForwardModal'
+import { VoiceUserMenu } from './voice/VoiceUserMenu'
+import { MediaHelp } from './voice/MediaHelp'
+import { useVoiceMenu, voiceMenu } from '../lib/voiceMenu'
+import { closeMediaHelp, useMediaHelp } from '../lib/mediaHelp'
 
 interface Props {
   onLogout: () => void
@@ -50,6 +54,7 @@ const QUOTES: [string, string][] = [
 function hasOpenLayer() {
   const u = useUi.getState()
   const m = useMsgUi.getState()
+  if (useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
   return Boolean(
     m.menu || m.forward || u.channelModal || u.groupModal || u.modal || u.profile || u.settings || u.serverSettings || u.asideOpen || u.mobileMain,
   )
@@ -59,7 +64,9 @@ function hasOpenLayer() {
 function closeTopLayer() {
   const u = useUi.getState()
   const m = useMsgUi.getState()
-  if (m.menu) msgUi.closeMenu()
+  if (useVoiceMenu.getState().menu) voiceMenu.close()
+  else if (useMediaHelp.getState().denied) closeMediaHelp()
+  else if (m.menu) msgUi.closeMenu()
   else if (m.forward) msgUi.closeForward()
   else if (u.channelModal) ui.closeChannelModal()
   else if (u.groupModal) ui.closeGroupModal()
@@ -134,9 +141,13 @@ export function Shell({ onLogout }: Props) {
     const back = trackBackButton(hasOpenLayer, closeTopLayer)
     const offUi = useUi.subscribe(back.sync)
     const offMsg = useMsgUi.subscribe(back.sync)
+    const offVoiceMenu = useVoiceMenu.subscribe(back.sync)
+    const offMediaHelp = useMediaHelp.subscribe(back.sync)
     return () => {
       offUi()
       offMsg()
+      offVoiceMenu()
+      offMediaHelp()
       back.stop()
     }
   }, [])
@@ -224,6 +235,9 @@ export function Shell({ onLogout }: Props) {
     </div>
     {/* меню сообщения (правый клик) — порталом поверх всего */}
     <MessageMenu />
+    {/* меню участника голоса (правый клик) и помощь с доступом к микрофону/камере/экрану */}
+    <VoiceUserMenu />
+    <MediaHelp />
     <IncomingCall />
     {/* уведомления — поверх всего, в том числе поверх настроек */}
     <Toasts />
