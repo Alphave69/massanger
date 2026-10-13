@@ -3,30 +3,45 @@
    ===================================================================== */
 
 :root {
-  --black: #000;
-  --panel: rgba(5, 5, 5, 0.6);
-  --panel-solid: #060606;
+  /* Все цвета — токены: темы (styles/themes.css) меняют только их.
+     Каналы «R G B» — для полупрозрачных оттенков: rgb(var(--fg-rgb) / 0.07).
+     Значения здесь — тема «Чёрная», она же по умолчанию. */
+  --fg-rgb: 255 255 255; /* основной: текст, линии, подсветки */
+  --bg-rgb: 0 0 0; /* фон приложения */
+  --accent-rgb: 255 255 255; /* акцент: активное, главные кнопки, бейджи, фокус */
+  --on-accent-rgb: 0 0 0; /* текст на акценте */
+  --glow-rgb: 255 255 255; /* свечение */
+  --theme-glow: 1; /* сила свечения темы (в светлых — мягкая тень) */
+  --glow-user: 1; /* …и множитель из настроек */
+  --shade-rgb: 0 0 0; /* тени и затемнения */
+  --shade-k: 1;
+  --glass-rgb: 5 5 5; /* стеклянные панели */
+  --solid-rgb: 6 6 6; /* сплошная панель */
+  --pop-rgb: 4 4 4; /* меню и всплывашки */
+  --sphere-rgb: 255 255 255; /* точки фоновой сферы */
+
+  --panel-a: 0.6; /* прозрачность панелей (настройка) */
+  --panel-backdrop: none; /* размытие под панелями (настройка): blur(8px) и т.п. */
+  --surface: #050505; /* окна и карточки */
+  --surface-2: #070707; /* плитки, вложения */
+  --surface-3: #0b0b0b; /* баннеры профиля */
   --raise: #101010;
   --raise-2: #1a1a1a;
-  --hover: rgba(255, 255, 255, 0.07);
   --bubble: #121212;
-
-  --line: rgba(255, 255, 255, 0.1);
-  --line-2: rgba(255, 255, 255, 0.18);
-  --line-3: rgba(255, 255, 255, 0.34);
+  --bubble-text: #f2f2f2;
+  --medal-hi: #1d1d1d; /* диск значка */
+  --medal-hi-2: #232323;
+  --medal-lo: #050505;
 
   --text: #ffffff;
   --text-1: #e6e6e6;
   --text-2: #b0b0b0;
   --text-3: #6e6e6e;
+  --danger: #ff6b6b;
 
-  --glow: 0 0 22px rgba(255, 255, 255, 0.35);
-  --glow-strong: 0 0 0 1px #fff, 0 0 24px rgba(255, 255, 255, 0.5), 0 0 64px rgba(255, 255, 255, 0.18);
-
-  --r-s: 8px;
-  --r-m: 12px;
-  --r-l: 16px;
-  --r-xl: 22px;
+  --rk: 1; /* скругления: 0.4 — острые, 1 — обычные, 1.45 — круглые */
+  --avatar-r: 50%; /* форма аватарок */
+  --msg-gap: 1; /* расстояние между сообщениями */
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -36,6 +51,33 @@
   --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   color-scheme: dark;
+}
+
+/* Производные токены — пересчитываются и в превью тем (.theme-scope) */
+:root,
+.theme-scope {
+  --black: rgb(var(--bg-rgb));
+  --panel: rgb(var(--glass-rgb) / var(--panel-a));
+  --panel-solid: rgb(var(--solid-rgb));
+  --pop: rgb(var(--pop-rgb));
+  --hover: rgb(var(--fg-rgb) / 0.07);
+  --accent: rgb(var(--accent-rgb));
+  --on-accent: rgb(var(--on-accent-rgb));
+  --glow-k: calc(var(--theme-glow) * var(--glow-user));
+
+  --line: rgb(var(--fg-rgb) / 0.1);
+  --line-2: rgb(var(--fg-rgb) / 0.18);
+  --line-3: rgb(var(--fg-rgb) / 0.34);
+
+  --glow: 0 0 22px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
+  --glow-strong:
+    0 0 0 1px var(--accent), 0 0 24px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k))),
+    0 0 64px rgb(var(--glow-rgb) / calc(0.18 * var(--glow-k)));
+
+  --r-s: calc(8px * var(--rk));
+  --r-m: calc(12px * var(--rk));
+  --r-l: calc(16px * var(--rk));
+  --r-xl: calc(22px * var(--rk));
 }
 
 *,
@@ -81,13 +123,13 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--text);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 ::-webkit-scrollbar {
@@ -95,13 +137,13 @@ button:disabled {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--fg-rgb) / 0.14);
   border: 3px solid transparent;
-  border-radius: 99px;
+  border-radius: calc(99px * var(--rk));
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgb(var(--fg-rgb) / 0.3);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -129,15 +171,15 @@ button:disabled {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(700px circle at var(--gx, -999px) var(--gy, -999px), rgba(255, 255, 255, 0.05), transparent 60%),
-    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.5px) 0 0 / 26px 26px;
+    radial-gradient(700px circle at var(--gx, -999px) var(--gy, -999px), rgb(var(--fg-rgb) / 0.05), transparent 60%),
+    radial-gradient(rgb(var(--fg-rgb) / 0.07) 1px, transparent 1.5px) 0 0 / 26px 26px;
 }
 
 .backdrop::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(rgba(255, 255, 255, 0.45) 1px, transparent 1.6px) 0 0 / 26px 26px;
+  background: radial-gradient(rgb(var(--fg-rgb) / 0.45) 1px, transparent 1.6px) 0 0 / 26px 26px;
   -webkit-mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
   mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
 }
@@ -181,7 +223,7 @@ button:disabled {
   padding: 1px;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(280px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.75), transparent 55%);
+  background: radial-gradient(280px circle at var(--mx, -999px) var(--my, -999px), rgb(var(--fg-rgb) / 0.75), transparent 55%);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -223,9 +265,9 @@ button:disabled {
 
 /* Белая со свечением; при наведении — блик пробегает по кнопке */
 .btn--primary {
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 20px rgb(var(--glow-rgb) / calc(0.25 * var(--glow-k)));
 }
 
 .btn--primary::before {
@@ -233,7 +275,7 @@ button:disabled {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(105deg, transparent 30%, rgba(0, 0, 0, 0.14) 45%, transparent 60%);
+  background: linear-gradient(105deg, transparent 30%, rgb(var(--bg-rgb) / 0.14) 45%, transparent 60%);
   transform: translateX(-100%);
 }
 
@@ -254,7 +296,7 @@ button:disabled {
 .btn--outline:hover {
   box-shadow:
     inset 0 0 0 1px var(--text),
-    0 0 20px rgba(255, 255, 255, 0.2);
+    0 0 20px rgb(var(--glow-rgb) / calc(0.2 * var(--glow-k)));
 }
 
 .btn--ghost {
@@ -280,7 +322,7 @@ button:disabled {
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   color: var(--text-2);
   transition:
     background-color 0.15s ease,
@@ -300,13 +342,13 @@ button:disabled {
 
 .icon-btn.is-active {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--fg-rgb) / 0.1);
 }
 
 /* Включённый «запрет» (микрофон выключен и т.п.) — инверсия со свечением */
 .icon-btn.is-on {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
   box-shadow: var(--glow);
 }
 
@@ -314,7 +356,7 @@ button:disabled {
   position: relative;
   width: 38px;
   height: 38px;
-  border-radius: 19px;
+  border-radius: calc(19px * var(--rk));
   display: grid;
   place-items: center;
   background: var(--raise);
@@ -331,7 +373,7 @@ button:disabled {
 .round-btn:hover {
   color: var(--text);
   border-color: var(--line-3);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.18 * var(--glow-k)));
 }
 
 .round-btn:active {
@@ -340,14 +382,14 @@ button:disabled {
 
 .round-btn--solid,
 .round-btn--confirm {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 .round-btn--solid:hover,
 .round-btn--confirm:hover {
-  color: var(--black);
+  color: var(--on-accent);
   box-shadow: var(--glow-strong);
 }
 
@@ -365,13 +407,13 @@ button:disabled {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   display: inline-grid;
   place-items: center;
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
   font: 700 11px/1 var(--mono);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.55 * var(--glow-k)));
   animation: pop-in 0.4s var(--ease-spring);
 }
 
@@ -380,7 +422,7 @@ button:disabled {
   padding: 0 14px;
   border-radius: var(--r-m);
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--fg-rgb) / 0.04);
   outline: none;
   color: var(--text);
   font-size: 15px;
@@ -390,10 +432,10 @@ button:disabled {
 }
 
 .input:focus {
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: rgb(var(--fg-rgb) / 0.6);
   box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.06),
-    0 0 24px rgba(255, 255, 255, 0.12);
+    0 0 0 4px rgb(var(--fg-rgb) / 0.06),
+    0 0 24px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
 }
 
 /* ============ аватары и статусы ============ */
@@ -402,7 +444,7 @@ button:disabled {
   position: relative;
   flex: none;
   display: inline-block;
-  border-radius: 50%;
+  border-radius: var(--avatar-r);
 }
 
 .avatar__face {
@@ -410,14 +452,14 @@ button:disabled {
   height: 100%;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--avatar-r);
   font-weight: 700;
   letter-spacing: -0.02em;
   user-select: none;
 }
 
 .avatar__face--dark {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.35);
 }
 
 .avatar__badge {
@@ -436,7 +478,7 @@ button:disabled {
 }
 
 .avatar__badge--online .status-icon {
-  filter: drop-shadow(0 0 3px #fff);
+  filter: drop-shadow(0 0 3px rgb(var(--glow-rgb) / var(--glow-k)));
 }
 
 .avatar--ring {
@@ -448,8 +490,8 @@ button:disabled {
 .avatar--ring.is-online {
   box-shadow:
     0 0 0 3px var(--panel-solid),
-    0 0 0 4px #fff,
-    0 0 34px rgba(255, 255, 255, 0.45);
+    0 0 0 4px var(--accent),
+    0 0 34px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
   animation: ring-glow 3.2s ease-in-out infinite;
 }
 
@@ -457,8 +499,8 @@ button:disabled {
   50% {
     box-shadow:
       0 0 0 3px var(--panel-solid),
-      0 0 0 4px #fff,
-      0 0 54px rgba(255, 255, 255, 0.7);
+      0 0 0 4px var(--accent),
+      0 0 54px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k)));
   }
 }
 
@@ -488,7 +530,7 @@ button:disabled {
   pointer-events: none;
   opacity: 0;
   z-index: 50;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 20px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
   transition:
     opacity 0.15s ease,
     translate 0.2s var(--ease-out);
@@ -578,9 +620,9 @@ button:disabled {
   height: 58px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--fg-rgb) / 0.04);
   font: 700 26px/1 var(--mono);
   color: var(--text);
   transition:
@@ -595,10 +637,10 @@ button:disabled {
 }
 
 .code-input:focus-within .code-input__cell.is-active {
-  border-color: #fff;
+  border-color: var(--accent);
   box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.06),
-    0 0 24px rgba(255, 255, 255, 0.25);
+    0 0 0 4px rgb(var(--fg-rgb) / 0.06),
+    0 0 24px rgb(var(--glow-rgb) / calc(0.25 * var(--glow-k)));
   transform: translateY(-2px);
 }
 

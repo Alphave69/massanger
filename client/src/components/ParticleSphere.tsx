@@ -194,6 +194,9 @@ export function ParticleSphere({ mode, className }: Props) {
     let last = performance.now()
     let raf = 0
     let blank = false // холст уже очищен — пока сфера погашена, не трогаем его
+    // Цвет точек — из темы (--sphere-rgb); перечитываем раз в полсекунды, не каждый кадр
+    let dot = '#fff'
+    let frameNo = 0
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 16.667, 3)
@@ -285,8 +288,12 @@ export function ParticleSphere({ mode, className }: Props) {
         sb[i] = Math.min(BUCKETS - 1, Math.floor(alpha * BUCKETS))
       }
 
+      if (frameNo++ % 30 === 0) {
+        const rgb = getComputedStyle(document.documentElement).getPropertyValue('--sphere-rgb').trim()
+        dot = rgb ? `rgb(${rgb})` : '#fff'
+      }
       ctx.clearRect(0, 0, w, h)
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = dot
       for (let b = 0; b < BUCKETS; b++) {
         ctx.globalAlpha = Math.min(1, ((b + 0.5) / BUCKETS) * cur.a)
         ctx.beginPath()

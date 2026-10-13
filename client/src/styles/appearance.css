@@ -1,0 +1,342 @@
+/* =====================================================================
+   Настройки → «Внешний вид»: живое превью, выбор темы, акцента, шрифта и формы
+   ===================================================================== */
+
+/* --- живое превью: каналы слева, переписка справа --- */
+
+.look-preview {
+  display: flex;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.look-preview__side {
+  flex: none;
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 14px;
+}
+
+.look-preview__chan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: var(--r-m);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.look-preview__chan.has-unread {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.look-preview__chan.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 22px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
+}
+
+.look-preview__chan i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgb(var(--glow-rgb) / var(--glow-k));
+}
+
+.look-preview__chat {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .look-preview__side {
+    display: none;
+  }
+}
+
+/* --- выбор темы: карточки-миниатюры в цветах самой темы --- */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 7px 10px;
+  border-radius: calc(16px * var(--rk));
+  border: 1px solid var(--line);
+  background: rgb(var(--fg-rgb) / 0.025);
+  text-align: left;
+  animation: rise-in 0.4s var(--ease-out) both;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.3s ease,
+    transform 0.25s var(--ease-spring);
+}
+
+.theme-card:hover {
+  border-color: var(--line-3);
+  background: rgb(var(--fg-rgb) / 0.05);
+  transform: translateY(-2px);
+}
+
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 26px rgb(var(--glow-rgb) / calc(0.18 * var(--glow-k)));
+}
+
+.theme-card__mock {
+  position: relative;
+  display: flex;
+  gap: 5px;
+  height: 80px;
+  margin-bottom: 6px;
+  padding: 7px;
+  overflow: hidden;
+  border-radius: calc(11px * var(--rk));
+  border: 1px solid var(--line);
+  background: var(--black);
+}
+
+.theme-card__side,
+.theme-card__chat {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 5px;
+  border-radius: calc(7px * var(--rk));
+  border: 1px solid var(--line);
+  background: rgb(var(--glass-rgb) / 0.72);
+}
+
+.theme-card__side {
+  width: 34%;
+}
+
+.theme-card__side i {
+  height: 7px;
+  border-radius: calc(3px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.14);
+}
+
+.theme-card__side i.is-active {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
+}
+
+.theme-card__chat {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.theme-card__chat i {
+  width: 64%;
+  height: 10px;
+  border-radius: calc(5px * var(--rk));
+  border: 1px solid var(--line);
+  background: var(--bubble);
+}
+
+.theme-card__chat i.is-mine {
+  align-self: flex-end;
+  width: 46%;
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
+}
+
+/* фоновая сфера — просвечивает сквозь панели, как в приложении */
+.theme-card__dots {
+  position: absolute;
+  top: 6px;
+  right: -12px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: radial-gradient(rgb(var(--sphere-rgb) / 0.85) 0.9px, transparent 1.3px) 0 0 / 5px 5px;
+  -webkit-mask: radial-gradient(circle at 42% 40%, #000 25%, rgb(0 0 0 / 0.35) 55%, transparent 70%);
+  mask: radial-gradient(circle at 42% 40%, #000 25%, rgb(0 0 0 / 0.35) 55%, transparent 70%);
+}
+
+.theme-card__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.theme-card__hint {
+  padding: 0 3px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text-3);
+}
+
+/* --- акцент --- */
+
+.look-note {
+  margin: 0 0 14px;
+}
+
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accent-swatch {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sw, transparent);
+  color: #000;
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.18);
+  transition:
+    transform 0.25s var(--ease-spring),
+    box-shadow 0.2s ease;
+}
+
+.accent-swatch:hover {
+  transform: translateY(-2px) scale(1.06);
+}
+
+.accent-swatch.is-active {
+  box-shadow:
+    0 0 0 2px var(--black),
+    0 0 0 3.5px var(--text),
+    0 0 16px color-mix(in srgb, var(--sw, var(--accent)) 60%, transparent);
+}
+
+/* «как в теме» — кружок в акценте самой темы */
+.accent-swatch__theme {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.2);
+}
+
+.accent-swatch--custom {
+  cursor: pointer;
+  background: conic-gradient(from 0deg, #ff6b6b, #ffd43b, #69db7c, #38d9a9, #4dabf7, #b197fc, #f783ac, #ff6b6b);
+}
+
+.accent-swatch--custom.is-active {
+  background: var(--sw);
+}
+
+.accent-swatch--custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: inherit;
+}
+
+/* --- шрифт, скругления, аватарки --- */
+
+.look-label {
+  display: block;
+  margin: 2px 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.look-seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.look-seg:last-child {
+  margin-bottom: 0;
+}
+
+.look-seg__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 10px;
+  border-radius: calc(14px * var(--rk));
+  border: 1px solid var(--line);
+  background: rgb(var(--fg-rgb) / 0.025);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.3s ease;
+}
+
+.look-seg__item:hover {
+  border-color: var(--line-3);
+  color: var(--text);
+}
+
+.look-seg__item.is-active {
+  border-color: var(--accent);
+  background: rgb(var(--fg-rgb) / 0.06);
+  color: var(--text);
+  box-shadow: 0 0 22px rgb(var(--glow-rgb) / calc(0.14 * var(--glow-k)));
+}
+
+.look-seg__sample {
+  height: 34px;
+  display: grid;
+  place-items: center;
+}
+
+.look-seg__font {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text);
+}
+
+.look-seg__corner {
+  width: 42px;
+  height: 30px;
+  border: 1.5px solid var(--text-2);
+  background: rgb(var(--fg-rgb) / 0.08);
+}
+
+.look-seg__item.is-active .look-seg__corner {
+  border-color: var(--accent);
+}
+
+.look-reset {
+  margin-top: 26px;
+}

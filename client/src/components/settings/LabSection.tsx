@@ -53,13 +53,14 @@ export function LabSection() {
             if (v) findEgg('mirror')
           }}
         />
+        {/* Ретро-терминал вырос в настоящую тему — здесь просто быстрый переключатель */}
         <Toggle
           label="Ретро-терминал"
-          hint="Зелёный фосфор, моноширинный шрифт и строки развёртки — как в 1982-м"
-          checked={s.labRetro}
-          onChange={(v) => setSetting('labRetro', v)}
+          hint="Зелёный фосфор, моноширинный шрифт и строки развёртки — как в 1982-м. Теперь это тема во «Внешнем виде»"
+          checked={s.theme === 'retro'}
+          onChange={(v) => setSetting('theme', v ? 'retro' : 'black')}
         />
-        {(s.labNegative || s.labMirror || s.labRetro) && (
+        {(s.labNegative || s.labMirror) && (
           <div className="set-actions">
             <button className="btn btn--ghost btn--sm" onClick={() => resetSettings([...LAB_KEYS])}>
               Вернуть как было

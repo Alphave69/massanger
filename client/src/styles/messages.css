@@ -32,7 +32,7 @@
 }
 
 .mgroup--mine .msg.is-active > .bubble {
-  box-shadow: 0 0 32px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 32px rgb(var(--glow-rgb) / calc(0.3 * var(--glow-k)));
 }
 
 .msg.is-active .msg-actions,
@@ -61,8 +61,8 @@
   0%,
   25% {
     box-shadow:
-      0 0 0 2px #fff,
-      0 0 40px rgba(255, 255, 255, 0.6);
+      0 0 0 2px var(--accent),
+      0 0 40px rgb(var(--glow-rgb) / calc(0.6 * var(--glow-k)));
   }
   100% {
     box-shadow:
@@ -82,10 +82,10 @@
   align-items: center;
   gap: 1px;
   padding: 2px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   border: 1px solid var(--line-2);
-  background: #070707;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.65);
+  background: var(--surface-2);
+  box-shadow: 0 8px 22px rgb(var(--shade-rgb) / calc(0.65 * var(--shade-k)));
 }
 
 .mgroup--mine .msg-actions__bar {
@@ -97,7 +97,7 @@
   min-width: 26px;
   padding: 0 5px;
   border: 0;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   background: transparent;
   box-shadow: none;
 }
@@ -110,9 +110,9 @@
 
 .msg-actions__bar .msg-actions__btn--danger:hover,
 .msg-actions__bar .msg-actions__btn--danger.is-armed {
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
 }
 
 .msg-actions__bar .msg-actions__btn--danger.is-armed {
@@ -130,12 +130,12 @@
   position: fixed;
   width: 236px;
   padding: 6px;
-  border-radius: 16px;
-  background: #040404;
+  border-radius: calc(16px * var(--rk));
+  background: var(--pop);
   border: 1px solid var(--line-2);
   box-shadow:
-    0 22px 54px rgba(0, 0, 0, 0.85),
-    0 0 34px rgba(255, 255, 255, 0.07);
+    0 22px 54px rgb(var(--shade-rgb) / calc(0.85 * var(--shade-k))),
+    0 0 34px rgb(var(--glow-rgb) / calc(0.07 * var(--glow-k)));
   animation: msg-menu-in 0.18s var(--ease-out);
 }
 
@@ -164,7 +164,7 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   font: 19px/1 var(--emoji);
   transition:
     background-color 0.12s ease,
@@ -184,10 +184,10 @@
 }
 
 .msg-menu__react.is-mine {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--fg-rgb) / 0.12);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
-    0 0 14px rgba(255, 255, 255, 0.28);
+    inset 0 0 0 1px rgb(var(--fg-rgb) / 0.7),
+    0 0 14px rgb(var(--glow-rgb) / calc(0.28 * var(--glow-k)));
 }
 
 .msg-menu__react--more {
@@ -213,7 +213,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-1);
@@ -232,14 +232,14 @@
 .msg-menu__item:hover,
 .msg-menu__item:focus-visible {
   outline: none;
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.28);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.28 * var(--glow-k)));
 }
 
 .msg-menu__item:hover > svg,
 .msg-menu__item:focus-visible > svg {
-  color: var(--black);
+  color: var(--on-accent);
 }
 
 .msg-menu__item.is-done {
@@ -261,14 +261,14 @@
 }
 
 .msg-menu__item--danger.is-armed {
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 22px rgba(255, 255, 255, 0.5);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 22px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
   animation: pop-in 0.3s var(--ease-spring);
 }
 
 .msg-menu__item--danger.is-armed > svg {
-  color: var(--black);
+  color: var(--on-accent);
 }
 
 .msg-menu__item--dev {
@@ -297,7 +297,7 @@
   top: 0;
   z-index: 1;
   padding: 7px 6px 5px;
-  background: #040404;
+  background: var(--pop);
   font: 500 10px/1 var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -315,7 +315,7 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   font: 20px/1 var(--emoji);
   transition:
     background-color 0.12s ease,
@@ -334,8 +334,8 @@
 }
 
 .emoji-picker__btn.is-mine {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  background: rgb(var(--fg-rgb) / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.6);
 }
 
 /* ============ реакции под сообщением ============ */
@@ -364,9 +364,9 @@
   align-items: center;
   gap: 6px;
   padding: 0 9px 0 7px;
-  border-radius: 99px;
+  border-radius: calc(99px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--fg-rgb) / 0.04);
   color: var(--text-2);
   font: 600 12px/1 var(--mono);
   transition:
@@ -379,7 +379,7 @@
 
 .reaction:hover:not(:disabled) {
   border-color: var(--line-3);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--fg-rgb) / 0.08);
   color: var(--text);
 }
 
@@ -393,12 +393,12 @@
 
 /* своя реакция — белая рамка и свечение */
 .reaction.is-mine {
-  border-color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+  background: rgb(var(--fg-rgb) / 0.1);
   color: var(--text);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.25),
-    0 0 16px rgba(255, 255, 255, 0.35);
+    0 0 0 1px rgb(var(--fg-rgb) / 0.25),
+    0 0 16px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
 }
 
 .reaction.is-new {
@@ -473,9 +473,9 @@
   pointer-events: none;
   /* тёмное кольцо — чтобы подсказка не сливалась со своим (белым) пузырём */
   box-shadow:
-    0 0 0 1px #000,
-    0 0 0 2px rgba(255, 255, 255, 0.25),
-    0 0 20px rgba(255, 255, 255, 0.35);
+    0 0 0 1px var(--black),
+    0 0 0 2px rgb(var(--fg-rgb) / 0.25),
+    0 0 20px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
   transition:
     opacity 0.15s ease,
     translate 0.2s var(--ease-out);
@@ -503,7 +503,7 @@
   padding: 0 6px 0 12px;
   font-size: 12.5px;
   color: var(--text-3);
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   transition: color 0.15s ease;
 }
 
@@ -516,7 +516,7 @@
   margin-right: 1px;
   border: solid var(--line-3);
   border-width: 2px 0 0 2px;
-  border-top-left-radius: 8px;
+  border-top-left-radius: calc(8px * var(--rk));
   translate: 0 1px;
 }
 
@@ -529,7 +529,7 @@
   order: 1;
   margin: 0 0 0 1px;
   border-width: 2px 2px 0 0;
-  border-radius: 0 8px 0 0;
+  border-radius: 0 calc(8px * var(--rk)) 0 0;
 }
 
 .reply-quote .avatar {
@@ -628,20 +628,20 @@
 
 .mgroup--mine .fwd__head,
 .mgroup--mine .fwd__from {
-  color: rgba(0, 0, 0, 0.5);
+  color: rgb(var(--on-accent-rgb) / 0.5);
 }
 
 .mgroup--mine .fwd__head b,
 .mgroup--mine .fwd__quote--me b {
-  color: var(--black);
+  color: var(--on-accent);
 }
 
 .mgroup--mine .fwd__quote {
-  border-left-color: rgba(0, 0, 0, 0.35);
+  border-left-color: rgb(var(--on-accent-rgb) / 0.35);
 }
 
 .mgroup--mine .fwd__quote--me {
-  color: rgba(0, 0, 0, 0.7);
+  color: rgb(var(--on-accent-rgb) / 0.7);
 }
 
 /* ============ «(изменено)» и правка ============ */
@@ -655,7 +655,7 @@
 }
 
 .mgroup--mine .bubble__edited {
-  color: rgba(0, 0, 0, 0.45);
+  color: rgb(var(--on-accent-rgb) / 0.45);
 }
 
 .bubble.bubble--editing,
@@ -664,13 +664,13 @@
   width: 540px;
   max-width: 100%;
   padding: 8px 12px 7px;
-  border-radius: 16px;
+  border-radius: calc(16px * var(--rk));
   background: var(--raise);
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: rgb(var(--fg-rgb) / 0.55);
   color: var(--text);
   box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.05),
-    0 0 30px rgba(255, 255, 255, 0.12);
+    0 0 0 4px rgb(var(--fg-rgb) / 0.05),
+    0 0 30px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
   animation: fade-in 0.2s ease;
 }
 
@@ -695,7 +695,7 @@
 
 .msg-editor__hint kbd {
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: calc(5px * var(--rk));
   border: 1px solid var(--line-2);
   font: inherit;
   color: var(--text-2);
@@ -731,8 +731,8 @@
   padding: 6px 7px 7px 14px;
   border: 1px solid var(--line-2);
   border-bottom: 0;
-  border-radius: 14px 14px 0 0;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: calc(14px * var(--rk)) calc(14px * var(--rk)) 0 0;
+  background: rgb(var(--fg-rgb) / 0.045);
   font-size: 12.5px;
   color: var(--text-3);
   animation: reply-bar-in 0.25s var(--ease-out);
@@ -765,7 +765,7 @@
   height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   color: var(--text-2);
   transition:
     background-color 0.15s ease,
@@ -773,8 +773,8 @@
 }
 
 .reply-bar__close:hover {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .reply-bar__close[data-tip]::before {
@@ -801,9 +801,9 @@
   gap: 8px;
   min-width: 0;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: calc(12px * var(--rk));
   border: 1px dashed var(--line-3);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--fg-rgb) / 0.03);
   font-size: 13px;
   color: var(--text-2);
 }
@@ -856,7 +856,7 @@
   height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   border: 1px solid var(--line-2);
   background: var(--raise-2);
   font: 700 16px/1 var(--mono);
@@ -866,14 +866,14 @@
 .fwd-target__go {
   flex: none;
   padding: 6px 11px;
-  border-radius: 9px;
-  background: var(--text);
-  color: var(--black);
+  border-radius: calc(9px * var(--rk));
+  background: var(--accent);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   opacity: 0;
   transform: translateX(6px);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
   transition:
     opacity 0.15s ease,
     transform 0.25s var(--ease-out);
