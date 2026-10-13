@@ -202,8 +202,13 @@ function passwordProblem(password: unknown): string | null {
 // ============ защита от перебора и рассылки ============
 
 const FIFTEEN_MIN = 15 * 60_000
-/** Неудачные входы: на один логин/почту и на один IP */
-const loginFailsByName = new RateLimiter(5, FIFTEEN_MIN)
+/**
+ * Неудачные входы. Строгий лимит — на пару «логин + IP»: перебирать пароль с одного адреса нельзя,
+ * а заблокировать чужой аккаунт неверными паролями со своего адреса — тоже (владелец войдёт со своего).
+ * На один логин со всех адресов — мягкий лимит против перебора с многих IP; плюс общий лимит на IP
+ */
+const loginFailsByNameIp = new RateLimiter(5, FIFTEEN_MIN)
+const loginFailsByName = new RateLimiter(30, 60 * 60_000)
 const loginFailsByIp = new RateLimiter(20, FIFTEEN_MIN)
 /** Письма с кодами (регистрация, сброс пароля, смена почты) с одного IP */
 const codeMailsByIp = new RateLimiter(10, 60 * 60_000)
@@ -293,17 +298,20 @@ app.post('/api/auth/login', async (req, res) => {
   // считаем по тому, что ввели: «Login» и «login» — один и тот же счётчик
   const nameKey = id.toLowerCase()
   const ip = clientIp(req)
-  const wait = Math.max(loginFailsByName.retryAfter(nameKey), loginFailsByIp.retryAfter(ip))
+  const pairKey = `${nameKey}|${ip}`
+  const wait = Math.max(loginFailsByNameIp.retryAfter(pairKey), loginFailsByName.retryAfter(nameKey), loginFailsByIp.retryAfter(ip))
   if (wait) return tooMany(res, wait, `Слишком много неудачных попыток входа — попробуй ${waitText(wait)}`)
 
   const user = id.includes('@') ? store.findUserByEmail(id) : store.findUserByName(id)
   if (!user || typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) {
+    loginFailsByNameIp.hit(pairKey)
     loginFailsByName.hit(nameKey)
     loginFailsByIp.hit(ip)
     return fail(res, 401, 'Неверный логин, почта или пароль')
   }
   if (user.banned) return fail(res, 403, 'Аккаунт заблокирован')
-  loginFailsByName.reset(nameKey)
+  // общий счётчик логина не сбрасываем: иначе вход владельца обнулял бы перебор с чужих адресов
+  loginFailsByNameIp.reset(pairKey)
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 

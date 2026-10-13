@@ -103,8 +103,9 @@ All limits are in-memory sliding windows and reset when the server restarts.
 
 | What | Limit |
 | ---- | ----- |
-| Failed logins per login/e-mail | 5 per 15 min |
-| Failed logins per IP | 20 per 15 min |
+| Failed logins per login/e-mail **from one IP** | 5 per 15 min |
+| Failed logins per login/e-mail from all IPs together | 30 per hour |
+| Failed logins per IP (any logins) | 20 per 15 min |
 | Code e-mails per IP (register, reset, e-mail change) | 10 per hour |
 | Messages per user (`message:send`) | 5 per 4 s |
 
@@ -142,6 +143,7 @@ The app runs behind Caddy on the same machine. Express uses `trust proxy = loopb
 
 - **Hard-coded JWT secret.** The server used to sign tokens with a hard-coded development secret whenever `JWT_SECRET` was not set. That string is visible in this public repository, so on such a deployment anyone could forge a login token for any user id. The production server was configured with a random secret by `setup.sh`. The fallback has now been removed, and the server refuses to start without a strong secret.
 - **Missing limits.** Login and e-mail endpoints, and message sending, had no rate limits. Limits were added as described above.
+- **Account lockout by strangers.** The first version of the login limit counted failures per login regardless of IP: 5 wrong passwords from anywhere locked the real owner out for 15 minutes, so anyone who knew a login could block that account. The strict limit is now per login + IP pair, so wrong passwords from an attacker's address don't block the owner's address. A softer per-login limit across all IPs (30 per hour) still slows down password guessing from many addresses. A successful login clears only that pair's counter, not the per-login one, so the owner signing in doesn't give a distributed attacker a fresh budget. Remaining trade-off: an attacker with many IP addresses can still exhaust the per-login limit and block that login for up to an hour.
 - **Permissive CORS.** The API and Socket.IO accepted any origin. They are now restricted to the configured origins.
 
 ### Reporting a vulnerability
