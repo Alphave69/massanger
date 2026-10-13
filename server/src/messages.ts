@@ -4,6 +4,7 @@ import { on, reply } from './safe.js'
 import { runCommand } from './commands.js'
 import { hasChannelPermission } from './permissions.js'
 import type { Badges } from './badges.js'
+import { RateLimiter } from './ratelimit.js'
 
 /**
  * Сообщения в реальном времени: отправить (в том числе ответом), реакции, правка, пересылка.
@@ -26,6 +27,10 @@ const MAX_EMOJI = 16
 const validEmoji = (emoji: string) => emoji.length > 0 && emoji.length <= MAX_EMOJI && !/\s/.test(emoji) && !/\p{Cc}/u.test(emoji)
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
+
+/** Антиспам: не больше 5 сообщений за 4 секунды от одного человека (во все каналы вместе) */
+const sendLimit = new RateLimiter(5, 4000)
+const SLOW_DOWN = ['Воу-воу, полегче, амиго 🤠', 'Клавиатура дымится — дай ей остыть', 'Ты печатаешь быстрее, чем мы читаем']
 
 /** Как назвать место, откуда переслали: «#общий · Nuntius», «личка» или название группы */
 function placeName(access: store.ChannelAccess) {
@@ -72,6 +77,13 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
   function attach(socket: Socket, userId: string) {
     on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown }, ack?: unknown) => {
       const answer = reply(ack)
+      const wait = sendLimit.retryAfter(userId)
+      if (wait) {
+        // слишком часто — сообщение не доставляем, клиент покажет причину
+        answer({ error: `${SLOW_DOWN[Math.floor(Math.random() * SLOW_DOWN.length)]} Подожди ${Math.ceil(wait / 1000)} с`, retryAfter: Math.ceil(wait / 1000) })
+        return
+      }
+      sendLimit.hit(userId)
       const channelId = str(payload?.channelId)
       const content = store.snip(str(payload?.content).trim(), MAX_LENGTH)
       const access = channelId ? store.channelAccess(channelId, userId) : undefined
