@@ -37,6 +37,20 @@
     opacity: 1;
   }
 
+  /* долгое нажатие по плитке звонка и по человеку в голосе — меню, а не выделение текста */
+  .tile,
+  .voice-user {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* наведения нет — «Смотреть» на чужой демонстрации видно сразу */
+  .tile__watch {
+    opacity: 1;
+    scale: 1;
+  }
+
   .reaction {
     min-height: 32px;
   }
@@ -839,6 +853,89 @@
   .msg-menu--sheet .emoji-picker__btn {
     height: 44px;
     font-size: 25px;
+  }
+
+  /* --- меню участника голоса — шторкой снизу --- */
+
+  .vmenu-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(var(--bg-rgb) / 0.6);
+    animation: fade-in 0.2s ease;
+  }
+
+  .vmenu.vmenu--sheet {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 40px);
+    padding: 20px 12px calc(env(safe-area-inset-bottom) + 12px);
+    border-bottom: 0;
+    border-radius: calc(26px * var(--rk)) calc(26px * var(--rk)) 0 0;
+    animation: sheet-up 0.34s var(--ease-out);
+  }
+
+  .vmenu__grip {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: calc(2px * var(--rk));
+    background: var(--line-3);
+  }
+
+  .vmenu--sheet .vmenu__item {
+    padding: 14px 12px;
+    border-radius: calc(12px * var(--rk));
+    font-size: 15.5px;
+  }
+
+  .vmenu--sheet .vmenu__item > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .vmenu--sheet .vmenu__vol {
+    padding: 8px 12px 4px;
+  }
+
+  .vmenu--sheet .vmenu__vol .slider {
+    height: 32px;
+  }
+
+  /* --- помощь с доступом: подсказка сверху во всю ширину, кнопки окна — во всю ширину --- */
+
+  .media-ask {
+    top: calc(env(safe-area-inset-top) + 10px);
+    width: calc(100vw - 20px);
+    gap: 12px;
+    padding: 12px 40px 12px 12px;
+  }
+
+  .media-ask--bottom {
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom) + 12px);
+  }
+
+  .media-ask .mpic--phone {
+    width: 80px;
+    height: 128px;
+  }
+
+  .media-ask .mpic--desk {
+    display: none;
+  }
+
+  .media-help__actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .cam-test {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* --- настройки: сначала список разделов, раздел — отдельным экраном --- */

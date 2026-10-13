@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, Mic, Square, Volume2 } from 'lucide-react'
+import { Camera, Keyboard, Mic, Square, Volume2 } from 'lucide-react'
 import { blip } from '../../lib/fx'
+import { askMedia, mediaDenied, showMediaHelp } from '../../lib/mediaHelp'
 import { keyLabel, setSetting, useSettings } from '../../lib/settings'
-import { micProblem, openMic } from '../../lib/voice'
+import { cameraProblem, micProblem, openCamera, openMic } from '../../lib/voice'
 import { Choice, Group, SectionHead, Select, Slider, Toggle } from './controls'
 
 type SinkCapable = { setSinkId?: (id: string) => Promise<void> }
@@ -33,18 +34,20 @@ export function VoiceSection() {
 
   const askPermission = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await askMedia('mic', () => navigator.mediaDevices.getUserMedia({ audio: true }))
       stream.getTracks().forEach((t) => t.stop())
       setError(null)
       await refresh()
     } catch (err) {
       setError(micProblem(err))
+      // запрещено — окно с инструкцией; разрешат — названия микрофонов появятся сами
+      if (mediaDenied(err)) showMediaHelp('mic', { onGranted: () => void refresh().then(() => setError(null)) }, err)
     }
   }
 
-  const deviceOptions = (list: MediaDeviceInfo[], fallback: string, current: string) => {
+  const deviceOptions = (list: MediaDeviceInfo[], fallback: string, current: string, byDefault = 'По умолчанию (системное)') => {
     const options = [
-      { value: '', label: 'По умолчанию (системное)' },
+      { value: '', label: byDefault },
       ...list
         .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
         .map((d, i) => ({ value: d.deviceId, label: d.label || `${fallback} ${i + 1}` })),
@@ -56,7 +59,7 @@ export function VoiceSection() {
 
   return (
     <>
-      <SectionHead title="Голос и звук" subtitle="Настрой микрофон и звук заранее — голосовые каналы уже на подходе." />
+      <SectionHead title="Голос и звук" subtitle="Микрофон, звук и камера — настрой заранее, чтобы в звонке всё заработало сразу." />
 
       {!navigator.mediaDevices?.getUserMedia ? (
         <div className="notice">Этот браузер не умеет работать с микрофоном. Открой Nuntius в Chrome, Edge или Firefox.</div>
@@ -97,6 +100,8 @@ export function VoiceSection() {
           </Group>
 
           <MicTest onError={setError} />
+
+          <CameraTest cameras={devices.filter((d) => d.kind === 'videoinput')} options={deviceOptions} onFound={refresh} />
         </>
       )}
 
@@ -186,12 +191,14 @@ function MicTest({ onError }: { onError: (text: string | null) => void }) {
       // выбранный микрофон не открылся и взяли системный — об этом и скажем вместо «всё хорошо»
       const notes: string[] = []
       try {
-        stream = await openMic((text) => notes.push(text))
+        stream = await askMedia('mic', () => openMic((text) => notes.push(text)))
       } catch (err) {
         window.clearTimeout(slow)
         if (cancelled) return
         onError(micProblem(err))
         setTesting(false)
+        // запрещено — окно с инструкцией; разрешат — проверка начнётся сама
+        if (mediaDenied(err)) showMediaHelp('mic', { onGranted: () => setTesting(true) }, err)
         return
       }
       window.clearTimeout(slow)
@@ -299,7 +306,7 @@ function FindMic({ onFound }: { onFound: () => Promise<void> }) {
     let ctx: AudioContext | null = null
     try {
       // без разрешения браузер не покажет устройства — спрашиваем один раз
-      const first = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const first = await askMedia('mic', () => navigator.mediaDevices.getUserMedia({ audio: true }))
       first.getTracks().forEach((t) => t.stop())
       const list = (await navigator.mediaDevices.enumerateDevices()).filter(
         (d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications',
@@ -351,6 +358,7 @@ function FindMic({ onFound }: { onFound: () => Promise<void> }) {
       }
     } catch (err) {
       setResult({ ok: false, text: micProblem(err) })
+      if (mediaDenied(err)) showMediaHelp('mic', {}, err)
     } finally {
       for (const x of streams) x.stream.getTracks().forEach((t) => t.stop())
       void ctx?.close()
@@ -366,6 +374,98 @@ function FindMic({ onFound }: { onFound: () => Promise<void> }) {
       {!result && left === 0 && <span className="muted">Не слышно? Нажми и говори 3 секунды — сам выберу микрофон, в котором тебя слышно</span>}
       {result && <div className={`notice${result.ok ? '' : ' notice--error'}`}>{result.text}</div>}
     </div>
+  )
+}
+
+type DeviceOptions = (list: MediaDeviceInfo[], fallback: string, current: string, byDefault?: string) => { value: string; label: string }[]
+
+/**
+ * Камера для звонков: выбор и живое превью — видно, та ли камера и как тебя увидят.
+ * Сменить камеру можно и посреди звонка: она переключится на лету (см. switchCamera в lib/voice.ts)
+ */
+function CameraTest({ cameras, options, onFound }: { cameras: MediaDeviceInfo[]; options: DeviceOptions; onFound: () => Promise<void> }) {
+  const cameraDeviceId = useSettings((st) => st.cameraDeviceId)
+  const [on, setOn] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  // Какая камера на самом деле открылась
+  const [opened, setOpened] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  // Пока нет разрешения на камеру, браузер не отдаёт их названия
+  const needsPermission = cameras.length > 0 && cameras.every((d) => !d.label)
+
+  useEffect(() => {
+    if (!on) return
+    let cancelled = false
+    let stream: MediaStream | null = null
+    const start = async () => {
+      // выбранная не открылась и взяли системную — скажем об этом
+      const notes: string[] = []
+      try {
+        stream = await askMedia('camera', () => openCamera((text) => notes.push(text)))
+      } catch (err) {
+        if (cancelled) return
+        setOn(false)
+        setError(cameraProblem(err))
+        // запрещено — окно с инструкцией; разрешат — превью включится само
+        if (mediaDenied(err)) showMediaHelp('camera', { onGranted: () => setOn(true) }, err)
+        return
+      }
+      if (cancelled) return stream.getTracks().forEach((t) => t.stop())
+      setError(null)
+      setNote(notes[0] ?? null)
+      setOpened(stream.getVideoTracks()[0]?.label || 'камера без названия')
+      if (videoRef.current) videoRef.current.srcObject = stream
+      // доступ получен — теперь браузер покажет названия камер
+      void onFound()
+    }
+    void start()
+    return () => {
+      cancelled = true
+      stream?.getTracks().forEach((t) => t.stop())
+      if (videoRef.current) videoRef.current.srcObject = null
+      setOpened(null)
+    }
+  }, [on, cameraDeviceId, onFound])
+
+  return (
+    <Group title="Камера">
+      <div className="cam-test">
+        <div className={`cam-test__preview${on ? ' is-on' : ''}`}>
+          <video ref={videoRef} className="cam-test__video" autoPlay playsInline muted />
+          {!on && (
+            <span className="cam-test__off">
+              <Camera size={22} />
+              {cameras.length || needsPermission ? 'Камера выключена' : 'Камера не найдена'}
+            </span>
+          )}
+        </div>
+        <div className="cam-test__side">
+          <Select
+            label="Камера"
+            value={cameraDeviceId}
+            options={options(cameras, 'Камера', cameraDeviceId, 'По умолчанию (системная)')}
+            onChange={(v) => setSetting('cameraDeviceId', v)}
+          />
+          <button className={`btn btn--sm ${on ? 'btn--outline' : 'btn--primary'}`} onClick={() => setOn((v) => !v)}>
+            {on ? <Square size={14} /> : <Camera size={15} />} {on ? 'Выключить' : 'Проверить камеру'}
+          </button>
+          <p className="muted">
+            {on
+              ? opened
+                ? `Показывает: ${opened}`
+                : 'Включаем…'
+              : needsPermission
+                ? 'Нажми «Проверить камеру» — браузер спросит доступ, и появятся названия камер.'
+                : cameras.length
+                  ? 'Так тебя увидят друзья. В звонке камеру можно сменить на лету.'
+                  : 'Подключи камеру — она появится в списке сама.'}
+          </p>
+        </div>
+      </div>
+      {note && <div className="notice">{note}</div>}
+      {error && <div className="notice notice--error">{error}</div>}
+    </Group>
   )
 }
 

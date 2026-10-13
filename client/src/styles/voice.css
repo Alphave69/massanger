@@ -158,6 +158,49 @@
   color: var(--text-3);
 }
 
+/* Строка человека под каналом и метка «в эфире» (показывает экран) — щелчок открывает его демонстрацию */
+.voice-user-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voice-user-row > .voice-user {
+  flex: 1;
+  min-width: 0;
+}
+
+.voice-user-row.is-menu > .voice-user {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.voice-live {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: calc(6px * var(--rk));
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 9px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
+  animation: rise-in 0.3s var(--ease-out) both;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s var(--ease-spring);
+}
+
+.voice-live:hover {
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k)));
+  transform: scale(1.06);
+}
+
 /* ============ «Голос подключён» над своей панелью ============ */
 
 .voice-panel {
@@ -479,12 +522,6 @@
   box-shadow: none;
 }
 
-/* Меню громкости живёт поверх всего интерфейса (в плитке его бы обрезало) */
-.volume-layer {
-  position: relative;
-  z-index: 60;
-}
-
 .tile__label {
   position: absolute;
   left: 8px;
@@ -503,6 +540,9 @@
 }
 
 .tile__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font: 10px var(--mono);
   color: var(--text-3);
 }
@@ -571,50 +611,62 @@
   top: calc(100% + 8px);
 }
 
-/* Громкость человека для себя */
-.volume-menu {
-  position: relative;
+/* Щелчок по плитке — крупно, по крупной — обратно в сетку (как в Discord), двойной — во весь экран */
+.stage .tile {
+  cursor: zoom-in;
+  touch-action: manipulation;
 }
 
-.volume-menu__pop {
-  position: fixed;
-  width: 220px;
-  padding: 12px;
-  border-radius: calc(14px * var(--rk));
-  border: 1px solid var(--line-2);
-  background: var(--surface);
-  box-shadow: 0 16px 40px rgb(var(--shade-rgb) / calc(0.7 * var(--shade-k)));
-  animation: menu-in 0.2s var(--ease-out);
+.stage .tile.tile--focused {
+  cursor: zoom-out;
 }
 
-.volume-menu__row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
+.stage .tile:fullscreen {
+  cursor: default;
 }
 
-.volume-menu__row b {
-  font: 600 12px var(--mono);
+/* открыто меню этого человека — плитка подсвечена, кнопки видны */
+.tile.is-menu {
+  border-color: var(--line-3);
 }
 
-.volume-menu__mute {
-  width: 100%;
-  margin-top: 8px;
-  padding: 7px;
-  border-radius: calc(9px * var(--rk));
-  border: 1px solid var(--line-2);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-2);
+.tile.is-menu .tile__tools {
+  opacity: 1;
 }
 
-.volume-menu__mute:hover,
-.volume-menu__mute.is-on {
+.tile__tool.is-active {
   background: var(--accent);
   color: var(--on-accent);
-  border-color: var(--accent);
+}
+
+/* Чужая демонстрация в сетке: подсказка «Смотреть» по наведению */
+.tile__watch {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: calc(99px * var(--rk));
+  background: rgb(var(--bg-rgb) / 0.78);
+  border: 1px solid var(--line-3);
+  font: 600 12px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  opacity: 0;
+  scale: 0.92;
+  pointer-events: none;
+  transition:
+    opacity 0.15s ease,
+    scale 0.25s var(--ease-spring);
+}
+
+.tile:hover .tile__watch {
+  opacity: 1;
+  scale: 1;
 }
 
 /* Лобби голосового канала (ещё не зашли) */
@@ -1347,4 +1399,784 @@
 .modal-layer {
   position: relative;
   z-index: 350;
+}
+
+/* ============ меню участника голоса (правый клик / «⋯» / долгое нажатие) ============ */
+
+.vmenu-layer {
+  position: relative;
+  z-index: 300;
+}
+
+.vmenu {
+  position: fixed;
+  width: 264px;
+  max-height: calc(100vh / var(--ui-zoom, 1) - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: calc(16px * var(--rk));
+  background: var(--panel-solid);
+  border: 1px solid var(--line-2);
+  box-shadow:
+    0 22px 54px rgb(var(--shade-rgb) / calc(0.85 * var(--shade-k))),
+    0 0 34px rgb(var(--glow-rgb) / calc(0.07 * var(--glow-k)));
+  animation: menu-in 0.18s var(--ease-out);
+}
+
+.vmenu__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.vmenu__head .avatar {
+  flex: none;
+  border-radius: 50%;
+}
+
+.vmenu__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vmenu__who b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.vmenu__who small {
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.vmenu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.vmenu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: calc(9px * var(--rk));
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-1);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.2s ease;
+}
+
+.vmenu__item > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.vmenu__item:hover:not(:disabled),
+.vmenu__item:focus-visible {
+  outline: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.28 * var(--glow-k)));
+}
+
+.vmenu__item:hover:not(:disabled) > svg,
+.vmenu__item:focus-visible > svg {
+  color: var(--on-accent);
+}
+
+.vmenu__item:disabled {
+  opacity: 0.5;
+}
+
+/* «заглушить для себя» включено — галочка */
+.vmenu__item.is-checked,
+.vmenu__item.is-checked > svg {
+  color: var(--text);
+}
+
+/* опасное в монохроме — белым, а взведённое «точно выгнать?» — инверсия со свечением */
+.vmenu__item--danger {
+  color: var(--text);
+}
+
+.vmenu__item--danger.is-armed {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 22px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
+  animation: pop-in 0.3s var(--ease-spring);
+}
+
+.vmenu__item--danger.is-armed > svg {
+  color: var(--on-accent);
+}
+
+.vmenu__sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line);
+}
+
+.vmenu__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 5px;
+  font: 500 10.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+.vmenu__note {
+  margin: 0;
+  padding: 2px 10px 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.vmenu__vol {
+  display: block;
+  padding: 6px 10px 2px;
+}
+
+.vmenu__vol-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.vmenu__vol-top > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vmenu__vol-top b {
+  font: 600 12px var(--mono);
+  color: var(--text);
+}
+
+.vmenu__vol.is-off .slider {
+  opacity: 0.4;
+}
+
+/* ============ помощь с доступом к микрофону, камере и экрану ============ */
+
+.media-help-layer {
+  position: relative;
+  z-index: 410;
+}
+
+/* «Сейчас браузер спросит…» — пока открыто окошко браузера */
+.media-ask {
+  position: fixed;
+  left: 50%;
+  translate: -50% 0;
+  width: min(560px, calc(100vw / var(--ui-zoom, 1) - 24px));
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 44px 14px 14px;
+  border-radius: calc(20px * var(--rk));
+  border: 1px solid var(--line-3);
+  background: var(--panel-solid);
+  box-shadow:
+    0 24px 60px rgb(var(--shade-rgb) / calc(0.85 * var(--shade-k))),
+    0 0 40px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
+  animation: rise-in 0.35s var(--ease-out);
+}
+
+.media-ask--top {
+  top: 18px;
+}
+
+.media-ask--bottom {
+  bottom: 24px;
+}
+
+.media-ask__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.media-ask__text b {
+  font: 700 15px/1.25 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.media-ask__text span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.media-ask__text q {
+  quotes: '«' '»';
+  font-weight: 600;
+  color: var(--text);
+}
+
+.media-ask__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(9px * var(--rk));
+  color: var(--text-3);
+}
+
+.media-ask__close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Картинки: как выглядит окошко браузера / где включить доступ */
+.mpic {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: calc(12px * var(--rk));
+  border: 1px solid var(--line-2);
+  background:
+    radial-gradient(rgb(var(--fg-rgb) / 0.06) 1px, transparent 1.5px) 0 0 / 12px 12px,
+    var(--black);
+  font-family: var(--font);
+  color: var(--text-1);
+  user-select: none;
+}
+
+.mpic--desk {
+  width: 200px;
+  height: 118px;
+}
+
+.mpic--phone {
+  width: 92px;
+  height: 150px;
+  border-radius: calc(18px * var(--rk));
+  border-width: 2px;
+}
+
+.mpic__bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 7px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raise);
+}
+
+.mpic__bar > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-3);
+}
+
+.mpic__url {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 15px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: calc(99px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.08);
+  font: 8px var(--mono);
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.mpic__url--phone {
+  position: absolute;
+  top: 8px;
+  left: 6px;
+  right: 6px;
+  margin: 0;
+}
+
+/* значок у адреса — сюда нажимать, если доступ запрещён */
+.mpic__lock {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  margin-left: -4px;
+  border-radius: 50%;
+}
+
+.mpic__lock.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 10px rgb(var(--glow-rgb) / calc(0.9 * var(--glow-k)));
+  animation: mpic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mpic-pulse {
+  50% {
+    box-shadow:
+      0 0 0 4px rgb(var(--fg-rgb) / 0.25),
+      0 0 14px rgb(var(--glow-rgb) / calc(0.9 * var(--glow-k)));
+  }
+}
+
+/* окошко браузера с вопросом */
+.mpic__prompt,
+.mpic__panel,
+.mpic__picker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: calc(9px * var(--rk));
+  border: 1px solid var(--line-3);
+  background: var(--raise-2);
+  box-shadow: 0 10px 24px rgb(var(--shade-rgb) / calc(0.8 * var(--shade-k)));
+  animation: rise-in 0.5s 0.15s var(--ease-out) both;
+}
+
+.mpic--desk .mpic__prompt,
+.mpic--desk .mpic__panel {
+  top: 30px;
+  left: 8px;
+  width: 150px;
+}
+
+.mpic--safari .mpic__prompt {
+  left: 50%;
+  translate: -50% 0;
+}
+
+.mpic--phone .mpic__prompt {
+  left: 6px;
+  right: 6px;
+  bottom: 8px;
+}
+
+.mpic--ios .mpic__prompt {
+  bottom: auto;
+  top: 50%;
+  translate: 0 -50%;
+  text-align: center;
+}
+
+.mpic--fix .mpic__panel {
+  top: 30px;
+  left: 6px;
+  right: 6px;
+}
+
+.mpic__prompt small,
+.mpic__panel small {
+  font-size: 7.5px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.mpic__ask {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mpic__ask svg {
+  width: 10px;
+  height: 10px;
+}
+
+.mpic__btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.mpic__btns em {
+  padding: 3px 6px;
+  border-radius: calc(5px * var(--rk));
+  border: 1px solid var(--line-2);
+  font: normal 600 7.5px var(--font);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* «Разрешить» — сюда нажимать: светится и «пульсирует» */
+.mpic__btns em.is-go {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  animation: mpic-pulse 1.4s ease-in-out infinite;
+}
+
+/* на маленьком телефоне в картинке — мелко и без вылезания за край */
+.mpic--phone .mpic__prompt {
+  gap: 5px;
+  padding: 6px 5px;
+}
+
+.mpic--phone .mpic__prompt small {
+  font-size: 6.5px;
+  overflow-wrap: anywhere;
+}
+
+.mpic--phone .mpic__btns em {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 2px;
+  font-size: 6.5px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* окно выбора экрана */
+.mpic__picker {
+  top: 32px;
+  left: 50%;
+  translate: -50% 0;
+  width: 150px;
+}
+
+.mpic__tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.mpic__tabs i,
+.mpic__select {
+  font: normal 600 7px var(--font);
+  color: var(--text-3);
+}
+
+.mpic__tabs i.is-on {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mpic__thumbs {
+  display: flex;
+  gap: 5px;
+}
+
+.mpic__thumbs i {
+  flex: 1;
+  height: 22px;
+  border-radius: calc(4px * var(--rk));
+  border: 1px solid var(--line-2);
+  background: rgb(var(--fg-rgb) / 0.06);
+}
+
+.mpic__thumbs i.is-on {
+  border-color: var(--text);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
+}
+
+/* строка «Микрофон — Разрешить» / переключатель в настройках */
+.mpic__row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mpic__row > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.mpic__row svg {
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+
+.mpic__select {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px;
+  border-radius: calc(5px * var(--rk));
+  background: var(--accent);
+  color: var(--on-accent);
+  animation: mpic-pulse 1.4s ease-in-out infinite;
+}
+
+.mpic__select svg {
+  width: 8px;
+  height: 8px;
+}
+
+.mpic__switch {
+  flex: none;
+  position: relative;
+  width: 20px;
+  height: 11px;
+  border-radius: calc(99px * var(--rk));
+  background: var(--line-3);
+}
+
+.mpic__switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--black);
+}
+
+.mpic__switch.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k)));
+}
+
+.mpic__switch.is-on::after {
+  translate: 9px 0;
+  background: var(--on-accent);
+}
+
+/* окно настроек (Windows, iPhone, macOS) */
+.mpic--settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+}
+
+.mpic--settings .mpic__row {
+  padding: 8px 10px;
+  border-radius: calc(9px * var(--rk));
+  border: 1px solid var(--line-2);
+  background: var(--raise);
+  font-size: 12px;
+}
+
+.mpic--settings .mpic__row svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mpic--settings .mpic__switch {
+  width: 30px;
+  height: 16px;
+}
+
+.mpic--settings .mpic__switch::after {
+  top: 3px;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+}
+
+.mpic--settings .mpic__switch.is-on::after {
+  translate: 14px 0;
+}
+
+.mpic__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 10.5px var(--mono);
+  color: var(--text-3);
+}
+
+.mpic__dim {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+/* Окно «нет доступа» с инструкцией */
+.media-help .media-help__modal {
+  max-width: 500px;
+}
+
+.media-help__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 14px;
+  border-radius: calc(14px * var(--rk));
+  border: 1px solid var(--line-3);
+  background: rgb(var(--fg-rgb) / 0.06);
+  color: var(--text);
+  box-shadow: 0 0 24px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
+}
+
+.media-help__modal .modal__subtitle {
+  margin-bottom: 16px;
+}
+
+.media-help__modal > .mpic {
+  margin: 0 auto 18px;
+}
+
+.media-help__modal > .mpic--desk {
+  width: 100%;
+  max-width: 340px;
+  height: 150px;
+}
+
+.media-help__modal > .mpic--desk .mpic__panel,
+.media-help__modal > .mpic--desk .mpic__prompt {
+  width: 190px;
+}
+
+.media-help__steps {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.media-help__steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 36px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+
+.media-help__steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 12px var(--mono);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.3 * var(--glow-k)));
+}
+
+.media-help__extra {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: calc(12px * var(--rk));
+  border: 1px dashed var(--line-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.media-help__still {
+  margin-bottom: 14px;
+}
+
+.media-help__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ============ проверка камеры в настройках ============ */
+
+.cam-test {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.cam-test__preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(14px * var(--rk));
+  border: 1px solid var(--line-2);
+  background:
+    radial-gradient(circle at 50% 40%, rgb(var(--fg-rgb) / 0.06), transparent 65%),
+    var(--black);
+}
+
+.cam-test__preview.is-on {
+  border-color: var(--line-3);
+  box-shadow: 0 0 24px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
+}
+
+/* превью — как в зеркале (так же видишь себя в звонке) */
+.cam-test__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.cam-test__off {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 11px var(--mono);
+  color: var(--text-3);
+}
+
+.cam-test__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cam-test__side .select-field {
+  align-self: stretch;
+}
+
+.cam-test__side .muted {
+  margin: 0;
+}
+
+.cam-test + .notice {
+  margin: 14px 0 0;
 }
