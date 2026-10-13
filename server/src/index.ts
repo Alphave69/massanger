@@ -21,6 +21,7 @@ import { registerRoleRoutes } from './roles.js'
 import { broadcastGuild, serializeGuild } from './guildView.js'
 import { hasChannelPermission } from './permissions.js'
 import { RateLimiter, waitText } from './ratelimit.js'
+import { allowedOrigins, originAllowed } from './origins.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
@@ -28,11 +29,20 @@ const app = express()
 // Перед нами Caddy на этой же машине: настоящий IP клиента он кладёт в X-Forwarded-For.
 // Доверяем только ему (loopback) — иначе любой подставил бы себе чужой IP в заголовке
 app.set('trust proxy', 'loopback')
-app.use(cors())
+// API — только для своих сайтов: чужой отвечаем 403, своим — заголовки CORS (и ответ на preflight)
+app.use('/api', (req, res, next) => {
+  if (originAllowed(req.headers.origin, req.headers.host)) return next()
+  fail(res, 403, 'Запросы к Nuntius разрешены только с его собственного сайта')
+})
+app.use('/api', cors((req, cb) => cb(null, { origin: originAllowed(req.headers.origin, req.headers.host) })))
 app.use(express.json())
 
 const http = createServer(app)
-const io = new Server(http, { cors: { origin: '*' } })
+const io = new Server(http, {
+  cors: { origin: allowedOrigins },
+  // WebSocket CORS не проверяет — Origin смотрим сами ещё до рукопожатия
+  allowRequest: (req, cb) => cb(null, originAllowed(req.headers.origin, req.headers.host)),
+})
 
 const fail = (res: Response, code: number, error: string) => void res.status(code).json({ error })
 
