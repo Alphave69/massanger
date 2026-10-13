@@ -33,7 +33,7 @@ export function SlowWarning({ left }: { left: number }) {
       </span>
       <span className="slow-warn__text">
         <b>{line}</b>
-        <span>Сообщения не доходят — можно снова через {secs} с</span>
+        <span>Писать можно снова через {secs} с</span>
       </span>
       <button type="button" className="slow-warn__close" onClick={dismissSlow} aria-label="Закрыть предупреждение" data-tip="Закрыть">
         <X size={15} />

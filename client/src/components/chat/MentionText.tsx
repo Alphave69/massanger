@@ -10,11 +10,15 @@ import { ui } from '../../lib/ui'
  * клик по человеку — его карточка. Неподтверждённые метки — обычным текстом.
  */
 export function MentionText({ message: m }: { message: Message }) {
-  const pieces = useMemo(() => (m.content.includes('@') ? splitMentions(m.content) : null), [m.content])
+  // без «@» в тексте упоминаний нет — и подписываться на людей и роли незачем
+  return m.content.includes('@') ? <Rich message={m} /> : <>{m.content}</>
+}
+
+function Rich({ message: m }: { message: Message }) {
+  const pieces = useMemo(() => splitMentions(m.content), [m.content])
   const users = useChat((s) => s.users)
   const meId = useChat((s) => s.me?.id)
   const guild = useChat((s) => guildOfChannel(s.guilds, m.channelId))
-  if (!pieces) return <>{m.content}</>
 
   const ok = m.mentions
   const myRoles = (meId && guild?.memberRoles?.[meId]) || []
