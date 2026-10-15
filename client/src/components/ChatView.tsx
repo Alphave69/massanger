@@ -499,7 +499,7 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
   const active = Math.min(sel, Math.max(0, matches.length - 1))
 
   // «@» в начале слова перед курсором — подсказываем, кого упомянуть
-  const mentionAt = /(^|[\s(«"'])@([^\s@]{0,32})$/.exec(value.slice(0, caret))
+  const mentionAt = /(^|[\s([{«"'„“])@([^\s@]{0,32})$/.exec(value.slice(0, caret))
   const mentionStart = mentionAt ? caret - mentionAt[2].length - 1 : -1
   // список зависит от участников, ролей и того, кто в сети — на них и подписываемся
   const guilds = useChat((s) => s.guilds)

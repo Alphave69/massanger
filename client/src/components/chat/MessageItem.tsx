@@ -27,8 +27,11 @@ function onContextMenu(e: MouseEvent<HTMLElement>, message: Message) {
   // выделили кусок текста в этом сообщении — предложим скопировать именно его
   const sel = window.getSelection()
   const selection = sel && !sel.isCollapsed && sel.anchorNode && e.currentTarget.contains(sel.anchorNode) ? sel.toString().trim() : ''
-  msgUi.openMenu(message, { kind: 'point', x: e.clientX, y: e.clientY }, 'menu', 'context', selection)
+  msgUi.openMenu(message, { kind: 'point', x: e.clientX, y: e.clientY }, 'menu', 'context', selection, linkAt(e.target))
 }
+
+/** Ссылка в тексте сообщения под курсором или пальцем */
+const linkAt = (el: EventTarget | Element | null) => (el instanceof Element ? (el.closest('a.msg-link')?.getAttribute('href') ?? '') : '')
 
 /**
  * Долгое нажатие пальцем — то же меню (iPhone не присылает contextmenu).
@@ -39,7 +42,7 @@ function useTouchMenu(message: Message) {
     // клавиатуру убираем — меню выезжает снизу на её место
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     window.getSelection()?.removeAllRanges()
-    msgUi.openMenu(message, { kind: 'point', x, y }, 'menu', 'context')
+    msgUi.openMenu(message, { kind: 'point', x, y }, 'menu', 'context', '', linkAt(document.elementFromPoint(x, y)))
   })
   const onMenu = (e: MouseEvent<HTMLElement>) => {
     press.cancel()

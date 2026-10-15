@@ -10,10 +10,10 @@ import { joinVoice, useVoice, watchScreen } from '../lib/voice'
 import { useVoiceMenu, voiceMenu } from '../lib/voiceMenu'
 import { Avatar } from './Avatar'
 import { plural } from '../lib/format'
-
-const TIMES: [string, string, string] = ['раз', 'раза', 'раз']
 import { UserBar } from './UserBar'
 import { VoicePanel } from './voice/VoicePanel'
+
+const TIMES: [string, string, string] = ['раз', 'раза', 'раз']
 
 const NO_MEMBERS: VoiceMember[] = []
 

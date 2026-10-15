@@ -10,8 +10,10 @@ import { findRole, hasChannelPermission, isEveryone } from './permissions.js'
 
 const USER_TOKEN = /<@([\w-]{1,64})>/g
 const ROLE_TOKEN = /<@&([\w-]{1,64})>/g
-/** @everyone / @here — отдельным словом, не внутри почты или ника */
-const MASS_TOKEN = /(^|[^\p{L}\p{N}_.@])@(everyone|here)(?![\p{L}\p{N}_])/gu
+/** @everyone / @here — отдельным словом: перед ним начало, пробел или открывающая скобка/кавычка (не почта, не ссылка) */
+const MASS_TOKEN = /(^|[\s([{«"'„“])@(everyone|here)(?![\p{L}\p{N}_])/gu
+/** `код` и ```блоки кода``` — в них упоминаний нет (так же режет клиент: client/src/lib/linkify.ts) */
+const CODE = /```([\s\S]*?)```|`([^`\n]+)`/g
 
 /** Больше разных людей и ролей в одном сообщении не зовём — защита от «пинга всех по одному» */
 const MAX_MENTIONS = 25
@@ -26,7 +28,9 @@ interface Options {
 }
 
 /** Проверенные упоминания для сообщения автора в этом канале; undefined — никого не позвали */
-export function parseMentions(content: string, access: store.ChannelAccess, authorId: string, { isOnline, previous }: Options): store.Mentions | undefined {
+export function parseMentions(raw: string, access: store.ChannelAccess, authorId: string, { isOnline, previous }: Options): store.Mentions | undefined {
+  // пустой блок «``````» клиент кодом не считает — и мы не вырезаем
+  const content = raw.includes('`') ? raw.replace(CODE, (m, block?: string) => (block !== undefined && !block.trim() ? m : ' ')) : raw
   // человек: существует и видит этот канал (в личке и группе — её участник)
   const users = uniq(USER_TOKEN, content)
     .filter((id) => store.findUser(id) && store.canSee(access, id))

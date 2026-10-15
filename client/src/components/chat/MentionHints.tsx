@@ -3,9 +3,16 @@ import { AtSign, Users } from 'lucide-react'
 import type { Suggestion } from '../../lib/mentions'
 import { Avatar } from '../Avatar'
 
+/** Где мышь была в последний раз — чтобы отличить настоящее движение от «подсказка выскочила под курсором» */
+let mouse = { x: -1, y: -1 }
+window.addEventListener('mousemove', (e) => (mouse = { x: e.clientX, y: e.clientY }), { capture: true, passive: true })
+
 /** Подсказка над полем ввода после «@»: люди, роли, @everyone / @here */
 export function MentionHints({ items, active, onHover, onPick }: { items: Suggestion[]; active: number; onHover: (i: number) => void; onPick: (s: Suggestion) => void }) {
   const listRef = useRef<HTMLDivElement>(null)
+  // Подсказка появилась прямо под неподвижной мышью — это не выбор (иначе Enter позвал бы, например, @here).
+  // Выбор мышью — только после настоящего движения
+  const still = useRef<{ x: number; y: number } | null>(mouse)
 
   // выбранный стрелками пункт всегда на виду
   useEffect(() => {
@@ -23,7 +30,12 @@ export function MentionHints({ items, active, onHover, onPick }: { items: Sugges
           aria-selected={i === active}
           className={`cmd-hint mention-hint${i === active ? ' is-active' : ''}`}
           onMouseDown={(e) => e.preventDefault()}
-          onMouseEnter={() => onHover(i)}
+          onMouseMove={(e) => {
+            const s = still.current
+            if (s && s.x === e.clientX && s.y === e.clientY) return
+            still.current = null
+            if (i !== active) onHover(i)
+          }}
           onClick={() => onPick(s)}
         >
           {s.kind === 'user' ? (

@@ -1011,6 +1011,83 @@ button.mention:hover {
   color: var(--text-2);
 }
 
+/* ============ ссылки и код в сообщениях ============ */
+
+/* ссылка светится: цвет акцента, подчёркивание и мягкое свечение; при наведении — ярче */
+.msg-link {
+  color: var(--accent, var(--text));
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 3px;
+  text-shadow: 0 0 10px rgb(var(--glow-rgb, 255 255 255) / calc(0.45 * var(--glow-k, 1)));
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  /* долгое нажатие на телефоне — наше меню («Копировать ссылку»), а не системное */
+  -webkit-touch-callout: none;
+  transition:
+    text-decoration-color 0.15s ease,
+    text-shadow 0.2s ease,
+    background-color 0.15s ease;
+}
+
+.msg-link:hover {
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
+  background: var(--hover);
+  text-shadow: 0 0 14px rgb(var(--glow-rgb, 255 255 255) / calc(0.8 * var(--glow-k, 1)));
+}
+
+.msg-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* в своём пузыре (он цвета акцента) — цветом текста пузыря, без свечения */
+.mgroup--mine .msg-link {
+  color: var(--on-accent, var(--black));
+  text-shadow: none;
+}
+
+.mgroup--mine .msg-link:hover {
+  background: rgb(var(--on-accent-rgb, 0 0 0) / 0.08);
+}
+
+/* `код` в строке и ```блок кода``` */
+.msg-code,
+.msg-pre {
+  font-family: var(--mono);
+  border: 1px solid var(--line);
+  background: rgb(var(--shade-rgb, 0 0 0) / 0.35);
+}
+
+.msg-code {
+  padding: 1px 5px;
+  margin: 0 1px;
+  border-radius: 6px;
+  font-size: 0.86em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.msg-pre {
+  display: block;
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mgroup--mine .msg-code,
+.mgroup--mine .msg-pre {
+  background: rgb(var(--on-accent-rgb, 0 0 0) / 0.07);
+  border-color: rgb(var(--on-accent-rgb, 0 0 0) / 0.14);
+}
+
 /* ============ анти-спам: «Воу-воу, полегче» ============ */
 
 .slow-warn {
