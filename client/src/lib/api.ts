@@ -105,6 +105,7 @@ export const PERMISSIONS = [
   'CREATE_INVITE',
   'VIEW_CHANNEL',
   'SEND_MESSAGES',
+  'ATTACH_FILES',
   'MANAGE_MESSAGES',
   'CONNECT',
   'SPEAK',
@@ -116,7 +117,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 /** Права, которые можно настроить отдельному каналу */
-export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
+export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'MANAGE_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
 
 export interface Role {
   id: string

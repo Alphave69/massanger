@@ -76,6 +76,14 @@ export interface User {
   /** Заблокирован: не может войти, все сессии закрыты */
   banned: boolean
   privileges: Privileges
+
+  // --- внешний вид профиля ---
+  /** Своя картинка вместо инициалов: адрес файла (/files/…) или null */
+  avatar: string | null
+  /** Баннер в карточке профиля: адрес файла или null */
+  banner: string | null
+  /** Цвет профиля ('#rrggbb') — лёгкий оттенок карточки; null — без цвета */
+  accent: string | null
 }
 
 /** Исключения для роли в конкретном канале */
@@ -175,6 +183,43 @@ export interface Message {
   forwarded?: Forwarded
   /** Когда текст меняли в последний раз */
   editedAt?: number
+  /** Прикреплённые файлы (снимок на момент отправки; пересылка ссылается на те же файлы) */
+  attachments?: Attachment[]
+}
+
+// --- загруженные файлы (сами файлы — в data/uploads, см. uploads.ts) ---
+
+export type UploadKind = 'image' | 'video' | 'audio' | 'file'
+
+export interface Upload {
+  /** 128 бит случайности (32 hex-символа): адрес файла никто не угадает */
+  id: string
+  /** Расширение на диске — по настоящему типу файла, а не по имени (у неизвестных — bin) */
+  ext: string
+  ownerId: string
+  /** Имя, с которым файл прислали (для скачивания) */
+  name: string
+  size: number
+  /** Тип, определённый по содержимому файла */
+  mime: string
+  kind: UploadKind
+  width?: number
+  height?: number
+  createdAt: number
+  /** К чему прикреплён: id сообщения, 'avatar:<id>' / 'banner:<id>' — или null (неприкреплённое удалим через сутки) */
+  attachedTo: string | null
+}
+
+/** Файл в сообщении — то, что видит клиент */
+export interface Attachment {
+  id: string
+  url: string
+  name: string
+  size: number
+  mime: string
+  kind: UploadKind
+  width?: number
+  height?: number
 }
 
 export const REPLY_SNIPPET = 200
@@ -187,6 +232,9 @@ interface Data {
   relations: Relation[]
   dms: Dm[]
   messages: Message[]
+  uploads: Upload[]
+  /** Разовые переделки данных, которые уже сделаны (чтобы не повторять их при каждом запуске) */
+  migrations: string[]
 }
 
 const DATA_FILE = resolve(dirname(fileURLToPath(import.meta.url)), '../data/db.json')
@@ -211,12 +259,17 @@ function load(): Data {
       admin: u.admin ?? false,
       banned: u.banned ?? false,
       privileges: { ...DEFAULT_PRIVILEGES, ...u.privileges },
+      avatar: u.avatar ?? null,
+      banner: u.banner ?? null,
+      accent: u.accent ?? null,
     })),
     // общий сервер переименован вместе с приложением
     guilds: migrateGuilds(raw.guilds ?? []),
     relations: raw.relations ?? [],
     dms: (raw.dms ?? []).map((d) => ({ ...d, kind: d.kind ?? 'dm', name: d.name ?? '', ownerId: d.ownerId ?? null })),
     messages: raw.messages ?? [],
+    uploads: raw.uploads ?? [],
+    migrations: raw.migrations ?? [],
   }
 }
 
@@ -263,6 +316,16 @@ function save() {
   }, 200)
 }
 
+// Права «Прикреплять файлы» раньше не было: один раз выдаём его всем ролям, которые могут писать,
+// иначе на старых серверах файлы смогли бы слать только владельцы. Дальше им управляют сами
+if (!data.migrations.includes('attach-files')) {
+  for (const g of data.guilds) {
+    for (const r of g.roles) if (r.permissions.includes('SEND_MESSAGES') && !r.permissions.includes('ATTACH_FILES')) r.permissions.push('ATTACH_FILES')
+  }
+  data.migrations.push('attach-files')
+  save()
+}
+
 export const id = () => randomUUID()
 
 /** Редкость значка для сортировки (задаёт badges.ts, чтобы store не зависел от каталога) */
@@ -283,6 +346,9 @@ export function publicUser(u: User) {
     verified: u.verified,
     /** Номер регистрации: «пользователь №7» */
     number: userNumber(u.id),
+    avatar: u.avatar,
+    banner: u.banner,
+    accent: u.accent,
     /** Полученные значки: сначала редкие, внутри — по времени получения */
     badges: Object.entries(u.badges)
       .map(([id, at]) => ({ id, at }))
@@ -318,6 +384,9 @@ export function createUser(u: Pick<User, 'username' | 'displayName' | 'passwordH
     admin: false,
     banned: false,
     privileges: { ...DEFAULT_PRIVILEGES },
+    avatar: null,
+    banner: null,
+    accent: null,
   }
   data.users.push(user)
   // Все новые пользователи сразу попадают на общий сервер
@@ -343,6 +412,9 @@ export type UserPatch = Partial<
     | 'admin'
     | 'banned'
     | 'privileges'
+    | 'avatar'
+    | 'banner'
+    | 'accent'
   >
 >
 
@@ -412,6 +484,7 @@ export function joinGuild(guildId: string, userId: string): Guild | undefined {
 export function deleteGuild(guild: Guild) {
   const channelIds = new Set(guild.channels.map((c) => c.id))
   data.guilds = data.guilds.filter((g) => g !== guild)
+  releaseFiles(data.messages.filter((m) => channelIds.has(m.channelId)))
   data.messages = data.messages.filter((m) => !channelIds.has(m.channelId))
   save()
 }
@@ -425,6 +498,7 @@ export function addChannel(guild: Guild, name: string, type: Channel['type']): C
 
 export function removeChannel(guild: Guild, channelId: string) {
   guild.channels = guild.channels.filter((c) => c.id !== channelId)
+  releaseFiles(data.messages.filter((m) => m.channelId === channelId))
   data.messages = data.messages.filter((m) => m.channelId !== channelId)
   save()
 }
@@ -491,6 +565,7 @@ export function createGroup(ownerId: string, memberIds: string[], name: string):
 /** Удалить переписку целиком (группа опустела) */
 export function deleteDm(dm: Dm) {
   data.dms = data.dms.filter((d) => d !== dm)
+  releaseFiles(data.messages.filter((m) => m.channelId === dm.id))
   data.messages = data.messages.filter((m) => m.channelId !== dm.id)
   save()
 }
@@ -544,7 +619,7 @@ export function snip(text: string, max: number) {
 }
 
 /** Снимок сообщения для ответа на него */
-export const replyRef = (m: Message): ReplyRef => ({ id: m.id, authorId: m.authorId, content: snip(m.content, REPLY_SNIPPET) })
+export const replyRef = (m: Message): ReplyRef => ({ id: m.id, authorId: m.authorId, content: snip(m.content || attachmentsLabel(m.attachments), REPLY_SNIPPET) })
 
 export function addMessage(
   channelId: string,
@@ -574,6 +649,7 @@ export const findMessage = (messageId: string) => data.messages.find((m) => m.id
 
 export function deleteMessage(message: Message) {
   data.messages = data.messages.filter((m) => m !== message)
+  releaseFiles([message])
   save()
 }
 
@@ -604,6 +680,94 @@ export function editMessage(message: Message, content: string) {
   message.content = content
   message.editedAt = Date.now()
   save()
+}
+
+// --- загруженные файлы ---
+
+const uploadIndex = new Map(data.uploads.map((u) => [u.id, u]))
+
+export const allUploads = () => data.uploads
+
+export const findUpload = (uploadId: string) => uploadIndex.get(uploadId)
+
+/** Адрес файла: по нему его отдают всем, кто его знает (см. README → Security) */
+export const fileUrl = (u: Pick<Upload, 'id' | 'ext'>) => `/files/${u.id}.${u.ext}`
+
+/** id файла из его адреса (/files/<id>.<ext>) */
+export const uploadIdOf = (url: string | null | undefined) => /^\/files\/([0-9a-f]{32})\./.exec(url ?? '')?.[1]
+
+export function addUpload(u: Upload) {
+  data.uploads.push(u)
+  uploadIndex.set(u.id, u)
+  save()
+}
+
+export function removeUpload(u: Upload) {
+  data.uploads = data.uploads.filter((x) => x !== u)
+  uploadIndex.delete(u.id)
+  save()
+}
+
+export function markUpload(u: Upload, attachedTo: string | null) {
+  u.attachedTo = attachedTo
+  save()
+}
+
+export const attachmentOf = (u: Upload): Attachment => ({
+  id: u.id,
+  url: fileUrl(u),
+  name: u.name,
+  size: u.size,
+  mime: u.mime,
+  kind: u.kind,
+  ...(u.width && u.height ? { width: u.width, height: u.height } : {}),
+})
+
+/** Прикрепить файлы к только что созданному сообщению (или скопировать при пересылке) */
+export function setAttachments(message: Message, list: Attachment[]) {
+  if (!list.length) return
+  message.attachments = list
+  for (const a of list) {
+    const u = findUpload(a.id)
+    if (u && !u.attachedTo) u.attachedTo = message.id
+  }
+  save()
+}
+
+/** id всех файлов, на которые что-то ссылается: сообщения, аватарки и баннеры */
+export function referencedUploads(): Set<string> {
+  const out = new Set<string>()
+  for (const m of data.messages) for (const a of m.attachments ?? []) out.add(a.id)
+  for (const u of data.users) {
+    for (const url of [u.avatar, u.banner]) {
+      const id = uploadIdOf(url)
+      if (id) out.add(id)
+    }
+  }
+  return out
+}
+
+/** «📷 Фото», «🎬 Видео», «📎 Файл» — вместо текста там, где сообщение из одних вложений */
+export function attachmentsLabel(list: Attachment[] | undefined): string {
+  if (!list?.length) return ''
+  const n = list.length
+  const all = (kind: UploadKind) => list.every((a) => a.kind === kind)
+  if (all('image')) return n > 1 ? `📷 ${n} фото` : '📷 Фото'
+  if (all('video')) return n > 1 ? `🎬 ${n} видео` : '🎬 Видео'
+  if (all('audio')) return n > 1 ? `🎵 Аудио ×${n}` : '🎵 Аудио'
+  return n > 1 ? `📎 Файлы ×${n}` : '📎 Файл'
+}
+
+/** Сообщения удалены — их файлы, на которые больше никто не ссылается, удаляет uploads.ts */
+let onFilesReleased: (ids: string[]) => void = () => {}
+export const setFilesReleased = (fn: (ids: string[]) => void) => {
+  onFilesReleased = fn
+}
+
+/** Проверяем уже после удаления (в следующем тике) — пересланные копии ссылаются на те же файлы */
+function releaseFiles(messages: Message[]) {
+  const ids = messages.flatMap((m) => (m.attachments ?? []).map((a) => a.id))
+  if (ids.length) setImmediate(() => onFilesReleased(ids))
 }
 
 // --- для значков и админки ---
