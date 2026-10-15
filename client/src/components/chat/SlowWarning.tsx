@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { dismissSlow, useSlow } from '../../lib/antispam'
 
@@ -24,11 +24,17 @@ export function useSlowLeft(): number {
 export function SlowWarning({ left }: { left: number }) {
   const line = useSlow((s) => s.line)
   const dismissed = useSlow((s) => s.dismissed)
+  const until = useSlow((s) => s.until)
+  // колечко вокруг цифры тает за всю паузу (продлили паузу — начинается заново)
+  const ringMs = useMemo(() => Math.max(0, until - Date.now()), [until])
   if (left <= 0 || dismissed) return null
   const secs = Math.ceil(left / 1000)
   return (
     <div className="slow-warn" role="status">
       <span className="slow-warn__count" aria-hidden="true">
+        <svg className="slow-warn__ring" viewBox="0 0 36 36">
+          <circle key={until} cx="18" cy="18" r="16" pathLength={100} style={{ animationDuration: `${ringMs}ms` }} />
+        </svg>
         {secs}
       </span>
       <span className="slow-warn__text">

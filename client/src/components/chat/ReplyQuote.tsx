@@ -29,7 +29,8 @@ function useAuthor(authorId: string, channelId: string) {
 export function ReplyQuote({ reply, channelId }: { reply: ReplyRef; channelId: string }) {
   const { user, name, color } = useAuthor(reply.authorId, channelId)
   const live = useChat((s) => findLoaded(s, channelId, reply.id)?.content)
-  const text = oneLine(readable(live ?? reply.content, channelId))
+  // сохранённое начало оригинала могло оборвать метку упоминания посередине («<@9f3a…») — её хвост не показываем
+  const text = oneLine(readable(live ?? reply.content.replace(/<@&?[\w-]*$/, ''), channelId))
 
   const jump = () => {
     if (!jumpToMessage(reply.id)) chat.toast({ title: 'Сообщение не найдено', text: 'Его удалили — или оно слишком далеко в истории' })
