@@ -36,8 +36,9 @@ const MAX_PIXELS = 60_000_000
 const DAY = 24 * 60 * 60_000
 const HOUR = 60 * 60_000
 
-/** Не больше 30 файлов за 10 минут от одного человека */
-const uploadsPerUser = new RateLimiter(30, 10 * 60_000)
+/** Не больше 60 файлов за 10 минут от одного человека (альбом из отпуска пролезет, бесконечный поток — нет) */
+const UPLOADS_PER_10_MIN = 60
+const uploadsPerUser = new RateLimiter(UPLOADS_PER_10_MIN, 10 * 60_000)
 
 /** Сколько байт человек загрузил за последние сутки (в памяти: после перезапуска счёт с нуля) */
 const spent = new Map<string, { at: number; size: number }[]>()
@@ -206,12 +207,15 @@ export function cleanName(raw: unknown): string {
 
 // ============ загрузка ============
 
-/** Слишком часто или сверх суточного лимита: тело дочитываем (иначе браузер увидит обрыв, а не ответ) и отвечаем */
+/**
+ * Отказ до чтения файла (большой, слишком часто, сверх суточного лимита): тело дочитываем впустую и только потом
+ * отвечаем — иначе браузер увидит обрыв соединения, а не понятную ошибку
+ */
 function refuse(req: Request, res: Response, code: number, error: string, retryAfterMs?: number) {
   if (retryAfterMs) res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)))
   const declared = Number(req.headers['content-length'])
-  if (declared > MAX_BYTES) {
-    // огромное тело дочитывать не будем — закрываем соединение
+  if (!(declared <= MAX_BYTES * 4)) {
+    // совсем огромное (или неизвестной длины) дочитывать не будем — закрываем соединение
     res.setHeader('Connection', 'close')
     return fail(res, code, error)
   }
