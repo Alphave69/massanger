@@ -25,6 +25,8 @@ function WithMentions({ message: m, parts }: { message: Message; parts: RichPart
   return <Parts parts={parts} renderText={(text) => <Mentions text={text} message={m} users={users} meId={meId} guild={guild} />} />
 }
 
+const isBlock = (p: RichPart | undefined) => p?.kind === 'code' && p.block
+
 function Parts({ parts, renderText }: { parts: RichPart[]; renderText?: (text: string) => ReactNode }) {
   // обычное сообщение без ссылок и кода — просто строка
   if (parts.length === 1 && parts[0].kind === 'text' && !renderText) return <>{parts[0].text}</>
@@ -59,7 +61,11 @@ function Parts({ parts, renderText }: { parts: RichPart[]; renderText?: (text: s
             </code>
           )
         }
-        return <Fragment key={i}>{renderText ? renderText(p.text) : p.text}</Fragment>
+        // блок кода и так с новой строки — переводы строк вокруг него лишние (иначе пустая строка)
+        let text = p.text
+        if (isBlock(parts[i - 1])) text = text.replace(/^\n/, '')
+        if (isBlock(parts[i + 1])) text = text.replace(/\n$/, '')
+        return <Fragment key={i}>{renderText ? renderText(text) : text}</Fragment>
       })}
     </>
   )
