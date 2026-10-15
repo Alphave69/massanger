@@ -127,7 +127,8 @@ export function ensureContrast(color: RGB, against: RGB[], min: number, tone: 'd
   const target = tone === 'dark' ? 1 : 0
   let lo = 0 // доля пути к target: 0 — исходный, 1 — белый/чёрный
   let hi = 1
-  const at = (t: number) => fromLab([L0 + (target - L0) * t, a, b])
+  // сразу в целые 0…255 — проверяем ровно тот цвет, что попадёт в CSS
+  const at = (t: number) => fromLab([L0 + (target - L0) * t, a, b]).map(Math.round) as RGB
   if (!ok(at(1))) return at(1)
   for (let i = 0; i < 20; i++) {
     const t = (lo + hi) / 2

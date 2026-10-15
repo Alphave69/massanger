@@ -647,7 +647,8 @@ export interface LookColors {
 export function fitAccent(hex: string, t: ThemeInfo): RGB | null {
   const c = /^#[0-9a-f]{6}$/i.test(hex) ? rgb(hex) : null
   if (!c) return null
-  return ensureContrast(c, [rgb(t.p.bg), rgb(t.p.surface), rgb(t.p.raise)], 3, t.tone)
+  // с небольшим запасом: оттенок поверхностей чуть сдвигает их яркость
+  return ensureContrast(c, [rgb(t.p.bg), rgb(t.p.surface), rgb(t.p.raise)], 3.1, t.tone)
 }
 
 /** Текст на заливке акцентом: почти чёрный или почти белый в оттенок акцента — что контрастнее */
@@ -693,7 +694,7 @@ export function lookVars(t: ThemeInfo, look: LookColors): Record<string, string>
   // сфера следует за акцентом вместе с оттенком поверхностей
   const sphere = tint ? mix(rgb(p.sphere), accent, tint * (dark ? 0.6 : 0.4)) : rgb(p.sphere)
   // акцент как цвет текста (ссылки, @упоминания): на фоне и в пузырях — контраст ≥ 4.5:1
-  const ink = ensureContrast(accent, [bg, surface, bubble], 4.5, t.tone)
+  const ink = ensureContrast(accent, [bg, surface, bubble], 4.6, t.tone)
   // «свои сообщения нейтральным»: пузырь чуть заметнее чужих, текст — как в пузырях
   const ownN = mix(bubble, fg, dark ? 0.07 : 0.045)
 
