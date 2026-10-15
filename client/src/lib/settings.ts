@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { themeInfo, type ThemeId } from './themes'
+import { cssBlock, lookVars, THEMES, themeInfo, type LookColors, type ThemeId } from './themes'
 
 /**
  * Настройки приложения «под себя». Живут на устройстве (localStorage):
@@ -26,6 +26,9 @@ export interface Settings {
   panelBlur: number // 0 … 24 px — размытие сферы и фона под панелями
   clock24: boolean // 21:04, а не 9:04 PM
   clockSeconds: boolean
+  surfaceTint: number // 0 … 1 — панели и фон в оттенок акцента
+  ownBubble: 'accent' | 'neutral' // свои сообщения: в цвет акцента или нейтральные
+  bgEffects: number // 0 … 2 — узор из точек и «фонарик» за курсором на фоне
 
   // уведомления
   sounds: boolean
@@ -78,6 +81,9 @@ export const DEFAULT_SETTINGS: Settings = {
   panelBlur: 0,
   clock24: true,
   clockSeconds: false,
+  surfaceTint: 0,
+  ownBubble: 'accent',
+  bgEffects: 1,
 
   sounds: true,
   toasts: true,
@@ -157,22 +163,31 @@ function applyLook(s: Settings) {
   const theme = themeInfo(s.theme)
   root.dataset.theme = theme.id
   root.dataset.tone = theme.tone
-  const vars: string[] = [
-    `--rk:${RADIUS[s.radius] ?? 1}`,
-    `--avatar-r:${s.avatarShape === 'squircle' ? '30%' : '50%'}`,
-    `--msg-gap:${s.msgSpacing}`,
-    `--glow-user:${s.glowLevel}`,
-    `--panel-a:${s.panelOpacity}`,
-    `--panel-backdrop:${s.panelBlur > 0 ? `blur(${s.panelBlur}px)` : 'none'}`,
-  ]
-  const accent = hexToRgb(s.accent)
-  if (accent) {
-    const rgb = accent.join(' ')
-    vars.push(`--accent-rgb:${rgb}`, `--glow-rgb:${rgb}`, `--on-accent-rgb:${inkFor(accent)}`)
+  root.dataset.own = s.ownBubble
+  const colors: LookColors = { accent: s.accent, tint: s.surfaceTint }
+  const vars: Record<string, string> = {
+    ...lookVars(theme, colors),
+    '--rk': String(RADIUS[s.radius] ?? 1),
+    '--avatar-r': s.avatarShape === 'squircle' ? '30%' : '50%',
+    '--msg-gap': String(s.msgSpacing),
+    '--glow-user': String(s.glowLevel),
+    '--bg-fx': String(s.bgEffects),
+    '--panel-a': String(s.panelOpacity),
+    '--panel-backdrop': s.panelBlur > 0 ? `blur(${s.panelBlur}px)` : 'none',
   }
-  if (s.font !== 'theme') vars.push(`--font:${FONTS[s.font]}`)
-  // Только внутри приложения (data-themed) и сильнее любой темы — поэтому такой длинный селектор
-  lookStyle().textContent = `html[data-themed][data-theme]:root{${vars.join(';')}}`
+  if (s.font !== 'theme') vars['--font'] = FONTS[s.font]
+  // Только внутри приложения (data-themed) и сильнее любых правил — поэтому такой длинный селектор
+  const css = cssBlock('html[data-themed][data-theme]:root', vars)
+  if (lookStyle('nuntius-look').textContent !== css) lookStyle('nuntius-look').textContent = css
+  // Превью тем в настройках — каждая в своих цветах, но с твоим акцентом и оттенком
+  const key = `${s.accent}|${s.surfaceTint}`
+  if (key !== previewsKey) {
+    previewsKey = key
+    lookStyle('nuntius-look-previews').textContent = THEMES.map((t) =>
+      cssBlock(`.theme-scope[data-theme='${t.id}']`, lookVars(t, colors)),
+    ).join('\n')
+  }
+  bgColor = `rgb(${vars['--bg-rgb'].replace(/ /g, ',')})`
   updateThemeColor()
 }
 
@@ -184,31 +199,17 @@ const FONTS: Record<Exclude<Settings['font'], 'theme'>, string> = {
   mono: 'var(--mono)',
 }
 
-let lookEl: HTMLStyleElement | null = null
-function lookStyle() {
-  if (!lookEl) {
-    lookEl = document.createElement('style')
-    lookEl.id = 'nuntius-look'
-    document.head.appendChild(lookEl)
-  }
-  return lookEl
-}
+let previewsKey = ''
+let bgColor = '#000000'
 
-function hexToRgb(hex: string): [number, number, number] | null {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex)
-  if (!m) return null
-  const n = parseInt(m[1], 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-/** Чем писать на цветной заливке: чёрным или белым — что контрастнее */
-function inkFor([r, g, b]: [number, number, number]) {
-  const lin = (c: number) => {
-    const v = c / 255
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+function lookStyle(id: string) {
+  let el = document.getElementById(id) as HTMLStyleElement | null
+  if (!el) {
+    el = document.createElement('style')
+    el.id = id
+    document.head.appendChild(el)
   }
-  const l = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-  return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? '0 0 0' : '255 255 255'
+  return el
 }
 
 /**
@@ -225,7 +226,7 @@ export function setThemed(on: boolean) {
 /** Цвет системной полосы (телефон, PWA) — под фон темы */
 function updateThemeColor() {
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', themed ? themeInfo(useSettings.getState().theme).meta : '#000000')
+  if (meta) meta.setAttribute('content', themed ? bgColor : '#000000')
 }
 
 apply(useSettings.getState())

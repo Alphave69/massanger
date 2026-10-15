@@ -1,9 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { Check, Pipette, RotateCcw } from 'lucide-react'
+import { contrast, rgb, rgbToHex, toLab, chroma } from '../../lib/color'
 import { formatTime } from '../../lib/format'
 import { resetSettings, setSetting, useSettings, type Settings } from '../../lib/settings'
 import { useChat } from '../../lib/store'
-import { ACCENTS, THEMES, themeInfo } from '../../lib/themes'
+import { ACCENTS, fitAccent, THEMES, themeInfo, type ThemeInfo } from '../../lib/themes'
 import { Avatar } from '../Avatar'
 import { Group, SectionHead, Slider, Toggle } from './controls'
 
@@ -26,6 +27,9 @@ const APPEARANCE_KEYS = [
   'panelBlur',
   'clock24',
   'clockSeconds',
+  'surfaceTint',
+  'ownBubble',
+  'bgEffects',
 ] as const
 
 // Время в превью — всегда «вечер», чтобы было видно разницу 21:04 / 9:04 PM
@@ -51,6 +55,12 @@ export function AppearanceSection() {
   const friend = { id: 'preview-friend', displayName: 'Друг' }
   const theme = themeInfo(s.theme)
   const customAccent = s.accent !== '' && !ACCENTS.some((a) => a.value === s.accent)
+  // Свой цвет под тему: показываем, во что он превратился, если пришлось подправить яркость
+  const fitted = s.accent ? fitAccent(s.accent, theme) : null
+  const adjusted = fitted && contrast(fitted, rgb(s.accent)) > 1.15 ? rgbToHex(fitted) : ''
+  // У белого, чёрного и серого акцента нет оттенка — подкрашивать поверхности нечем
+  const accentNow = fitted ?? rgb(theme.p.accent)
+  const tintable = chroma(toLab(accentNow)) >= 0.02
 
   return (
     <>
@@ -101,41 +111,15 @@ export function AppearanceSection() {
       </div>
 
       <Group title="Тема">
-        <div className="theme-grid" role="radiogroup" aria-label="Тема">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="radio"
-              aria-checked={s.theme === t.id}
-              className={`theme-card${s.theme === t.id ? ' is-active' : ''}`}
-              onClick={() => setSetting('theme', t.id)}
-            >
-              <span className="theme-card__mock theme-scope" data-theme={t.id} data-tone={t.tone} aria-hidden="true">
-                <span className="theme-card__side">
-                  <i className="is-active" />
-                  <i />
-                  <i />
-                </span>
-                <span className="theme-card__chat">
-                  <i />
-                  <i className="is-mine" />
-                  <i />
-                </span>
-                <span className="theme-card__dots" />
-              </span>
-              <span className="theme-card__name">
-                {t.name}
-                {s.theme === t.id && <Check size={14} />}
-              </span>
-              <span className="theme-card__hint">{t.hint}</span>
-            </button>
-          ))}
-        </div>
+        <ThemeGallery title="Тёмные" themes={THEMES.filter((t) => t.tone === 'dark')} active={s.theme} own={s.ownBubble} />
+        <ThemeGallery title="Светлые" themes={THEMES.filter((t) => t.tone === 'light')} active={s.theme} own={s.ownBubble} />
       </Group>
 
       <Group title="Акцент">
-        <p className="muted look-note">Цвет активного: выбранный канал, свои сообщения, кнопки, бейджи, переключатели и рамка фокуса.</p>
+        <p className="muted look-note">
+          Цвет активного: выбранный канал, свои сообщения, кнопки, бейджи, переключатели и рамка фокуса. Яркость сами подгоняем под тему —
+          чтобы всё читалось.
+        </p>
         <div className="accent-row" role="radiogroup" aria-label="Цвет акцента">
           <AccentSwatch label="Как в теме" active={s.accent === ''} onClick={() => setSetting('accent', '')}>
             <span className="accent-swatch__theme theme-scope" data-theme={theme.id} data-tone={theme.tone}>
@@ -147,14 +131,14 @@ export function AppearanceSection() {
               key={a.value}
               label={a.name}
               active={s.accent === a.value}
-              color={a.value}
+              color={rgbToHex(fitAccent(a.value, theme) ?? rgb(a.value))}
               onClick={() => setSetting('accent', a.value)}
             />
           ))}
           <label
             className={`accent-swatch accent-swatch--custom${customAccent ? ' is-active' : ''}`}
             data-tip="Свой цвет"
-            style={customAccent ? ({ '--sw': s.accent } as CSSProperties) : undefined}
+            style={customAccent && fitted ? ({ '--sw': rgbToHex(fitted) } as CSSProperties) : undefined}
           >
             {customAccent ? <Check size={15} /> : <Pipette size={15} />}
             <input
@@ -165,6 +149,36 @@ export function AppearanceSection() {
             />
           </label>
         </div>
+        {adjusted && (
+          <p className="look-fit">
+            <i style={{ background: s.accent }} />→<i style={{ background: adjusted }} />
+            {theme.tone === 'dark' ? 'Чуть осветлили' : 'Чуть затемнили'} под «{theme.name}» — иначе на фоне не разглядеть
+          </p>
+        )}
+
+        <Slider
+          label="Оттенок поверхностей"
+          hint={tintable ? 'Фон и панели слегка окрашиваются в цвет акцента' : 'У этого акцента нет оттенка — выбери цветной, чтобы окрасить фон и панели'}
+          value={Math.round(s.surfaceTint * 100)}
+          min={0}
+          max={100}
+          step={5}
+          marks={[0, 25, 50, 75, 100]}
+          disabled={!tintable}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('surfaceTint', v / 100)}
+        />
+
+        <span className="look-label">Свои сообщения</span>
+        <Segmented
+          label="Цвет своих сообщений"
+          value={s.ownBubble}
+          onChange={(v) => setSetting('ownBubble', v)}
+          options={[
+            { value: 'accent', label: 'В цвет акцента', sample: <span className="look-seg__bubble" /> },
+            { value: 'neutral', label: 'Нейтральные', sample: <span className="look-seg__bubble look-seg__bubble--neutral" /> },
+          ]}
+        />
       </Group>
 
       <Group title="Шрифт и форма">
@@ -266,6 +280,17 @@ export function AppearanceSection() {
           onChange={(v) => setSetting('sphereBrightness', v / 100)}
         />
         <Slider
+          label="Узор на фоне"
+          hint="Сетка из точек за панелями и «фонарик» за курсором"
+          value={Math.round(s.bgEffects * 100)}
+          min={0}
+          max={200}
+          step={10}
+          marks={[0, 50, 100, 150, 200]}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('bgEffects', v / 100)}
+        />
+        <Slider
           label="Сила свечения"
           hint="Ореолы у кнопок, бейджей и активного. 0 — совсем без свечения"
           value={Math.round(s.glowLevel * 100)}
@@ -305,6 +330,53 @@ export function AppearanceSection() {
         <RotateCcw size={16} /> Сбросить внешний вид
       </button>
     </>
+  )
+}
+
+/** Галерея тем: карточки-миниатюры, каждая в цветах своей темы (с твоим акцентом) */
+function ThemeGallery({ title, themes, active, own }: { title: string; themes: ThemeInfo[]; active: string; own: Settings['ownBubble'] }) {
+  return (
+    <div className="theme-gallery">
+      <span className="theme-gallery__title">{title}</span>
+      <div className="theme-grid" role="radiogroup" aria-label={`${title} темы`}>
+        {themes.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="radio"
+            aria-checked={active === t.id}
+            className={`theme-card${active === t.id ? ' is-active' : ''}`}
+            data-theme-id={t.id}
+            onClick={() => setSetting('theme', t.id)}
+          >
+            <span className="theme-card__mock theme-scope" data-theme={t.id} data-tone={t.tone} data-own={own} aria-hidden="true">
+              <span className="theme-card__dock">
+                <i className="is-active" />
+                <i />
+                <i />
+              </span>
+              <span className="theme-card__side">
+                <i className="is-active" />
+                <i />
+                <i />
+              </span>
+              <span className="theme-card__chat">
+                <i />
+                <i className="is-mine" />
+                <i />
+                <b />
+              </span>
+              <span className="theme-card__dots" />
+            </span>
+            <span className="theme-card__name">
+              {t.name}
+              {active === t.id && <Check size={14} />}
+            </span>
+            <span className="theme-card__hint">{t.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

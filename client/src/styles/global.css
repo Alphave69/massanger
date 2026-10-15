@@ -3,7 +3,7 @@
    ===================================================================== */
 
 :root {
-  /* Все цвета — токены: темы (styles/themes.css) меняют только их.
+  /* Все цвета — токены: темы (палитры в lib/themes.ts) меняют только их.
      Каналы «R G B» — для полупрозрачных оттенков: rgb(var(--fg-rgb) / 0.07).
      Значения здесь — тема «Чёрная», она же по умолчанию. */
   --fg-rgb: 255 255 255; /* основной: текст, линии, подсветки */
@@ -19,6 +19,9 @@
   --solid-rgb: 6 6 6; /* сплошная панель */
   --pop-rgb: 4 4 4; /* меню и всплывашки */
   --sphere-rgb: 255 255 255; /* точки фоновой сферы */
+  --accent-ink-rgb: 255 255 255; /* акцент, который читается как текст на фоне: ссылки, @упоминания */
+  --own-n-rgb: 31 31 31; /* свои сообщения в нейтральном цвете (настройка) */
+  --own-n-ink-rgb: 242 242 242;
 
   --panel-a: 0.6; /* прозрачность панелей (настройка) */
   --panel-backdrop: none; /* размытие под панелями (настройка): blur(8px) и т.п. */
@@ -42,6 +45,7 @@
   --rk: 1; /* скругления: 0.4 — острые, 1 — обычные, 1.45 — круглые */
   --avatar-r: 50%; /* форма аватарок */
   --msg-gap: 1; /* расстояние между сообщениями */
+  --bg-fx: 1; /* яркость узора на фоне (настройка) */
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -63,6 +67,9 @@
   --hover: rgb(var(--fg-rgb) / 0.07);
   --accent: rgb(var(--accent-rgb));
   --on-accent: rgb(var(--on-accent-rgb));
+  --accent-ink: rgb(var(--accent-ink-rgb));
+  --accent-soft: rgb(var(--accent-rgb) / 0.14); /* подсветка: упоминания, выделенное */
+  --own-edge-rgb: var(--accent-rgb);
   --glow-k: calc(var(--theme-glow) * var(--glow-user));
 
   --line: rgb(var(--fg-rgb) / 0.1);
@@ -171,15 +178,15 @@ button:disabled {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(700px circle at var(--gx, -999px) var(--gy, -999px), rgb(var(--fg-rgb) / 0.05), transparent 60%),
-    radial-gradient(rgb(var(--fg-rgb) / 0.07) 1px, transparent 1.5px) 0 0 / 26px 26px;
+    radial-gradient(700px circle at var(--gx, -999px) var(--gy, -999px), rgb(var(--fg-rgb) / calc(0.05 * var(--bg-fx))), transparent 60%),
+    radial-gradient(rgb(var(--fg-rgb) / calc(0.07 * var(--bg-fx))) 1px, transparent 1.5px) 0 0 / 26px 26px;
 }
 
 .backdrop::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(rgb(var(--fg-rgb) / 0.45) 1px, transparent 1.6px) 0 0 / 26px 26px;
+  background: radial-gradient(rgb(var(--fg-rgb) / calc(0.45 * var(--bg-fx))) 1px, transparent 1.6px) 0 0 / 26px 26px;
   -webkit-mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
   mask: radial-gradient(240px circle at var(--gx, -999px) var(--gy, -999px), #000, transparent 70%);
 }
