@@ -9,6 +9,7 @@ import { uiZoom, useSettings } from '../../lib/settings'
 import { activeChannelId, useChat } from '../../lib/store'
 import { useUi } from '../../lib/ui'
 import { useIsMobile } from '../../lib/mobile'
+import { useSheetSwipe } from '../../lib/swipe'
 import { EmojiPicker } from './EmojiPicker'
 
 /**
@@ -59,6 +60,8 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
   const sheet = useIsMobile()
   const sheetRef = useRef(sheet)
   sheetRef.current = sheet
+  // телефон: шторку смахивают вниз, затемнение бледнеет вместе с ней
+  useSheetSwipe(popRef, () => msgUi.closeMenu(), sheet, () => popRef.current?.parentElement?.querySelector<HTMLElement>('.msg-sheet-backdrop'))
 
   const isMine = (emoji: string) => Boolean(message.reactions?.[emoji]?.includes(meId))
 

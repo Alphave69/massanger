@@ -1,8 +1,9 @@
-import { useEffect, type ComponentType } from 'react'
+import { useEffect, useRef, type ComponentType, type RefObject } from 'react'
 import { ArrowLeft, Award, Bell, Crown, FlaskConical, IdCard, LogOut, Mic, Palette, ShieldCheck, UserRound, X } from 'lucide-react'
 import { versionClick } from '../../lib/eggs'
 import { useIsMobile } from '../../lib/mobile'
 import { useSettings } from '../../lib/settings'
+import { hold, letGo, settle, slideAway, useSwipe } from '../../lib/swipe'
 import { selfPresence } from '../../lib/status'
 import { useChat } from '../../lib/store'
 import { ui, useUi, type SettingsSection } from '../../lib/ui'
@@ -63,6 +64,8 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const devMode = useSettings((s) => s.devMode)
   const list = useUi((s) => s.settingsList)
   const mobile = useIsMobile()
+  const rootRef = useRef<HTMLDivElement>(null)
+  useSettingsSwipe(rootRef, mobile && Boolean(section && me), ui.closeSettings)
 
   useEffect(() => {
     if (!section) return
@@ -78,7 +81,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const nav = [...NAV, ...(devMode ? [LAB] : []), ...(me.admin ? [ADMIN] : [])]
 
   return (
-    <div className={`settings zoomed${mobile ? (list ? ' is-list' : ' is-section') : ''}`} role="dialog" aria-modal="true" aria-label="Настройки">
+    <div ref={rootRef} className={`settings zoomed${mobile ? (list ? ' is-list' : ' is-section') : ''}`} role="dialog" aria-modal="true" aria-label="Настройки">
       <nav className="settings__nav">
         <div className="settings__nav-inner">
           {mobile && <MobileTop title="Настройки" onClose={ui.closeSettings} />}
@@ -161,5 +164,41 @@ export function MobileBar({ back, onClose }: { back: string; onClose: () => void
         <X size={22} />
       </button>
     </div>
+  )
+}
+
+/**
+ * Телефон: свайп вправо по настройкам (своим или сервера) — из раздела обратно к списку разделов,
+ * со списка — закрыть настройки совсем. Экран едет за пальцем.
+ */
+export function useSettingsSwipe(ref: RefObject<HTMLDivElement | null>, active: boolean, onClose: () => void) {
+  useSwipe(
+    ref,
+    {
+      start(dir) {
+        const root = ref.current
+        if (dir !== 'right' || !root) return null
+        const size = root.getBoundingClientRect().width
+        if (!useUi.getState().settingsList) {
+          const nav = root.querySelector<HTMLElement>(':scope > .settings__nav')
+          const content = root.querySelector<HTMLElement>(':scope > .settings__content')
+          return {
+            size,
+            move(px) {
+              const p = px / size
+              hold(content, { translate: `${(p * 100).toFixed(2)}% 0` })
+              hold(nav, { translate: `${(-22 * (1 - p)).toFixed(2)}% 0`, opacity: String(p), visibility: 'visible' })
+            },
+            end: (commit) => settle([content, nav], commit ? ui.settingsBack : undefined),
+          }
+        }
+        return {
+          size,
+          move: (px) => hold(root, { translate: `${((px / size) * 100).toFixed(2)}% 0` }),
+          end: (commit) => (commit ? slideAway(root, 'right', onClose) : letGo(root)),
+        }
+      },
+    },
+    active,
   )
 }

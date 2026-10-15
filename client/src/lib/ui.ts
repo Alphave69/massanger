@@ -47,6 +47,7 @@ export const ui = {
   closeModal: () => useUi.setState({ modal: null }),
   toggleAside: () => useUi.setState((s) => ({ asideOpen: !s.asideOpen })),
   closeAside: () => useUi.setState({ asideOpen: false }),
+  openAside: () => useUi.setState({ asideOpen: true }),
   setStatusMenu: (open: boolean) => useUi.setState({ statusMenuOpen: open }),
   /** Показать карточку профиля рядом с элементом, по которому кликнули */
   showProfile(userId: string, anchor: Element) {
