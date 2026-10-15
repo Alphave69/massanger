@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
-import { Check, Copy, Forward, IdCard, Pencil, Plus, Reply, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, Forward, IdCard, Pencil, Plus, Reply, Trash2 } from 'lucide-react'
 import type { Message } from '../../lib/api'
 import { copyText, deleteMessage, findLoaded, messageRights, msgUi, QUICK_REACTIONS, rememberEmoji, useMsgUi, type MenuState } from '../../lib/msgActions'
 import { reactToMessage } from '../../lib/realtime'
@@ -276,12 +276,18 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
                 msgUi.closeMenu()
                 msgUi.openForward(message)
               })}
-            {item(
-              copied === 'text' ? 'Скопировано' : hasSelection ? 'Копировать выделенное' : 'Копировать текст',
-              copied === 'text' ? <Check size={16} /> : <Copy size={16} />,
-              () => void copy('text'),
-              copied === 'text' ? ' is-done' : '',
-            )}
+            {(message.content || hasSelection) &&
+              item(
+                copied === 'text' ? 'Скопировано' : hasSelection ? 'Копировать выделенное' : 'Копировать текст',
+                copied === 'text' ? <Check size={16} /> : <Copy size={16} />,
+                () => void copy('text'),
+                copied === 'text' ? ' is-done' : '',
+              )}
+            {Boolean(message.attachments?.length) &&
+              item(message.attachments!.length > 1 ? `Скачать файлы (${message.attachments!.length})` : 'Скачать файл', <Download size={16} />, () => {
+                msgUi.closeMenu()
+                downloadAll(message)
+              })}
             {rights.canEdit &&
               item('Редактировать', <Pencil size={16} />, () => {
                 msgUi.closeMenu()
@@ -314,4 +320,18 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
       )}
     </div>
   )
+}
+
+/** Скачать вложения сообщения (по одному — браузер может спросить разрешение на несколько загрузок) */
+function downloadAll(message: Message) {
+  message.attachments?.forEach((a, i) => {
+    window.setTimeout(() => {
+      const link = document.createElement('a')
+      link.href = `${a.url}?dl=1`
+      link.download = a.name
+      document.body.append(link)
+      link.click()
+      link.remove()
+    }, i * 350)
+  })
 }

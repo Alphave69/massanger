@@ -19,6 +19,12 @@ export interface User {
   /** Номер регистрации: 1 — самый первый человек в Nuntius */
   number: number
   badges: EarnedBadge[]
+  /** Своя картинка (/files/…) вместо инициалов */
+  avatar?: string | null
+  /** Баннер в карточке профиля */
+  banner?: string | null
+  /** Цвет профиля '#rrggbb' — лёгкий оттенок карточки */
+  accent?: string | null
 }
 
 /** Счётчики для значков (видны только себе и админу) */
@@ -231,6 +237,29 @@ export interface Message {
   forwarded?: Forwarded
   /** Когда текст меняли в последний раз */
   editedAt?: number
+  /** Прикреплённые файлы: фото, видео, аудио, документы */
+  attachments?: Attachment[]
+}
+
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+
+/** Файл в сообщении. url — /files/<id>.<ext>; размеры есть у картинок (и у видео, если их узнал отправитель) */
+export interface Attachment {
+  id: string
+  url: string
+  name: string
+  size: number
+  mime: string
+  kind: AttachmentKind
+  width?: number
+  height?: number
+}
+
+/** Ограничения загрузки (сервер присылает вместе с состоянием) */
+export interface UploadLimits {
+  maxBytes: number
+  avatarMaxBytes: number
+  bannerMaxBytes: number
 }
 
 // ============ админка ============
@@ -271,6 +300,7 @@ export interface InitialState {
   presence: Record<string, Presence>
   voice: Record<string, VoiceMember[]>
   rings: { roomId: string; from: string }[]
+  uploads?: UploadLimits
 }
 
 const TOKEN_KEY = 'nuntius.token'
@@ -343,11 +373,14 @@ export const api = {
   me: () => request<{ user: Me }>('/me'),
   state: () => request<InitialState>('/state'),
   updateMe: (
-    patch: Partial<Pick<Me, 'displayName' | 'username' | 'customStatus' | 'bio' | 'status'>> & { privacy?: Partial<Privacy>; password?: string },
+    patch: Partial<Pick<Me, 'displayName' | 'username' | 'customStatus' | 'bio' | 'status' | 'accent'>> & { privacy?: Partial<Privacy>; password?: string },
   ) =>
     request<{ user: Me }>('/me', { method: 'PATCH', body: patch }),
   changePassword: (current: string, next: string) => request<{ token: string }>('/me/password', { method: 'POST', body: { current, next } }),
   logoutAll: () => request<{ token: string }>('/me/logout-all', { method: 'POST' }),
+  /** Поставить загруженную картинку (POST /uploads) аватаркой или баннером; убрать */
+  setProfileImage: (slot: 'avatar' | 'banner', uploadId: string) => request<{ user: Me }>(`/me/${slot}`, { method: 'POST', body: { uploadId } }),
+  removeProfileImage: (slot: 'avatar' | 'banner') => request<{ user: Me }>(`/me/${slot}`, { method: 'DELETE' }),
 
   createGuild: (name: string) => request<{ guild: Guild }>('/guilds', { method: 'POST', body: { name } }),
   renameGuild: (id: string, name: string) => request<{ guild: Guild }>(`/guilds/${id}`, { method: 'PATCH', body: { name } }),

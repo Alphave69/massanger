@@ -8,6 +8,7 @@ import { forwardMessage } from '../../lib/realtime'
 import { chat, dmTitle, useChat, type View } from '../../lib/store'
 import { Avatar } from '../Avatar'
 import { GroupAvatar } from '../groups/GroupAvatar'
+import { messagePreview } from '../../lib/uploads'
 import { Modal } from '../Modal'
 
 /** Куда можно переслать: личка, группа или текстовый канал сервера */
@@ -62,14 +63,15 @@ function ForwardPicker({ message }: { message: Message }) {
         out.push({ id: d.id, kind: 'group', title: dmTitle(st, d), sub: plural(d.memberIds.length, MEMBERS), memberIds: d.memberIds })
       }
     }
-    // каналы серверов — только текстовые и только те, где у меня есть право писать
+    // каналы серверов — только текстовые и только те, где у меня есть право писать (а с файлами — и прикреплять)
+    const files = Boolean(message.attachments?.length)
     for (const g of guilds) {
       for (const c of g.channels) {
-        if (c.type === 'text' && can(g, 'SEND_MESSAGES', c.id)) out.push({ id: c.id, kind: 'channel', title: c.name, sub: g.name })
+        if (c.type === 'text' && can(g, 'SEND_MESSAGES', c.id) && (!files || can(g, 'ATTACH_FILES', c.id))) out.push({ id: c.id, kind: 'channel', title: c.name, sub: g.name })
       }
     }
     return out
-  }, [dms, guilds, users, me])
+  }, [dms, guilds, users, me, message])
 
   const q = query.trim().toLowerCase()
   const shown = q ? targets.filter((t) => `${t.title} ${t.sub}`.toLowerCase().includes(q)) : targets
@@ -89,7 +91,7 @@ function ForwardPicker({ message }: { message: Message }) {
     msgUi.closeForward()
     const where = t.kind === 'channel' ? `#${t.title}` : t.kind === 'group' ? `«${t.title}»` : t.title
     const action: View | undefined = t.kind === 'channel' ? undefined : { kind: 'dm', dmId: t.id }
-    chat.toast({ title: `Переслано в ${where}`, text: oneLine(message.content).slice(0, 120), action })
+    chat.toast({ title: `Переслано в ${where}`, text: oneLine(messagePreview(message)).slice(0, 120), action })
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -113,7 +115,7 @@ function ForwardPicker({ message }: { message: Message }) {
           <CornerUpRight size={15} className="fwd-preview__icon" />
           {author && <Avatar user={author} size={20} />}
           <b className="fwd-preview__name">{authorName}</b>
-          <span className="fwd-preview__text truncate">{oneLine(message.content)}</span>
+          <span className="fwd-preview__text truncate">{oneLine(messagePreview(message))}</span>
         </div>
         <div className="picker__search">
           <Search size={16} />

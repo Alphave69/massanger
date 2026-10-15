@@ -8,6 +8,7 @@ import { ui } from './ui'
 import { onBadgeEarned } from './badges'
 import { onEggFound, onMessageSent } from './eggs'
 import { onAnnounce } from './admin'
+import { messagePreview } from './uploads'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -123,7 +124,7 @@ export function connectRealtime(onUnauthorized: () => void) {
       const author = st.users[m.authorId]
       const dm = st.dms.find((d) => d.id === m.channelId)
       const title = dm?.kind === 'group' ? `${dmTitle(st, dm)} · ${author?.displayName ?? '…'}` : (author?.displayName ?? 'Новое сообщение')
-      notify(title, m.content.slice(0, 120), {
+      notify(title, messagePreview(m).slice(0, 120), {
         userId: m.authorId,
         action: { kind: 'dm', dmId: m.channelId },
       })
@@ -181,11 +182,11 @@ function messageRequest(event: string, payload: object, failTitle: string, offli
   })
 }
 
-/** Отправить сообщение (replyTo — id сообщения, на которое отвечаем); true — если сервер принял */
-export async function sendMessage(channelId: string, content: string, replyTo?: string): Promise<boolean> {
+/** Отправить сообщение (replyTo — id сообщения, на которое отвечаем; attachments — id загруженных файлов); true — если сервер принял */
+export async function sendMessage(channelId: string, content: string, replyTo?: string, attachments?: string[]): Promise<boolean> {
   const message = await messageRequest(
     'message:send',
-    { channelId, content, ...(replyTo ? { replyTo } : {}) },
+    { channelId, content, ...(replyTo ? { replyTo } : {}), ...(attachments?.length ? { attachments } : {}) },
     'Не отправлено',
     'Сообщение не отправлено — переподключаемся…',
   )

@@ -4,6 +4,7 @@ import { SYSTEM_AUTHOR, type ReplyRef } from '../../lib/api'
 import { findLoaded, focusComposer, jumpToMessage, msgUi, useMsgUi } from '../../lib/msgActions'
 import { guildOfChannel, roleColor } from '../../lib/perms'
 import { chat, useChat } from '../../lib/store'
+import { messagePreview } from '../../lib/uploads'
 import { Avatar } from '../Avatar'
 
 /** Текст для цитаты — в одну строку */
@@ -27,7 +28,10 @@ function useAuthor(authorId: string, channelId: string) {
  */
 export function ReplyQuote({ reply, channelId }: { reply: ReplyRef; channelId: string }) {
   const { user, name, color } = useAuthor(reply.authorId, channelId)
-  const live = useChat((s) => findLoaded(s, channelId, reply.id)?.content)
+  const live = useChat((s) => {
+    const m = findLoaded(s, channelId, reply.id)
+    return m ? messagePreview(m) : undefined
+  })
   const text = oneLine(live ?? reply.content)
 
   const jump = () => {
@@ -66,7 +70,7 @@ export function ReplyBar({ channelId }: { channelId: string }) {
       <CornerUpLeft size={15} className="reply-bar__icon" />
       <span className="reply-bar__text truncate">
         Ответ <b style={color ? { color } : undefined}>{name}</b>
-        <span className="reply-bar__snippet">: {oneLine(target.content)}</span>
+        <span className="reply-bar__snippet">: {oneLine(messagePreview(target))}</span>
       </span>
       <button
         type="button"
