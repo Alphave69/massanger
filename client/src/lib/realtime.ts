@@ -188,10 +188,10 @@ function messageRequest(event: string, payload: object, failTitle: string, offli
       resolve(null)
       return
     }
-    socket.timeout(8000).emit(event, payload, (err: Error | null, res: { error?: string; message?: Message; code?: string; retryAfter?: number }) => {
+    socket.timeout(8000).emit(event, payload, (err: Error | null, res: { error?: string; message?: Message; code?: string; retryAfter?: number; retryAfterMs?: number }) => {
       // Строчим слишком быстро: для сообщений — предупреждение с отсчётом над полем ввода, а не тост
       if (event === 'message:send' && res?.code === 'slow_down') {
-        slowDown(res.retryAfter ?? 2000)
+        slowDown(res.retryAfterMs ?? (res.retryAfter ?? 2) * 1000)
         resolve(null)
         return
       }

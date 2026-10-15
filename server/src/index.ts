@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import cors from 'cors'
-import express, { type Response } from 'express'
+import express, { type Request, type Response } from 'express'
 import { Server, type Socket } from 'socket.io'
 import { checkPassword, hashPassword, requireAuth, signToken, userFromToken, type AuthedRequest } from './auth.js'
 import * as store from './store.js'
@@ -20,15 +20,29 @@ import { registerGroupRoutes } from './groups.js'
 import { registerRoleRoutes } from './roles.js'
 import { broadcastGuild, serializeGuild } from './guildView.js'
 import { hasChannelPermission } from './permissions.js'
+import { RateLimiter, waitText } from './ratelimit.js'
+import { allowedOrigins, originAllowed } from './origins.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
 const app = express()
-app.use(cors())
+// Перед нами Caddy на этой же машине: настоящий IP клиента он кладёт в X-Forwarded-For.
+// Доверяем только ему (loopback) — иначе любой подставил бы себе чужой IP в заголовке
+app.set('trust proxy', 'loopback')
+// API — только для своих сайтов: чужой отвечаем 403, своим — заголовки CORS (и ответ на preflight)
+app.use('/api', (req, res, next) => {
+  if (originAllowed(req.headers.origin, req.headers.host)) return next()
+  fail(res, 403, 'Запросы к Nuntius разрешены только с его собственного сайта')
+})
+app.use('/api', cors((req, cb) => cb(null, { origin: originAllowed(req.headers.origin, req.headers.host) })))
 app.use(express.json())
 
 const http = createServer(app)
-const io = new Server(http, { cors: { origin: '*' } })
+const io = new Server(http, {
+  cors: { origin: allowedOrigins },
+  // WebSocket CORS не проверяет — Origin смотрим сами ещё до рукопожатия
+  allowRequest: (req, cb) => cb(null, originAllowed(req.headers.origin, req.headers.host)),
+})
 
 const fail = (res: Response, code: number, error: string) => void res.status(code).json({ error })
 
@@ -188,6 +202,39 @@ function passwordProblem(password: unknown): string | null {
   return null
 }
 
+// ============ защита от перебора и рассылки ============
+
+const FIFTEEN_MIN = 15 * 60_000
+/**
+ * Неудачные входы. Строгий лимит — на пару «логин + IP»: перебирать пароль с одного адреса нельзя,
+ * а заблокировать чужой аккаунт неверными паролями со своего адреса — тоже (владелец войдёт со своего).
+ * На один логин со всех адресов — мягкий лимит против перебора с многих IP; плюс общий лимит на IP
+ */
+const loginFailsByNameIp = new RateLimiter(5, FIFTEEN_MIN)
+const loginFailsByName = new RateLimiter(30, 60 * 60_000)
+const loginFailsByIp = new RateLimiter(20, FIFTEEN_MIN)
+/** Письма с кодами (регистрация, сброс пароля, смена почты) с одного IP */
+const codeMailsByIp = new RateLimiter(10, 60 * 60_000)
+
+const clientIp = (req: Request) => req.ip ?? req.socket.remoteAddress ?? 'unknown'
+
+function tooMany(res: Response, ms: number, error: string) {
+  res.setHeader('Retry-After', String(Math.ceil(ms / 1000)))
+  fail(res, 429, error)
+}
+
+/** Лимит писем с этого IP: true — можно слать (и письмо засчитано), false — ответ 429 уже отправлен */
+function allowCodeMail(req: Request, res: Response) {
+  const ip = clientIp(req)
+  const wait = codeMailsByIp.retryAfter(ip)
+  if (wait) {
+    tooMany(res, wait, `Слишком много писем с кодами — попробуй ${waitText(wait)}`)
+    return false
+  }
+  codeMailsByIp.hit(ip)
+  return true
+}
+
 /**
  * Отправить письмо с кодом. code === null — прошлый код ещё свежий, письмо не шлём.
  * Почта недоступна (хостинг закрыл почтовые порты и т. п.) — код не теряем: печатаем его в журнал сервера,
@@ -225,6 +272,7 @@ app.post('/api/auth/register', async (req, res) => {
 
   const name = typeof displayName === 'string' && displayName.trim() ? displayName.trim().slice(0, 32) : username
   const key = `register:${email}`
+  if (!cooldownLeft(key) && !allowCodeMail(req, res)) return
   const data: PendingRegistration = { email, username, displayName: name, passwordHash: await hashPassword(password) }
   const { code, resendIn } = issueCode(key, data)
   const sent = await mailCode(email, code, 'register')
@@ -250,11 +298,23 @@ app.post('/api/auth/register/verify', (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body ?? {}
   const id = typeof username === 'string' ? username.trim() : ''
+  // считаем по тому, что ввели: «Login» и «login» — один и тот же счётчик
+  const nameKey = id.toLowerCase()
+  const ip = clientIp(req)
+  const pairKey = `${nameKey}|${ip}`
+  const wait = Math.max(loginFailsByNameIp.retryAfter(pairKey), loginFailsByName.retryAfter(nameKey), loginFailsByIp.retryAfter(ip))
+  if (wait) return tooMany(res, wait, `Слишком много неудачных попыток входа — попробуй ${waitText(wait)}`)
+
   const user = id.includes('@') ? store.findUserByEmail(id) : store.findUserByName(id)
   if (!user || typeof password !== 'string' || !(await checkPassword(password, user.passwordHash))) {
+    loginFailsByNameIp.hit(pairKey)
+    loginFailsByName.hit(nameKey)
+    loginFailsByIp.hit(ip)
     return fail(res, 401, 'Неверный логин, почта или пароль')
   }
   if (user.banned) return fail(res, 403, 'Аккаунт заблокирован')
+  // общий счётчик логина не сбрасываем: иначе вход владельца обнулял бы перебор с чужих адресов
+  loginFailsByNameIp.reset(pairKey)
   res.json({ token: signToken(user), user: selfUser(user) })
 })
 
@@ -262,9 +322,11 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/reset', async (req, res) => {
   const email = normEmail(req.body?.email)
   if (!validEmail(email)) return fail(res, 400, BAD_EMAIL)
+  const key = `reset:${email}`
+  // лимит одинаковый и для чужих адресов — чтобы по нему нельзя было узнать, есть ли аккаунт
+  if (!cooldownLeft(key) && !allowCodeMail(req, res)) return
   const user = store.findUserByEmail(email)
   if (!user) return res.json({ email, resendIn: RESEND_AFTER / 1000 })
-  const key = `reset:${email}`
   const { code, resendIn } = issueCode(key, { userId: user.id })
   const sent = await mailCode(email, code, 'reset')
   res.json({ email, resendIn, ...sent })
@@ -393,6 +455,7 @@ app.post('/api/me/email', requireAuth, async (req, res) => {
   if (wait && pendingData<{ email: string }>(key)?.email !== email) {
     return fail(res, 429, `Подожди ${wait} с — потом можно отправить код на другой адрес`)
   }
+  if (!wait && !allowCodeMail(req, res)) return
   const { code, resendIn } = issueCode(key, { email })
   const sent = await mailCode(email, code, 'bind')
   res.json({ email, resendIn, ...sent })

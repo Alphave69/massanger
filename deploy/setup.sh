@@ -74,6 +74,8 @@ ask OWNER "Логин владельца" "$OWNER"
 JWT_SECRET=$(env_get JWT_SECRET); [ -n "$JWT_SECRET" ] || JWT_SECRET=$(openssl rand -hex 32)
 TURN_USER=$(env_get TURN_USERNAME); TURN_USER=${TURN_USER:-nuntius}
 TURN_PASS=$(env_get TURN_CREDENTIAL); [ -n "$TURN_PASS" ] || TURN_PASS=$(openssl rand -hex 16)
+# С каких сайтов можно ходить к API (CORS); уже заданный список не трогаем
+CORS_ORIGINS=$(env_get CORS_ORIGINS); CORS_ORIGINS=${CORS_ORIGINS:-https://$DOMAIN}
 
 # ---------- система ----------
 
@@ -131,6 +133,7 @@ ok "Готово"
 say "Настройки приложения (server/.env)"
 ENV_TEXT="# Создано deploy/setup.sh — НИКОМУ не показывай этот файл
 NUNTIUS_DOMAIN=$DOMAIN
+CORS_ORIGINS=$CORS_ORIGINS
 PORT=3001
 JWT_SECRET=$JWT_SECRET
 SMTP_HOST=smtp.yandex.ru

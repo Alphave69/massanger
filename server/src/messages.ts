@@ -86,6 +86,12 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
   function attach(socket: Socket, userId: string) {
     on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown }, ack?: unknown) => {
       const answer = reply(ack)
+      // Строчит слишком быстро — сообщение не доходит, клиент покажет «полегче» с отсчётом
+      const wait = sendLimit.hit(userId)
+      if (wait !== null) {
+        answer(slowDown(wait))
+        return
+      }
       const channelId = str(payload?.channelId)
       const content = store.snip(str(payload?.content).trim(), MAX_LENGTH)
       const access = channelId ? store.channelAccess(channelId, userId) : undefined
@@ -112,12 +118,6 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
       const command = runCommand(content)
       if (command && 'error' in command) {
         answer({ error: command.error })
-        return
-      }
-      // Строчит слишком быстро — сообщение не доходит, клиент покажет «полегче» с отсчётом
-      const wait = sendLimit.hit(userId)
-      if (wait !== null) {
-        answer(slowDown(wait))
         return
       }
       const text = command ? command.content : content
