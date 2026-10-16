@@ -265,8 +265,9 @@
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 12px;
         align-content: start;
-        margin: 0 -8px;
-        padding: 4px 8px 8px;
+        /* поля под свечение выбранного превью — иначе прокрутка обрезает его прямоугольником */
+        margin: -10px -16px -6px;
+        padding: 10px 16px 16px;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
       }
@@ -305,7 +306,7 @@
         background: rgba(255, 255, 255, 0.07);
         box-shadow:
           0 0 0 1px #fff,
-          0 0 28px rgba(255, 255, 255, 0.22);
+          0 0 14px rgba(255, 255, 255, 0.2);
       }
       .src__thumb {
         position: relative;
