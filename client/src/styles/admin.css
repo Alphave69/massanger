@@ -12,7 +12,7 @@
   margin: -6px 0 22px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.6));
+  background: linear-gradient(rgb(var(--bg-rgb) / 0.85), rgb(var(--bg-rgb) / 0.6));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -24,16 +24,16 @@
 .adm-tabs__n {
   min-width: 18px;
   padding: 2px 5px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: calc(9px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.1);
   font: 600 10.5px/1.2 var(--mono);
   text-align: center;
   color: var(--text-2);
 }
 
 .tab.is-active .adm-tabs__n {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .adm-refresh__spin {
@@ -62,7 +62,7 @@
 
 .adm-empty {
   padding: 36px 16px;
-  border-radius: 16px;
+  border-radius: calc(16px * var(--rk));
   border: 1px dashed var(--line-2);
   text-align: center;
   font-size: 13.5px;
@@ -72,7 +72,7 @@
 .adm-flag {
   flex: none;
   padding: 3px 7px;
-  border-radius: 7px;
+  border-radius: calc(7px * var(--rk));
   border: 1px solid var(--line-2);
   font: 600 9.5px/1 var(--mono);
   text-transform: uppercase;
@@ -81,10 +81,10 @@
 }
 
 .adm-flag--ban {
-  border-color: #fff;
-  background: #fff;
-  color: #000;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.35);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
 }
 
 /* ============ обзор ============ */
@@ -103,11 +103,11 @@
   gap: 4px;
   min-height: 112px;
   padding: 14px 14px 12px;
-  border-radius: 18px;
+  border-radius: calc(18px * var(--rk));
   border: 1px solid var(--line);
   background:
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.4px) 0 0 / 14px 14px,
-    rgba(255, 255, 255, 0.025);
+    radial-gradient(rgb(var(--fg-rgb) / 0.05) 1px, transparent 1.4px) 0 0 / 14px 14px,
+    rgb(var(--fg-rgb) / 0.025);
   text-align: left;
   animation: adm-tile-in 0.5s var(--ease-spring) backwards;
   transition:
@@ -133,8 +133,8 @@
 }
 
 .adm-tile.is-link:hover {
-  border-color: #fff;
-  box-shadow: 0 0 26px rgba(255, 255, 255, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 26px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
 }
 
 .adm-tile.is-link:active {
@@ -147,7 +147,7 @@
   display: grid;
   place-items: center;
   margin-bottom: 6px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   border: 1px solid var(--line-2);
   color: var(--text-2);
   transition:
@@ -158,11 +158,11 @@
 }
 
 .adm-tile:hover .adm-tile__icon {
-  background: #fff;
-  border-color: #fff;
-  color: #000;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   transform: rotate(-10deg) scale(1.08);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.4 * var(--glow-k)));
 }
 
 .adm-tile__value {
@@ -195,9 +195,9 @@
 
 .adm-list {
   padding: 12px 10px 10px;
-  border-radius: 18px;
+  border-radius: calc(18px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
   animation: rise-in 0.45s var(--ease-out) 0.2s backwards;
 }
 
@@ -225,7 +225,7 @@
   align-items: center;
   gap: 9px;
   padding: 6px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   animation: rise-in 0.35s var(--ease-out) backwards;
   transition:
     background-color 0.15s ease,
@@ -247,7 +247,7 @@
 
 .adm-list__row:first-of-type .adm-list__place {
   color: var(--text);
-  text-shadow: 0 0 8px #fff;
+  text-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
 }
 
 .adm-list__name {
@@ -341,7 +341,7 @@
   gap: 7px;
   height: 30px;
   padding: 0 6px 0 12px;
-  border-radius: 15px;
+  border-radius: calc(15px * var(--rk));
   border: 1px solid var(--line);
   font-size: 13px;
   font-weight: 500;
@@ -359,23 +359,23 @@
 }
 
 .adm-chip.is-active {
-  background: #fff;
-  border-color: #fff;
-  color: #000;
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.3);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.3 * var(--glow-k)));
 }
 
 .adm-chip__n {
   min-width: 20px;
   padding: 3px 6px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: calc(10px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.08);
   font: 600 10.5px/1 var(--mono);
   text-align: center;
 }
 
 .adm-chip.is-active .adm-chip__n {
-  background: rgba(0, 0, 0, 0.12);
+  background: rgb(var(--on-accent-rgb) / 0.12);
 }
 
 .adm-people__list {
@@ -390,9 +390,9 @@
 }
 
 .adm-person {
-  border-radius: 16px;
+  border-radius: calc(16px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
   animation: rise-in 0.35s var(--ease-out) backwards;
   transition:
     border-color 0.2s ease,
@@ -406,8 +406,8 @@
 
 .adm-person.is-open {
   border-color: var(--line-3);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  background: rgb(var(--fg-rgb) / 0.04);
+  box-shadow: 0 18px 40px rgb(var(--shade-rgb) / calc(0.5 * var(--shade-k)));
 }
 
 .adm-person.is-banned .adm-person__row > .avatar {
@@ -417,7 +417,7 @@
 
 .adm-person.is-banned .adm-person__name > .truncate {
   text-decoration: line-through;
-  text-decoration-color: rgba(255, 255, 255, 0.5);
+  text-decoration-color: rgb(var(--fg-rgb) / 0.5);
 }
 
 /* переход из «Обзора» — строка вспыхивает */
@@ -428,10 +428,10 @@
 @keyframes adm-flash {
   0%,
   30% {
-    border-color: #fff;
+    border-color: var(--accent);
     box-shadow:
-      0 0 0 1px #fff,
-      0 0 40px rgba(255, 255, 255, 0.35);
+      0 0 0 1px var(--accent),
+      0 0 40px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
   }
 }
 
@@ -441,7 +441,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 15px;
+  border-radius: calc(15px * var(--rk));
   text-align: left;
 }
 
@@ -473,7 +473,7 @@
   display: inline-grid;
   place-items: center;
   color: var(--text);
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.7));
+  filter: drop-shadow(0 0 4px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k))));
 }
 
 .adm-person__meta {
@@ -493,9 +493,9 @@
 }
 
 .adm-dot.is-on {
-  border-color: #fff;
-  background: #fff;
-  box-shadow: 0 0 8px #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
 }
 
 .adm-person__num {
@@ -553,9 +553,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 9px 10px;
-  border-radius: 12px;
+  border-radius: calc(12px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--fg-rgb) / 0.025);
   animation: pop-in 0.4s var(--ease-spring) backwards;
 }
 
@@ -601,7 +601,7 @@
 
 .adm-id {
   padding: 3px 7px;
-  border-radius: 7px;
+  border-radius: calc(7px * var(--rk));
   border: 1px dashed var(--line-2);
   font: 11px var(--mono);
   color: var(--text-2);
@@ -630,9 +630,9 @@
 .adm-panel__block {
   min-width: 0;
   padding: 6px 14px 10px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.35);
+  background: rgb(var(--bg-rgb) / 0.35);
 }
 
 .adm-panel__block .toggle-row {
@@ -660,8 +660,8 @@
 
 .adm-panel__count {
   padding: 2px 6px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: calc(8px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.08);
   color: var(--text-2);
 }
 
@@ -684,9 +684,9 @@
   gap: 8px;
   margin: 2px 0 8px;
   padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px dashed #fff;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: calc(12px * var(--rk));
+  border: 1px dashed var(--accent);
+  background: rgb(var(--fg-rgb) / 0.05);
   font-size: 13px;
   color: var(--text-1);
   animation: adm-shake-in 0.45s var(--ease-out);
@@ -730,9 +730,9 @@
   max-width: 100%;
   height: 30px;
   padding: 0 4px 0 5px;
-  border-radius: 15px;
+  border-radius: calc(15px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--fg-rgb) / 0.03);
   font-size: 12.5px;
   color: var(--text-1);
   animation: pop-in 0.4s var(--ease-spring) backwards;
@@ -756,7 +756,7 @@
   display: grid;
   place-items: center;
   padding: 0 4px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   color: var(--text-3);
   font: 600 10.5px/1 var(--mono);
   transition:
@@ -770,14 +770,14 @@
 }
 
 .adm-badge.is-asking {
-  border-color: #fff;
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb) / calc(0.2 * var(--glow-k)));
 }
 
 .adm-badge.is-asking .adm-badge__x {
   padding: 0 8px;
-  background: #fff;
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .adm-grant {
@@ -807,11 +807,11 @@
   gap: 12px;
   margin-top: 10px;
   padding: 10px 12px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px dashed var(--line-3);
   background:
-    radial-gradient(circle at 10% 50%, rgba(255, 255, 255, 0.08), transparent 50%),
-    rgba(255, 255, 255, 0.02);
+    radial-gradient(circle at 10% 50%, rgb(var(--fg-rgb) / 0.08), transparent 50%),
+    rgb(var(--fg-rgb) / 0.02);
   animation: adm-open 0.3s var(--ease-out);
 }
 
@@ -839,9 +839,9 @@
 }
 
 .adm-server {
-  border-radius: 16px;
+  border-radius: calc(16px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
   animation: rise-in 0.35s var(--ease-out) backwards;
   transition:
     border-color 0.2s ease,
@@ -853,8 +853,8 @@
 }
 
 .adm-server.is-confirming {
-  border-color: #fff;
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 30px rgb(var(--glow-rgb) / calc(0.1 * var(--glow-k)));
 }
 
 .adm-server__row {
@@ -870,9 +870,9 @@
   height: 42px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line-2);
-  background: #0c0c0c;
+  background: var(--surface-3);
   font: 700 14px var(--display);
   color: var(--text);
   transition:
@@ -886,10 +886,10 @@
 }
 
 .adm-server__icon.is-lobby {
-  background: #fff;
-  border-color: #fff;
-  color: #000;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
 }
 
 .adm-server__text {
@@ -922,8 +922,8 @@
   max-width: 260px;
   height: 3px;
   margin-top: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.07);
+  border-radius: calc(2px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.07);
   overflow: hidden;
 }
 
@@ -931,14 +931,14 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgb(var(--fg-rgb) / 0.7);
   animation: bdg-fill 0.9s var(--ease-out) 0.15s backwards;
 }
 
 .adm-server__lock {
   flex: none;
   padding: 4px 8px;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   border: 1px dashed var(--line-2);
   font: 10.5px var(--mono);
   color: var(--text-3);
@@ -949,8 +949,8 @@
 }
 
 .adm-server__del.is-active {
-  background: #fff;
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .adm-server__confirm {
@@ -1015,7 +1015,7 @@
 
 .counter.is-low {
   color: var(--text);
-  text-shadow: 0 0 8px #fff;
+  text-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
 }
 
 .adm-announce__sent {
@@ -1024,9 +1024,9 @@
   gap: 8px;
   margin-top: 14px;
   padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid #fff;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: calc(12px * var(--rk));
+  border: 1px solid var(--accent);
+  background: rgb(var(--fg-rgb) / 0.06);
   font-size: 13px;
   color: var(--text);
   animation: adm-sent 0.6s var(--ease-spring);
@@ -1036,7 +1036,7 @@
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.95);
-    box-shadow: 0 0 40px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 40px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
   }
 }
 
@@ -1056,12 +1056,12 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 18px;
+  border-radius: calc(18px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(4, 4, 4, 0.92);
+  background: rgb(var(--pop-rgb) / 0.92);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.7),
-    0 0 34px rgba(255, 255, 255, 0.07);
+    0 20px 50px rgb(var(--shade-rgb) / calc(0.7 * var(--shade-k))),
+    0 0 34px rgb(var(--glow-rgb) / calc(0.07 * var(--glow-k)));
   overflow: hidden;
   transition: opacity 0.2s ease;
 }
@@ -1102,8 +1102,8 @@
   bottom: 0;
   width: 100%;
   height: 2px;
-  background: var(--text);
-  box-shadow: 0 0 8px #fff;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
   transform-origin: left;
   animation: toast-timer 4.5s linear infinite;
 }

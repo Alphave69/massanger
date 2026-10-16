@@ -10,7 +10,7 @@
   display: inline-block;
   border-radius: 50%;
   background: var(--role, transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--role, #fff) 55%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--role, var(--accent)) 55%, transparent);
 }
 
 .role-dot--none {
@@ -26,9 +26,9 @@
   max-width: 180px;
   height: 24px;
   padding: 0 4px 0 9px;
-  border-radius: 99px;
-  border: 1px solid color-mix(in srgb, var(--role, #fff) 32%, transparent);
-  background: color-mix(in srgb, var(--role, #fff) 7%, rgba(255, 255, 255, 0.02));
+  border-radius: calc(99px * var(--rk));
+  border: 1px solid color-mix(in srgb, var(--role, var(--accent)) 32%, transparent);
+  background: color-mix(in srgb, var(--role, var(--accent)) 7%, rgb(var(--fg-rgb) / 0.02));
   font-size: 12px;
   font-weight: 500;
   color: var(--text-1);
@@ -58,8 +58,8 @@
 }
 
 .role-chip__x:hover {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* «+ роль» */
@@ -69,7 +69,7 @@
   gap: 4px;
   height: 24px;
   padding: 0 10px 0 8px;
-  border-radius: 99px;
+  border-radius: calc(99px * var(--rk));
   border: 1px dashed var(--line-3);
   font: 500 11.5px/1 var(--mono);
   color: var(--text-3);
@@ -85,7 +85,7 @@
   border-style: solid;
   border-color: var(--text);
   color: var(--text);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb) / calc(0.18 * var(--glow-k)));
 }
 
 .role-add svg {
@@ -129,12 +129,12 @@
   min-width: 200px;
   max-width: 280px;
   padding: 6px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line-2);
-  background: #050505;
+  background: var(--surface);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.8),
-    0 0 30px rgba(255, 255, 255, 0.06);
+    0 20px 50px rgb(var(--shade-rgb) / calc(0.8 * var(--shade-k))),
+    0 0 30px rgb(var(--glow-rgb) / calc(0.06 * var(--glow-k)));
   animation: menu-in 0.2s var(--ease-out);
 }
 
@@ -161,7 +161,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   font-size: 14px;
   font-weight: 500;
   color: var(--text-1);
@@ -171,12 +171,12 @@
 }
 
 .role-menu__item:hover {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .role-menu__item:hover .role-dot--none {
-  border-color: var(--black);
+  border-color: var(--on-accent);
 }
 
 /* ============ «Обзор»: мои роли и права ============ */
@@ -199,9 +199,9 @@
   align-items: center;
   gap: 6px;
   padding: 5px 10px 5px 8px;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--fg-rgb) / 0.03);
   font-size: 12.5px;
   color: var(--text-2);
   cursor: help;
@@ -273,7 +273,7 @@
   gap: 10px;
   height: 38px;
   padding: 0 10px 0 12px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   font-size: 14px;
   font-weight: 500;
   color: var(--text-2);
@@ -290,12 +290,12 @@
 }
 
 .role-row.is-active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--fg-rgb) / 0.08);
   color: var(--text);
   box-shadow:
     inset 0 0 0 1px var(--line-3),
-    inset 3px 0 0 var(--role, #fff),
-    0 0 22px color-mix(in srgb, var(--role, #fff) 14%, transparent);
+    inset 3px 0 0 var(--role, var(--accent)),
+    0 0 22px color-mix(in srgb, var(--role, var(--accent)) 14%, transparent);
 }
 
 .role-row__name {
@@ -316,7 +316,7 @@
   flex: none;
   min-width: 20px;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: calc(6px * var(--rk));
   border: 1px solid var(--line);
   font: 500 10px/1.2 var(--mono);
   text-align: center;
@@ -332,11 +332,11 @@
   position: relative;
   min-width: 0;
   padding: 18px 20px 20px;
-  border-radius: 20px;
+  border-radius: calc(20px * var(--rk));
   border: 1px solid var(--line-2);
   background:
-    radial-gradient(420px 160px at 0% 0%, color-mix(in srgb, var(--role, #fff) 10%, transparent), transparent 70%),
-    rgba(6, 6, 6, 0.9);
+    radial-gradient(420px 160px at 0% 0%, color-mix(in srgb, var(--role, var(--accent)) 10%, transparent), transparent 70%),
+    rgb(var(--solid-rgb) / 0.9);
   animation: rise-in 0.35s var(--ease-out);
 }
 
@@ -352,10 +352,10 @@
   height: 46px;
   display: grid;
   place-items: center;
-  border-radius: 15px;
-  background: var(--role, #fff);
-  color: var(--black);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--role, #fff) 50%, transparent);
+  border-radius: calc(15px * var(--rk));
+  background: var(--role, var(--accent));
+  color: #000;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--role, var(--accent)) 50%, transparent);
   transition:
     background-color 0.25s ease,
     box-shadow 0.25s ease;
@@ -405,7 +405,7 @@
 .role-note {
   margin: 16px 0 0;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: calc(12px * var(--rk));
   border: 1px dashed var(--line-2);
   font-size: 13px;
   line-height: 1.5;
@@ -423,7 +423,7 @@
   margin: 0 0 6px;
   border-style: solid;
   border-color: var(--line-3);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--fg-rgb) / 0.04);
   color: var(--text-1);
 }
 
@@ -437,9 +437,9 @@
   gap: 4px;
   margin-top: 18px;
   padding: 4px;
-  border-radius: 13px;
+  border-radius: calc(13px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
 }
 
 .role-tabs__tab {
@@ -449,7 +449,7 @@
   justify-content: center;
   gap: 7px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   font-size: 13px;
   font-weight: 600;
   color: var(--text-3);
@@ -465,9 +465,9 @@
 }
 
 .role-tabs__tab.is-active {
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.3);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.3 * var(--glow-k)));
 }
 
 .role-body {
@@ -508,10 +508,10 @@
   height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   background: var(--role);
-  color: var(--black);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  color: #000;
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.12);
   transition:
     transform 0.25s var(--ease-spring),
     box-shadow 0.2s ease;
@@ -524,8 +524,8 @@
 .swatch.is-active {
   box-shadow:
     0 0 0 2px var(--panel-solid),
-    0 0 0 3.5px #fff,
-    0 0 16px color-mix(in srgb, var(--role, #fff) 70%, transparent);
+    0 0 0 3.5px var(--accent),
+    0 0 16px color-mix(in srgb, var(--role, var(--accent)) 70%, transparent);
 }
 
 .swatch:disabled,
@@ -537,7 +537,7 @@
 .swatch--none {
   background:
     linear-gradient(135deg, transparent calc(50% - 1px), var(--text-3) calc(50% - 1px), var(--text-3) calc(50% + 1px), transparent calc(50% + 1px)),
-    rgba(255, 255, 255, 0.03);
+    rgb(var(--fg-rgb) / 0.03);
   color: var(--text);
   box-shadow: inset 0 0 0 1.5px var(--line-3);
 }
@@ -546,13 +546,13 @@
   box-shadow:
     inset 0 0 0 1.5px var(--line-3),
     0 0 0 2px var(--panel-solid),
-    0 0 0 3.5px #fff;
+    0 0 0 3.5px var(--accent);
 }
 
 .swatch--custom {
   cursor: pointer;
   background: conic-gradient(from 0deg, #ff6b6b, #ffd43b, #69db7c, #38d9a9, #4dabf7, #b197fc, #f783ac, #ff6b6b);
-  color: var(--black);
+  color: #000;
 }
 
 .swatch--custom.is-active {
@@ -580,7 +580,7 @@
   flex: none;
   width: 18px;
   height: 18px;
-  border-radius: 6px;
+  border-radius: calc(6px * var(--rk));
   background: var(--role, transparent);
   box-shadow: inset 0 0 0 1.5px var(--line-3);
 }
@@ -600,9 +600,9 @@
   gap: 12px;
   margin-top: 10px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(var(--bg-rgb) / 0.5);
 }
 
 .role-preview__text {
@@ -629,7 +629,7 @@
 .role-preview__msg {
   margin-left: auto;
   padding: 7px 12px;
-  border-radius: 14px 14px 14px 5px;
+  border-radius: calc(14px * var(--rk)) calc(14px * var(--rk)) calc(14px * var(--rk)) calc(5px * var(--rk));
   border: 1px solid var(--line);
   background: var(--bubble);
   font-size: 13px;
@@ -668,7 +668,7 @@
   content: 'опасно';
   margin-left: 8px;
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: calc(5px * var(--rk));
   border: 1px solid var(--line-3);
   font: 500 9.5px/1 var(--mono);
   text-transform: uppercase;
@@ -690,9 +690,9 @@
   gap: 2px;
   margin-top: 6px;
   padding: 6px;
-  border-radius: 12px;
+  border-radius: calc(12px * var(--rk));
   border: 1px solid var(--line-2);
-  background: #050505;
+  background: var(--surface);
   animation: menu-in 0.2s var(--ease-out);
 }
 
@@ -712,7 +712,7 @@
   gap: 10px;
   min-height: 42px;
   padding: 4px 4px 4px 8px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
@@ -738,13 +738,13 @@
 }
 
 .role-member--add:hover {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .role-member--add:hover .role-member__login,
 .role-member--add:hover svg {
-  color: var(--black);
+  color: var(--on-accent);
 }
 
 .role-member__x {
@@ -776,14 +776,14 @@
   flex-wrap: wrap;
   margin: 20px -8px -8px;
   padding: 8px 8px 8px 16px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line-3);
-  background: rgba(8, 8, 8, 0.97);
+  background: rgb(var(--solid-rgb) / 0.97);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.7),
-    0 0 30px rgba(255, 255, 255, 0.08);
+    0 16px 40px rgb(var(--shade-rgb) / calc(0.7 * var(--shade-k))),
+    0 0 30px rgb(var(--glow-rgb) / calc(0.08 * var(--glow-k)));
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
@@ -796,11 +796,11 @@
 }
 
 .savebar.is-shaking {
-  border-color: #fff;
+  border-color: var(--accent);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.7),
-    0 0 0 1px #fff,
-    0 0 36px rgba(255, 255, 255, 0.35);
+    0 16px 40px rgb(var(--shade-rgb) / calc(0.7 * var(--shade-k))),
+    0 0 0 1px var(--accent),
+    0 0 36px rgb(var(--glow-rgb) / calc(0.35 * var(--glow-k)));
   animation: savebar-shake 0.5s ease;
 }
 
@@ -890,7 +890,7 @@
 .ch-item__who .mrow__me {
   flex: none;
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: calc(5px * var(--rk));
   border: 1px solid var(--line-2);
   font: 500 9.5px/1 var(--mono);
   text-transform: uppercase;
@@ -924,9 +924,9 @@
   align-items: center;
   gap: 14px;
   padding: 2px 16px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--fg-rgb) / 0.025);
   transition:
     border-color 0.25s ease,
     box-shadow 0.3s ease;
@@ -939,7 +939,7 @@
 
 .chperms__private.is-on {
   border-color: var(--line-3);
-  box-shadow: 0 0 24px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 24px rgb(var(--glow-rgb) / calc(0.08 * var(--glow-k)));
 }
 
 .chperms__lock {
@@ -952,7 +952,7 @@
 
 .chperms__private.is-on .chperms__lock {
   color: var(--text);
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7));
+  filter: drop-shadow(0 0 6px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k))));
 }
 
 .chperms__grid {
@@ -978,7 +978,7 @@
   gap: 8px;
   height: 34px;
   padding: 0 8px 0 10px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-2);
@@ -1003,11 +1003,11 @@
 }
 
 .chperms__role.is-active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--fg-rgb) / 0.08);
   color: var(--text);
   box-shadow:
     inset 0 0 0 1px var(--line-3),
-    inset 3px 0 0 var(--role, #fff);
+    inset 3px 0 0 var(--role, var(--accent));
 }
 
 .chperms__sum {
@@ -1018,13 +1018,13 @@
 
 .chperms__sum i {
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: calc(4px * var(--rk));
   font: normal 600 9.5px/1.3 var(--mono);
 }
 
 .chperms__sum .is-allow {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .chperms__sum .is-deny {
@@ -1039,7 +1039,7 @@
   height: 32px;
   margin-top: 6px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   border: 1px dashed var(--line-2);
   font: 500 11.5px/1 var(--mono);
   color: var(--text-3);
@@ -1057,9 +1057,9 @@
 .chperms__perms {
   min-width: 0;
   padding: 12px 14px 6px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgb(var(--bg-rgb) / 0.4);
   animation: fade-in 0.2s ease;
 }
 
@@ -1132,9 +1132,9 @@
   display: flex;
   padding: 3px;
   gap: 2px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--fg-rgb) / 0.025);
 }
 
 .tri__opt {
@@ -1142,7 +1142,7 @@
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--rk));
   color: var(--text-3);
   transition:
     background-color 0.18s ease,
@@ -1174,14 +1174,14 @@
 /* Запрет — штриховка, разрешение — белая заливка со свечением */
 .tri__opt--deny.is-active {
   color: var(--text);
-  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0 3px, transparent 3px 6px);
-  box-shadow: inset 0 0 0 1.5px #fff;
+  background: repeating-linear-gradient(135deg, rgb(var(--fg-rgb) / 0.16) 0 3px, transparent 3px 6px);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .tri__opt--allow.is-active {
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.5);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
 }
 
 .tri__opt.is-active {
@@ -1222,8 +1222,8 @@
 }
 
 .channel.is-active .channel__lock {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* Голосовой канал, куда нельзя зайти */
@@ -1242,7 +1242,7 @@
 /* Заглушён на сервере (модератором или нет права говорить) */
 .voice-user__icons .is-server {
   color: var(--text);
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.8));
+  filter: drop-shadow(0 0 4px rgb(var(--glow-rgb) / calc(0.8 * var(--glow-k))));
 }
 
 /* ============ список участников справа ============ */
@@ -1252,7 +1252,7 @@
 }
 
 .members__group--role .side__label::after {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--role, #fff) 35%, transparent), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--role, var(--accent)) 35%, transparent), transparent);
 }
 
 .member__name .truncate {
@@ -1308,13 +1308,13 @@
   justify-content: center;
   gap: 6px;
   padding: 0 7px;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   border: 1px solid var(--line-2);
-  background: #070707;
+  background: var(--surface-2);
   color: var(--text-2);
   font: 600 12px/1 var(--font);
   white-space: nowrap;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 6px 18px rgb(var(--shade-rgb) / calc(0.6 * var(--shade-k)));
   transition:
     background-color 0.15s ease,
     color 0.15s ease,
@@ -1333,10 +1333,10 @@
 
 .msg-actions__btn--danger:hover,
 .msg-actions__btn--danger.is-armed {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.45);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
 }
 
 .msg-actions__btn--danger.is-armed {
@@ -1360,15 +1360,15 @@
   place-items: center;
   width: 20px;
   height: 20px;
-  border-radius: 6px;
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  border-radius: calc(6px * var(--rk));
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.55 * var(--glow-k)));
 }
 
 .tile__tool.is-server {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .mod-menu {
@@ -1381,7 +1381,7 @@
   align-items: center;
   gap: 12px;
   padding: 9px 10px;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
   text-align: left;
   color: var(--text-1);
   transition:
@@ -1411,12 +1411,12 @@
 }
 
 .mod-menu__item:hover:not(:disabled) {
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .mod-menu__item:hover:not(:disabled) small {
-  color: rgba(0, 0, 0, 0.6);
+  color: rgb(var(--on-accent-rgb) / 0.6);
 }
 
 .mod-menu__item:disabled {
@@ -1426,11 +1426,11 @@
 .mod-menu__item--danger {
   margin-top: 2px;
   box-shadow: inset 0 1px 0 var(--line);
-  border-radius: 0 0 9px 9px;
+  border-radius: 0 0 calc(9px * var(--rk)) calc(9px * var(--rk));
 }
 
 .mod-menu__item--danger:hover:not(:disabled) {
-  border-radius: 9px;
+  border-radius: calc(9px * var(--rk));
 }
 
 /* Свой микрофон заблокирован модератором */
@@ -1440,9 +1440,9 @@
 
 .vc__btn.is-locked {
   border-style: solid;
-  border-color: #fff;
+  border-color: var(--accent);
   color: var(--text);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.25 * var(--glow-k)));
 }
 
 .vc__lock {
@@ -1454,9 +1454,9 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--text);
-  color: var(--black);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 10px rgb(var(--glow-rgb) / calc(0.6 * var(--glow-k)));
   animation: pop-in 0.35s var(--ease-spring);
 }
 
@@ -1481,7 +1481,7 @@
   gap: 8px;
   margin: 18px 0 0;
   padding: 8px 14px;
-  border-radius: 99px;
+  border-radius: calc(99px * var(--rk));
   border: 1px dashed var(--line-3);
   font-size: 13px;
   color: var(--text-2);

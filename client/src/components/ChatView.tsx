@@ -12,6 +12,7 @@ import { activeChannelId, chat, dmTitle, presenceOf, useChat } from '../lib/stor
 import { ui, useUi } from '../lib/ui'
 import { joinVoice, toggleCamera, useVoice } from '../lib/voice'
 import { isMobile, useIsMobile } from '../lib/mobile'
+import { useSettings } from '../lib/settings'
 import { Avatar } from './Avatar'
 import { UserTags } from './UserTags'
 import { GroupAvatar } from './groups/GroupAvatar'
@@ -84,6 +85,8 @@ export function ChatView() {
   const users = useChat((s) => s.users)
   const meId = useChat((s) => s.me!.id)
   const typingIds = useChat(useShallow((s) => (channelId ? Object.keys(s.typing[channelId] ?? {}) : [])))
+  // поменяли формат времени во «Внешнем виде» — перерисуем подписи у сообщений сразу
+  useSettings((s) => `${s.clock24}${s.clockSeconds}`)
   const asideOpen = useUi((s) => s.asideOpen)
   const mobile = useIsMobile()
 

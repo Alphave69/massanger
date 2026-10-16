@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { api, ApiError, getToken, setToken, type Me } from './lib/api'
 import { startGlowTracking } from './lib/fx'
 import { isInstalledApp } from './lib/platform'
@@ -12,6 +12,7 @@ import { DownloadPage } from './components/landing/DownloadPage'
 import { AuthBack } from './components/landing/AuthBack'
 import { goBack, navigate, useRoute } from './components/landing/route'
 import { useChat } from './lib/store'
+import { setThemed } from './lib/settings'
 
 type Phase = 'checking' | 'auth' | 'leaving' | 'app'
 
@@ -94,6 +95,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dl-over-app', overApp)
   }, [overApp])
+  // Тема из настроек — только для самого приложения (и заставки перед ним); лендинг и вход остаются чёрными.
+  // До отрисовки — чтобы при запуске не мигал чёрный экран
+  const themed = (phase === 'app' || phase === 'checking') && !download
+  useLayoutEffect(() => setThemed(themed), [themed])
   // Нажали на уведомление или приняли звонок, пока открыта страница скачивания, — возвращаемся в приложение,
   // иначе чат или звонок открылись бы невидимо за ней
   useEffect(() => {

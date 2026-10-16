@@ -1,6 +1,7 @@
 // Мостик между страницами приложения и Electron. Сайту на сервере — только отметка «это приложение»;
 // управление адресом сервера — лишь странице подключения (connect.html), выбор экрана — лишь карточке
 // выбора (picker.html, слой поверх сайта). main.js вдобавок проверяет, от кого пришла команда.
+// Сайт может только сообщить цвета своей темы — под них перекрашивается полоска заголовка.
 const { contextBridge, ipcRenderer } = require('electron')
 
 const local = location.protocol === 'file:'
@@ -21,5 +22,5 @@ contextBridge.exposeInMainWorld(
           sources: () => ipcRenderer.invoke('picker:sources'),
           choose: (value) => ipcRenderer.send('picker:choose', value),
         }
-      : { isDesktop: true },
+      : { isDesktop: true, setTheme: (theme) => ipcRenderer.send('site:theme', theme) },
 )

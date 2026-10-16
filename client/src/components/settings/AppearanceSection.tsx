@@ -1,45 +1,107 @@
-import { RotateCcw } from 'lucide-react'
-import { resetSettings, setSetting, useSettings } from '../../lib/settings'
+import type { CSSProperties, ReactNode } from 'react'
+import { Check, Pipette, RotateCcw } from 'lucide-react'
+import { contrast, rgb, rgbToHex, toLab, chroma } from '../../lib/color'
+import { formatTime } from '../../lib/format'
+import { resetSettings, setSetting, useSettings, type Settings } from '../../lib/settings'
 import { useChat } from '../../lib/store'
+import { ACCENTS, fitAccent, THEMES, themeInfo, type ThemeInfo } from '../../lib/themes'
 import { Avatar } from '../Avatar'
 import { Group, SectionHead, Slider, Toggle } from './controls'
 
-const APPEARANCE_KEYS = ['uiScale', 'chatFontSize', 'compact', 'sphere', 'sphereBrightness', 'cursorGlow', 'reduceMotion'] as const
+const APPEARANCE_KEYS = [
+  'uiScale',
+  'chatFontSize',
+  'compact',
+  'sphere',
+  'sphereBrightness',
+  'cursorGlow',
+  'reduceMotion',
+  'theme',
+  'accent',
+  'font',
+  'radius',
+  'avatarShape',
+  'msgSpacing',
+  'glowLevel',
+  'panelOpacity',
+  'panelBlur',
+  'clock24',
+  'clockSeconds',
+  'surfaceTint',
+  'ownBubble',
+  'bgEffects',
+] as const
+
+// Время в превью — всегда «вечер», чтобы было видно разницу 21:04 / 9:04 PM
+const PREVIEW_AT = new Date(2026, 0, 1, 21, 4, 37).getTime()
+const PREVIEW_AT_2 = PREVIEW_AT + 61_000
+
+const FONT_OPTIONS: { value: Settings['font']; label: string; family: string }[] = [
+  { value: 'theme', label: 'Как в теме', family: '' },
+  { value: 'inter', label: 'Inter', family: "'Inter', sans-serif" },
+  { value: 'system', label: 'Системный', family: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
+  { value: 'mono', label: 'Моноширинный', family: 'var(--mono)' },
+]
+
+const RADIUS_OPTIONS: { value: Settings['radius']; label: string; k: number }[] = [
+  { value: 'sharp', label: 'Острые', k: 0.35 },
+  { value: 'normal', label: 'Обычные', k: 1 },
+  { value: 'round', label: 'Круглые', k: 1.5 },
+]
 
 export function AppearanceSection() {
   const s = useSettings()
   const me = useChat((st) => st.me!)
   const friend = { id: 'preview-friend', displayName: 'Друг' }
+  const theme = themeInfo(s.theme)
+  const customAccent = s.accent !== '' && !ACCENTS.some((a) => a.value === s.accent)
+  // Свой цвет под тему: показываем, во что он превратился, если пришлось подправить яркость
+  const fitted = s.accent ? fitAccent(s.accent, theme) : null
+  const adjusted = fitted && contrast(fitted, rgb(s.accent)) > 1.15 ? rgbToHex(fitted) : ''
+  // У белого, чёрного и серого акцента нет оттенка — подкрашивать поверхности нечем
+  const accentNow = fitted ?? rgb(theme.p.accent)
+  const tintable = chroma(toLab(accentNow)) >= 0.02
 
   return (
     <>
-      <SectionHead title="Внешний вид" subtitle="Масштаб, размер текста и эффекты — под твой экран и вкус." />
+      <SectionHead title="Внешний вид" subtitle="Тема, цвета, шрифт и масштаб — под твой экран и вкус. Всё меняется сразу." />
 
       <div className="appearance-preview glow">
-        <div className="mgroup">
-          <span className="mgroup__avatar">
-            <Avatar user={friend} size={38} />
-          </span>
-          <div className="mgroup__body">
-            <div className="mgroup__meta">
-              <span className="mgroup__author">Друг</span>
-              <time>Сегодня в 21:04</time>
-            </div>
-            <div className="bubble">
-              <span className="bubble__text">Ну как тебе такой размер?</span>
-              <time className="bubble__time">21:04</time>
-            </div>
-            <div className="bubble">
-              <span className="bubble__text">Если мелко — подвинь ползунок 👇</span>
-              <time className="bubble__time">21:04</time>
-            </div>
+        <div className="look-preview">
+          <div className="look-preview__side" aria-hidden="true">
+            <span className="look-preview__chan is-active"># общий</span>
+            <span className="look-preview__chan has-unread">
+              # мемы <i />
+            </span>
+            <span className="look-preview__chan"># музыка</span>
           </div>
-        </div>
-        <div className="mgroup mgroup--mine">
-          <div className="mgroup__body">
-            <div className="bubble">
-              <span className="bubble__text">Идеально ✦</span>
-              <time className="bubble__time">21:05</time>
+          <div className="look-preview__chat">
+            <div className="mgroup">
+              <span className="mgroup__avatar">
+                <Avatar user={friend} size={38} />
+              </span>
+              <div className="mgroup__body">
+                <div className="mgroup__meta">
+                  <span className="mgroup__author">Друг</span>
+                  <time>Сегодня в {formatTime(PREVIEW_AT)}</time>
+                </div>
+                <div className="bubble">
+                  <span className="bubble__text">Ну как тебе такая тема?</span>
+                  <time className="bubble__time">{formatTime(PREVIEW_AT)}</time>
+                </div>
+                <div className="bubble">
+                  <span className="bubble__text">Если мелко — подвинь ползунок 👇</span>
+                  <time className="bubble__time">{formatTime(PREVIEW_AT)}</time>
+                </div>
+              </div>
+            </div>
+            <div className="mgroup mgroup--mine">
+              <div className="mgroup__body">
+                <div className="bubble">
+                  <span className="bubble__text">Идеально ✦</span>
+                  <time className="bubble__time">{formatTime(PREVIEW_AT_2)}</time>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -47,6 +109,118 @@ export function AppearanceSection() {
           <Avatar user={me} size={22} /> так видят твои сообщения
         </span>
       </div>
+
+      <Group title="Тема">
+        <ThemeGallery title="Тёмные" themes={THEMES.filter((t) => t.tone === 'dark')} active={s.theme} own={s.ownBubble} />
+        <ThemeGallery title="Светлые" themes={THEMES.filter((t) => t.tone === 'light')} active={s.theme} own={s.ownBubble} />
+      </Group>
+
+      <Group title="Акцент">
+        <p className="muted look-note">
+          Цвет активного: выбранный канал, свои сообщения, кнопки, бейджи, переключатели и рамка фокуса. Яркость сами подгоняем под тему —
+          чтобы всё читалось.
+        </p>
+        <div className="accent-row" role="radiogroup" aria-label="Цвет акцента">
+          <AccentSwatch label="Как в теме" active={s.accent === ''} onClick={() => setSetting('accent', '')}>
+            <span className="accent-swatch__theme theme-scope" data-theme={theme.id} data-tone={theme.tone}>
+              {s.accent === '' && <Check size={15} />}
+            </span>
+          </AccentSwatch>
+          {ACCENTS.map((a) => (
+            <AccentSwatch
+              key={a.value}
+              label={a.name}
+              active={s.accent === a.value}
+              color={rgbToHex(fitAccent(a.value, theme) ?? rgb(a.value))}
+              onClick={() => setSetting('accent', a.value)}
+            />
+          ))}
+          <label
+            className={`accent-swatch accent-swatch--custom${customAccent ? ' is-active' : ''}`}
+            data-tip="Свой цвет"
+            style={customAccent && fitted ? ({ '--sw': rgbToHex(fitted) } as CSSProperties) : undefined}
+          >
+            {customAccent ? <Check size={15} /> : <Pipette size={15} />}
+            <input
+              type="color"
+              aria-label="Свой цвет акцента"
+              value={s.accent || '#22d3ee'}
+              onChange={(e) => setSetting('accent', e.target.value.toLowerCase())}
+            />
+          </label>
+        </div>
+        {adjusted && (
+          <p className="look-fit">
+            <i style={{ background: s.accent }} />→<i style={{ background: adjusted }} />
+            {theme.tone === 'dark' ? 'Чуть осветлили' : 'Чуть затемнили'} под «{theme.name}» — иначе на фоне не разглядеть
+          </p>
+        )}
+
+        <Slider
+          label="Оттенок поверхностей"
+          hint={tintable ? 'Фон и панели слегка окрашиваются в цвет акцента' : 'У этого акцента нет оттенка — выбери цветной, чтобы окрасить фон и панели'}
+          value={Math.round(s.surfaceTint * 100)}
+          min={0}
+          max={100}
+          step={5}
+          marks={[0, 25, 50, 75, 100]}
+          disabled={!tintable}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('surfaceTint', v / 100)}
+        />
+
+        <span className="look-label">Свои сообщения</span>
+        <Segmented
+          label="Цвет своих сообщений"
+          value={s.ownBubble}
+          onChange={(v) => setSetting('ownBubble', v)}
+          options={[
+            { value: 'accent', label: 'В цвет акцента', sample: <span className="look-seg__bubble" /> },
+            { value: 'neutral', label: 'Нейтральные', sample: <span className="look-seg__bubble look-seg__bubble--neutral" /> },
+          ]}
+        />
+      </Group>
+
+      <Group title="Шрифт и форма">
+        <span className="look-label">Шрифт интерфейса</span>
+        <Segmented
+          label="Шрифт интерфейса"
+          value={s.font}
+          onChange={(v) => setSetting('font', v)}
+          options={FONT_OPTIONS.map((o) => ({
+            value: o.value,
+            label: o.label,
+            sample: (
+              <span className="look-seg__font" style={{ fontFamily: o.family || (s.theme === 'retro' ? 'var(--mono)' : "'Inter', sans-serif") }}>
+                Аа
+              </span>
+            ),
+          }))}
+        />
+
+        <span className="look-label">Скругления</span>
+        <Segmented
+          label="Скругления"
+          value={s.radius}
+          onChange={(v) => setSetting('radius', v)}
+          options={RADIUS_OPTIONS.map((o) => ({
+            value: o.value,
+            label: o.label,
+            sample: <span className="look-seg__corner" style={{ borderRadius: `${Math.round(10 * o.k)}px` }} />,
+          }))}
+        />
+
+        <span className="look-label">Аватарки</span>
+        <Segmented
+          label="Форма аватарок"
+          value={s.avatarShape}
+          onChange={(v) => setSetting('avatarShape', v)}
+          options={[
+            { value: 'circle', label: 'Круг', sample: <AvatarSample user={me} r="50%" /> },
+            { value: 'squircle', label: 'Скруглённый квадрат', sample: <AvatarSample user={me} r="30%" /> },
+          ]}
+        />
+      </Group>
 
       <Group title="Масштаб">
         <Slider
@@ -70,7 +244,27 @@ export function AppearanceSection() {
           format={(v) => `${v}px`}
           onChange={(v) => setSetting('chatFontSize', v)}
         />
+        <Slider
+          label="Расстояние между сообщениями"
+          value={Math.round(s.msgSpacing * 100)}
+          min={50}
+          max={200}
+          step={25}
+          marks={[50, 100, 150, 200]}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('msgSpacing', v / 100)}
+        />
         <Toggle label="Компактные сообщения" hint="Меньше отступов — больше сообщений на экране" checked={s.compact} onChange={(v) => setSetting('compact', v)} />
+      </Group>
+
+      <Group title="Время">
+        <Toggle
+          label="24-часовой формат"
+          hint={`Сейчас так: ${formatTime(PREVIEW_AT)}`}
+          checked={s.clock24}
+          onChange={(v) => setSetting('clock24', v)}
+        />
+        <Toggle label="Показывать секунды" hint="У времени сообщений — для самых точных" checked={s.clockSeconds} onChange={(v) => setSetting('clockSeconds', v)} />
       </Group>
 
       <Group title="Фон и эффекты">
@@ -85,13 +279,155 @@ export function AppearanceSection() {
           format={(v) => `${v}%`}
           onChange={(v) => setSetting('sphereBrightness', v / 100)}
         />
+        <Slider
+          label="Узор на фоне"
+          hint="Сетка из точек за панелями и «фонарик» за курсором"
+          value={Math.round(s.bgEffects * 100)}
+          min={0}
+          max={200}
+          step={10}
+          marks={[0, 50, 100, 150, 200]}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('bgEffects', v / 100)}
+        />
+        <Slider
+          label="Сила свечения"
+          hint="Ореолы у кнопок, бейджей и активного. 0 — совсем без свечения"
+          value={Math.round(s.glowLevel * 100)}
+          min={0}
+          max={150}
+          step={10}
+          marks={[0, 50, 100, 150]}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('glowLevel', v / 100)}
+        />
+        <Slider
+          label="Плотность панелей"
+          hint="Меньше — панели прозрачнее, сквозь них видно сферу и фон"
+          value={Math.round(s.panelOpacity * 100)}
+          min={20}
+          max={100}
+          step={5}
+          marks={[20, 40, 60, 80, 100]}
+          format={(v) => `${v}%`}
+          onChange={(v) => setSetting('panelOpacity', v / 100)}
+        />
+        <Slider
+          label="Размытие под панелями"
+          value={s.panelBlur}
+          min={0}
+          max={24}
+          step={1}
+          marks={[0, 2, 8, 16, 24]}
+          format={(v) => `${v}px`}
+          onChange={(v) => setSetting('panelBlur', v)}
+        />
         <Toggle label="Подсветка за курсором" hint="Рамки панелей и точки фона загораются рядом с мышью" checked={s.cursorGlow} onChange={(v) => setSetting('cursorGlow', v)} />
         <Toggle label="Меньше анимаций" hint="Убирает почти всё движение интерфейса — спокойнее и легче для слабых компьютеров" checked={s.reduceMotion} onChange={(v) => setSetting('reduceMotion', v)} />
       </Group>
 
-      <button className="btn btn--ghost" onClick={() => resetSettings([...APPEARANCE_KEYS])}>
-        <RotateCcw size={16} /> Вернуть как было
+      <button className="btn btn--ghost look-reset" onClick={() => resetSettings([...APPEARANCE_KEYS])}>
+        <RotateCcw size={16} /> Сбросить внешний вид
       </button>
     </>
+  )
+}
+
+/** Галерея тем: карточки-миниатюры, каждая в цветах своей темы (с твоим акцентом) */
+function ThemeGallery({ title, themes, active, own }: { title: string; themes: ThemeInfo[]; active: string; own: Settings['ownBubble'] }) {
+  return (
+    <div className="theme-gallery">
+      <span className="theme-gallery__title">{title}</span>
+      <div className="theme-grid" role="radiogroup" aria-label={`${title} темы`}>
+        {themes.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="radio"
+            aria-checked={active === t.id}
+            className={`theme-card${active === t.id ? ' is-active' : ''}`}
+            data-theme-id={t.id}
+            onClick={() => setSetting('theme', t.id)}
+          >
+            <span className="theme-card__mock theme-scope" data-theme={t.id} data-tone={t.tone} data-own={own} aria-hidden="true">
+              <span className="theme-card__dock">
+                <i className="is-active" />
+                <i />
+                <i />
+              </span>
+              <span className="theme-card__side">
+                <i className="is-active" />
+                <i />
+                <i />
+              </span>
+              <span className="theme-card__chat">
+                <i />
+                <i className="is-mine" />
+                <i />
+                <b />
+              </span>
+              <span className="theme-card__dots" />
+            </span>
+            <span className="theme-card__name">
+              {t.name}
+              {active === t.id && <Check size={14} />}
+            </span>
+            <span className="theme-card__hint">{t.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AccentSwatch({ label, active, color, onClick, children }: { label: string; active: boolean; color?: string; onClick: () => void; children?: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={label}
+      data-tip={label}
+      className={`accent-swatch${active ? ' is-active' : ''}`}
+      style={color ? ({ '--sw': color } as CSSProperties) : undefined}
+      onClick={onClick}
+    >
+      {children ?? (active && <Check size={15} />)}
+    </button>
+  )
+}
+
+interface SegOption<T extends string> {
+  value: T
+  label: string
+  sample: ReactNode
+}
+
+/** Выбор из нескольких вариантов с картинкой-образцом */
+function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: SegOption<T>[]; onChange: (v: T) => void }) {
+  return (
+    <div className="look-seg" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={o.value === value}
+          className={`look-seg__item${o.value === value ? ' is-active' : ''}`}
+          onClick={() => onChange(o.value)}
+        >
+          <span className="look-seg__sample">{o.sample}</span>
+          <span className="look-seg__label">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AvatarSample({ user, r }: { user: { id: string; displayName: string }; r: string }) {
+  return (
+    <span className="look-seg__avatar" style={{ '--avatar-r': r } as CSSProperties}>
+      <Avatar user={user} size={30} />
+    </span>
   )
 }

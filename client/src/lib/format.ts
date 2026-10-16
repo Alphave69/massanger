@@ -1,4 +1,19 @@
-const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
+import { useSettings } from './settings'
+
+// Формат времени — из «Внешнего вида»: 24 или 12 часов, с секундами или без
+let timeFmtKey = ''
+let timeFmtCache: Intl.DateTimeFormat | null = null
+function timeFmt() {
+  const { clock24, clockSeconds } = useSettings.getState()
+  const key = `${clock24}${clockSeconds}`
+  if (!timeFmtCache || key !== timeFmtKey) {
+    timeFmtKey = key
+    timeFmtCache = clock24
+      ? new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: clockSeconds ? '2-digit' : undefined })
+      : new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', second: clockSeconds ? '2-digit' : undefined, hour12: true })
+  }
+  return timeFmtCache
+}
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 const shortDateFmt = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -10,13 +25,13 @@ const startOfDay = (ts: number) => {
 
 export const sameDay = (a: number, b: number) => startOfDay(a) === startOfDay(b)
 
-export const formatTime = (ts: number) => timeFmt.format(ts)
+export const formatTime = (ts: number) => timeFmt().format(ts)
 
 export function formatStamp(ts: number) {
   const days = Math.round((startOfDay(Date.now()) - startOfDay(ts)) / 86_400_000)
-  if (days === 0) return `Сегодня в ${timeFmt.format(ts)}`
-  if (days === 1) return `Вчера в ${timeFmt.format(ts)}`
-  return `${shortDateFmt.format(ts)} ${timeFmt.format(ts)}`
+  if (days === 0) return `Сегодня в ${formatTime(ts)}`
+  if (days === 1) return `Вчера в ${formatTime(ts)}`
+  return `${shortDateFmt.format(ts)} ${formatTime(ts)}`
 }
 
 export const formatDay = (ts: number) => dateFmt.format(ts)

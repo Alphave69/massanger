@@ -1,0 +1,81 @@
+/* =====================================================================
+   Особые эффекты тем. Сами цвета тем — в lib/themes.ts: оттуда они попадают
+   CSS-переменными на <html data-theme="…"> (и на .theme-scope — превью в настройках).
+   Тема действует лишь внутри приложения (data-themed): лендинг и вход — всегда чёрные.
+   ===================================================================== */
+
+/* ============ Ретро-терминал ============ */
+
+/* строки развёртки и лёгкое свечение букв — как на старом мониторе */
+:root[data-themed][data-theme='retro'] body {
+  text-shadow: 0 0 6px rgb(var(--glow-rgb) / 0.28);
+}
+
+:root[data-themed][data-theme='retro'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px);
+}
+
+/* серые аватарки — в зелёный фосфор */
+:root[data-themed][data-theme='retro'] .avatar__face,
+.theme-scope[data-theme='retro'] .avatar__face {
+  filter: sepia(1) hue-rotate(70deg) saturate(2.6) brightness(0.92);
+}
+
+/* ============ общее для светлых тем ============ */
+
+:root[data-themed][data-tone='light'] {
+  color-scheme: light;
+}
+
+/* Цвета ролей подбирают под чёрный фон (бывает и белый) — на светлом их темним, чтобы имя читалось */
+:root[data-themed][data-tone='light'] [style^='color'] {
+  filter: brightness(0.45) saturate(1.3);
+}
+
+/* …и там, где цвет роли приходит переменной --role: заголовок роли в настройках, группы участников */
+:root[data-themed][data-tone='light'] .role-head__text h3 {
+  color: color-mix(in oklab, var(--role, var(--text)) 55%, rgb(var(--fg-rgb)));
+  filter: none;
+}
+
+/* @Роль в чужом пузыре: светлый пузырь — цвет роли темнее (в своём пузыре его подгоняет messages.css) */
+:root[data-themed][data-tone='light'] .mgroup:not(.mgroup--mine) .mention--role.has-color {
+  color: color-mix(in oklab, var(--mention) 55%, rgb(var(--fg-rgb)));
+}
+
+/* @Роль в своём пузыре: на цветном акценте (розовом, синем…) цвет роли сильнее уводим к цвету текста на акценте.
+   В «Чёрной» с белым акцентом остаётся как было (messages.css) */
+:root[data-themed]:is(:not([data-theme='black']), [data-accent='custom']) .mgroup--mine .mention--role.has-color {
+  color: color-mix(in oklab, var(--mention) 25%, var(--on-accent));
+}
+
+:root[data-themed][data-tone='light'] .members__group--role .side__label {
+  color: color-mix(in oklab, var(--role, var(--text-3)) 60%, rgb(var(--fg-rgb)));
+}
+
+/* шапка настроек на телефоне: под светлой полупрозрачной шапкой тёмные миниатюры тем просвечивали слишком сильно */
+:root[data-themed][data-tone='light'] .settings__mbar {
+  background: rgb(var(--pop-rgb) / 0.96);
+}
+
+/* белые и светло-серые аватарки — тонкий контур, чтобы не растворялись в светлом фоне */
+:root[data-themed][data-tone='light'] .avatar__face:not(.avatar__face--dark),
+.theme-scope[data-tone='light'] .avatar__face:not(.avatar__face--dark) {
+  box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.16);
+}
+
+/* ============ свои сообщения в нейтральном цвете (настройка) ============ */
+/* Внутри своего пузыря «акцент» — это цвет пузыря: всё вложенное (ответы, пересылки, время) перекрашивается само */
+
+:root[data-themed][data-own='neutral'] .mgroup--mine .bubble:not(.bubble--editing) {
+  --accent-rgb: var(--own-n-rgb);
+  --on-accent-rgb: var(--own-n-ink-rgb);
+  --accent: rgb(var(--own-n-rgb));
+  --on-accent: rgb(var(--own-n-ink-rgb));
+  border-color: rgb(var(--own-edge-rgb) / 0.5);
+}

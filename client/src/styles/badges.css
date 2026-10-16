@@ -24,7 +24,7 @@
   width: var(--s);
   height: var(--s);
   border-radius: 50%;
-  background: radial-gradient(circle at 34% 28%, #1d1d1d, #050505 72%);
+  background: radial-gradient(circle at 34% 28%, var(--medal-hi), var(--medal-lo) 72%);
   color: var(--text);
 }
 
@@ -43,35 +43,35 @@
 /* редкий — двойное кольцо */
 .bdg--rare {
   box-shadow:
-    inset 0 0 0 var(--w) rgba(255, 255, 255, 0.9),
-    inset 0 0 0 calc(var(--w) + var(--s) * 0.07 + 1px) #070707,
-    inset 0 0 0 calc(var(--w) * 2 + var(--s) * 0.07 + 1px) rgba(255, 255, 255, 0.5);
+    inset 0 0 0 var(--w) rgb(var(--fg-rgb) / 0.9),
+    inset 0 0 0 calc(var(--w) + var(--s) * 0.07 + 1px) var(--surface-2),
+    inset 0 0 0 calc(var(--w) * 2 + var(--s) * 0.07 + 1px) rgb(var(--fg-rgb) / 0.5);
 }
 
 /* эпический — свечение, которое «дышит» */
 .bdg--epic {
   box-shadow:
-    inset 0 0 0 var(--w) #fff,
-    0 0 calc(var(--s) * 0.32) rgba(255, 255, 255, 0.42);
+    inset 0 0 0 var(--w) var(--accent),
+    0 0 calc(var(--s) * 0.32) rgb(var(--glow-rgb) / calc(0.42 * var(--glow-k)));
   animation: bdg-breathe 3.2s ease-in-out infinite;
 }
 
 .bdg--epic > svg {
-  filter: drop-shadow(0 0 calc(var(--s) * 0.08) rgba(255, 255, 255, 0.85));
+  filter: drop-shadow(0 0 calc(var(--s) * 0.08) rgb(var(--glow-rgb) / calc(0.85 * var(--glow-k))));
 }
 
 @keyframes bdg-breathe {
   50% {
     box-shadow:
-      inset 0 0 0 var(--w) #fff,
-      0 0 calc(var(--s) * 0.6) rgba(255, 255, 255, 0.7);
+      inset 0 0 0 var(--w) var(--accent),
+      0 0 calc(var(--s) * 0.6) rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k)));
   }
 }
 
 /* легендарный — переливающееся вращающееся кольцо и блик по диску */
 .bdg--legendary {
   background: none;
-  box-shadow: 0 0 calc(var(--s) * 0.42) rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 calc(var(--s) * 0.42) rgb(var(--glow-rgb) / calc(0.5 * var(--glow-k)));
 }
 
 .bdg--legendary::before {
@@ -91,13 +91,13 @@
   z-index: -1;
   border-radius: 50%;
   background:
-    linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.22) 50%, transparent 62%) -150% 0 / 260% 100% no-repeat,
-    radial-gradient(circle at 34% 28%, #232323, #050505 72%);
+    linear-gradient(115deg, transparent 38%, rgb(var(--fg-rgb) / 0.22) 50%, transparent 62%) -150% 0 / 260% 100% no-repeat,
+    radial-gradient(circle at 34% 28%, var(--medal-hi-2), var(--medal-lo) 72%);
   animation: bdg-sheen 3.6s ease-in-out infinite;
 }
 
 .bdg--legendary > svg {
-  filter: drop-shadow(0 0 calc(var(--s) * 0.09) #fff);
+  filter: drop-shadow(0 0 calc(var(--s) * 0.09) rgb(var(--glow-rgb) / var(--glow-k)));
 }
 
 @keyframes bdg-spin {
@@ -154,7 +154,7 @@
 
 @keyframes bdg-ghost {
   to {
-    background: #1a1a1a;
+    background: var(--raise-2);
   }
 }
 
@@ -214,7 +214,7 @@
 
 .bdg-row__item.is-open .bdg {
   transform: scale(1.22);
-  outline: 1px solid #fff;
+  outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -222,7 +222,7 @@
   height: 22px;
   min-width: 26px;
   padding: 0 7px;
-  border-radius: 11px;
+  border-radius: calc(11px * var(--rk));
   border: 1px dashed var(--line-3);
   font: 600 10.5px/1 var(--mono);
   color: var(--text-2);
@@ -236,8 +236,8 @@
 .bdg-row__more:hover {
   color: var(--text);
   border-style: solid;
-  border-color: #fff;
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb) / calc(0.25 * var(--glow-k)));
 }
 
 /* ============ подробности значка (всплывашка) ============ */
@@ -250,12 +250,12 @@
 
 .bdg-pop {
   position: fixed;
-  border-radius: 20px;
-  background: #050505;
+  border-radius: calc(20px * var(--rk));
+  background: var(--surface);
   border: 1px solid var(--line-2);
   box-shadow:
-    0 24px 70px rgba(0, 0, 0, 0.85),
-    0 0 50px rgba(255, 255, 255, 0.07);
+    0 24px 70px rgb(var(--shade-rgb) / calc(0.85 * var(--shade-k))),
+    0 0 50px rgb(var(--glow-rgb) / calc(0.07 * var(--glow-k)));
   transform-origin: var(--arrow) top;
   animation: bdg-pop-open 0.34s var(--ease-spring);
 }
@@ -279,7 +279,7 @@
   width: 12px;
   height: 12px;
   margin-left: -6px;
-  background: #0b0b0b;
+  background: var(--surface-3);
   border-left: 1px solid var(--line-2);
   border-top: 1px solid var(--line-2);
   transform: rotate(45deg);
@@ -288,7 +288,7 @@
 .bdg-pop.is-above .bdg-pop__arrow {
   top: auto;
   bottom: -6px;
-  background: #050505;
+  background: var(--surface);
   transform: rotate(225deg);
 }
 
@@ -306,12 +306,12 @@
   display: grid;
   place-items: center;
   height: 132px;
-  border-radius: 19px 19px 0 0;
+  border-radius: calc(19px * var(--rk)) calc(19px * var(--rk)) 0 0;
   border-bottom: 1px solid var(--line);
   background:
-    radial-gradient(circle at 50% 55%, rgba(255, 255, 255, 0.13), transparent 58%),
-    radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.4px) 0 0 / 12px 12px,
-    #0b0b0b;
+    radial-gradient(circle at 50% 55%, rgb(var(--fg-rgb) / 0.13), transparent 58%),
+    radial-gradient(rgb(var(--fg-rgb) / 0.16) 1px, transparent 1.4px) 0 0 / 12px 12px,
+    var(--surface-3);
   overflow: hidden;
   perspective: 480px;
 }
@@ -327,7 +327,7 @@
   height: 340px;
   margin: -170px 0 0 -170px;
   border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.09) 0 7deg, transparent 7deg 20deg);
+  background: repeating-conic-gradient(from 0deg, rgb(var(--fg-rgb) / 0.09) 0 7deg, transparent 7deg 20deg);
   -webkit-mask: radial-gradient(circle, #000 12%, transparent 60%);
   mask: radial-gradient(circle, #000 12%, transparent 60%);
   animation: bdg-spin 24s linear infinite;
@@ -335,7 +335,7 @@
 }
 
 .bdg-pop--legendary .bdg-pop__hero::before {
-  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.16) 0 6deg, transparent 6deg 16deg);
+  background: repeating-conic-gradient(from 0deg, rgb(var(--fg-rgb) / 0.16) 0 6deg, transparent 6deg 16deg);
   animation-duration: 14s;
 }
 
@@ -384,7 +384,7 @@
   inset: 0;
   z-index: 2;
   border-radius: 50%;
-  background: radial-gradient(circle at var(--px, 30%) var(--py, 25%), rgba(255, 255, 255, 0.42), transparent 48%);
+  background: radial-gradient(circle at var(--px, 30%) var(--py, 25%), rgb(var(--fg-rgb) / 0.42), transparent 48%);
   mix-blend-mode: screen;
   opacity: 0;
   pointer-events: none;
@@ -401,12 +401,12 @@
   left: 50%;
   translate: -50% 0;
   padding: 3px 8px;
-  border-radius: 8px;
-  background: #fff;
-  color: #000;
+  border-radius: calc(8px * var(--rk));
+  background: var(--accent);
+  color: var(--on-accent);
   font: 600 10.5px/1.2 var(--mono);
   white-space: nowrap;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
   pointer-events: none;
   animation: bdg-quip 1.5s var(--ease-out) forwards;
 }
@@ -493,9 +493,9 @@
   gap: 8px;
   margin-top: 12px;
   padding: 9px 11px;
-  border-radius: 12px;
+  border-radius: calc(12px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgb(var(--fg-rgb) / 0.035);
   font-size: 12px;
   color: var(--text-1);
 }
@@ -514,8 +514,8 @@
   flex: none;
   width: 60px;
   height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: calc(2px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.1);
   overflow: hidden;
 }
 
@@ -523,8 +523,8 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #fff;
-  box-shadow: 0 0 8px #fff;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
   animation: bdg-fill 0.9s var(--ease-out) 0.15s backwards;
 }
 
@@ -536,7 +536,7 @@
   gap: 6px;
   height: 20px;
   padding: 0 9px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--rk));
   border: 1px solid var(--line-2);
   font: 600 9.5px/1 var(--mono);
   text-transform: uppercase;
@@ -568,37 +568,37 @@
 .bdg-gem--rare {
   background: var(--text-2);
   box-shadow:
-    0 0 0 1px #050505,
+    0 0 0 1px var(--surface),
     0 0 0 2px var(--text-3);
 }
 
 .bdg-tier--epic {
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: rgb(var(--fg-rgb) / 0.6);
   color: var(--text);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb) / calc(0.16 * var(--glow-k)));
 }
 
 .bdg-tier--epic::before,
 .bdg-gem--epic {
-  background: #fff;
-  box-shadow: 0 0 6px #fff;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgb(var(--glow-rgb) / var(--glow-k));
 }
 
 .bdg-tier--legendary {
-  border-color: #fff;
-  color: #000;
-  background: linear-gradient(100deg, #fff 30%, #a8a8a8 45%, #fff 60%) 0 0 / 260% 100%;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  background: linear-gradient(100deg, var(--accent) 30%, #a8a8a8 45%, var(--accent) 60%) 0 0 / 260% 100%;
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
   animation: bdg-shine 2.8s linear infinite;
 }
 
 .bdg-tier--legendary::before {
-  background: #000;
+  background: var(--on-accent);
 }
 
 .bdg-gem--legendary {
-  background: conic-gradient(#fff, #555, #fff, #555, #fff);
-  box-shadow: 0 0 8px #fff;
+  background: conic-gradient(var(--accent), #555, var(--accent), #555, var(--accent));
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
 }
 
 @keyframes bdg-shine {
@@ -617,8 +617,8 @@
   flex: 1;
   min-width: 0;
   height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: calc(2px * var(--rk));
+  background: rgb(var(--fg-rgb) / 0.1);
   overflow: hidden;
 }
 
@@ -626,21 +626,21 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.5), #fff);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+  background: linear-gradient(90deg, rgb(var(--fg-rgb) / 0.5), var(--accent));
+  box-shadow: 0 0 10px rgb(var(--glow-rgb) / calc(0.6 * var(--glow-k)));
   animation: bdg-fill 1s var(--ease-out) 0.1s backwards;
 }
 
 .bdg-bar--big {
   height: 8px;
-  border-radius: 4px;
+  border-radius: calc(4px * var(--rk));
 }
 
 /* бегущие полоски на большой шкале */
 .bdg-bar--big > span {
   background:
-    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.18) 0 6px, transparent 6px 12px) 0 0 / 34px 100%,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.6), #fff);
+    repeating-linear-gradient(-45deg, rgb(var(--on-accent-rgb) / 0.18) 0 6px, transparent 6px 12px) 0 0 / 34px 100%,
+    linear-gradient(90deg, rgb(var(--fg-rgb) / 0.6), var(--accent));
   animation:
     bdg-fill 1.2s var(--ease-out) 0.15s backwards,
     bdg-stripes 1.2s linear infinite;
@@ -661,7 +661,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04)) 0 0 / 200% 100%;
+  background: linear-gradient(90deg, rgb(var(--fg-rgb) / 0.04), rgb(var(--fg-rgb) / 0.11), rgb(var(--fg-rgb) / 0.04)) 0 0 / 200% 100%;
   animation: bdg-skel 1.3s linear infinite;
 }
 
@@ -669,7 +669,7 @@
   width: 70%;
   height: 10px;
   margin-top: 12px;
-  border-radius: 5px;
+  border-radius: calc(5px * var(--rk));
 }
 
 .bdg-skel--short {
@@ -696,7 +696,7 @@
   display: grid;
   place-items: center;
   padding: 16px;
-  background: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.8) 70%);
+  background: radial-gradient(circle at 50% 45%, rgb(var(--bg-rgb) / 0.3), rgb(var(--bg-rgb) / 0.8) 70%);
   cursor: pointer;
   animation: fade-in 0.3s ease;
 }
@@ -716,14 +716,14 @@
   /* min(): у грид-ячейки авто-ширина, max-width: 100% карточку не сужает — на 320px она уезжала за край */
   width: min(360px, 100%);
   padding: 0 28px 26px;
-  border-radius: 28px;
+  border-radius: calc(28px * var(--rk));
   border: 1px solid var(--line-3);
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.09), transparent 60%),
-    #040404;
+    radial-gradient(circle at 50% 0%, rgb(var(--fg-rgb) / 0.09), transparent 60%),
+    var(--pop);
   box-shadow:
-    0 40px 120px rgba(0, 0, 0, 0.9),
-    0 0 80px rgba(255, 255, 255, 0.12);
+    0 40px 120px rgb(var(--shade-rgb) / calc(0.9 * var(--shade-k))),
+    0 0 80px rgb(var(--glow-rgb) / calc(0.12 * var(--glow-k)));
   text-align: center;
   animation: bdg-card-in 0.75s var(--ease-spring) backwards;
 }
@@ -748,10 +748,10 @@
 }
 
 .bdg-cele__card--epic {
-  border-color: rgba(255, 255, 255, 0.7);
+  border-color: rgb(var(--fg-rgb) / 0.7);
   box-shadow:
-    0 40px 120px rgba(0, 0, 0, 0.9),
-    0 0 90px rgba(255, 255, 255, 0.2);
+    0 40px 120px rgb(var(--shade-rgb) / calc(0.9 * var(--shade-k))),
+    0 0 90px rgb(var(--glow-rgb) / calc(0.2 * var(--glow-k)));
 }
 
 /* у легендарного рамка переливается по кругу */
@@ -766,7 +766,7 @@
   z-index: 0;
   padding: 1.5px;
   border-radius: inherit;
-  background: conic-gradient(from var(--bdg-a), #fff, #333 20%, #fff 40%, #555 60%, #fff 80%, #333 90%, #fff);
+  background: conic-gradient(from var(--bdg-a), var(--accent), #333 20%, var(--accent) 40%, #555 60%, var(--accent) 80%, #333 90%, var(--accent));
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -798,7 +798,7 @@
   height: 440px;
   margin: -220px 0 0 -220px;
   border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.08) 0 6deg, transparent 6deg 18deg);
+  background: repeating-conic-gradient(from 0deg, rgb(var(--fg-rgb) / 0.08) 0 6deg, transparent 6deg 18deg);
   -webkit-mask: radial-gradient(circle, #000 14%, transparent 60%);
   mask: radial-gradient(circle, #000 14%, transparent 60%);
   animation:
@@ -808,11 +808,11 @@
 }
 
 .bdg-cele__card--epic .bdg-cele__rays {
-  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.12) 0 6deg, transparent 6deg 18deg);
+  background: repeating-conic-gradient(from 0deg, rgb(var(--fg-rgb) / 0.12) 0 6deg, transparent 6deg 18deg);
 }
 
 .bdg-cele__card--legendary .bdg-cele__rays {
-  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.18) 0 5deg, transparent 5deg 14deg);
+  background: repeating-conic-gradient(from 0deg, rgb(var(--fg-rgb) / 0.18) 0 5deg, transparent 5deg 14deg);
   animation-duration: 12s, 1s;
 }
 
@@ -824,7 +824,7 @@
   height: 180px;
   margin: -90px 0 0 -90px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 66%);
+  background: radial-gradient(circle, rgb(var(--fg-rgb) / 0.32), transparent 66%);
   animation: bdg-halo 2.6s ease-in-out infinite;
   pointer-events: none;
 }
@@ -835,8 +835,8 @@
   position: absolute;
   inset: 30px;
   border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 20px #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 20px rgb(var(--glow-rgb) / var(--glow-k));
   opacity: 0;
   animation: bdg-shock 1s var(--ease-out) 0.25s;
 }
@@ -867,8 +867,8 @@
   height: var(--sz);
   margin: calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 8px #fff;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
   opacity: 0;
   pointer-events: none;
   animation: bdg-spark 1.15s var(--ease-out) forwards;
@@ -921,7 +921,7 @@
   font: 700 26px/1.15 var(--display);
   letter-spacing: -0.03em;
   color: var(--text);
-  text-shadow: 0 0 26px rgba(255, 255, 255, 0.45);
+  text-shadow: 0 0 26px rgb(var(--glow-rgb) / calc(0.45 * var(--glow-k)));
   animation: rise-in 0.5s var(--ease-out) 0.32s backwards;
 }
 
@@ -964,9 +964,9 @@
   right: 26px;
   bottom: 0;
   height: 2px;
-  border-radius: 1px;
-  background: #fff;
-  box-shadow: 0 0 8px #fff;
+  border-radius: calc(1px * var(--rk));
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--glow-rgb) / var(--glow-k));
   transform-origin: left;
   animation: toast-timer 4.5s linear forwards;
 }
@@ -987,15 +987,15 @@
 }
 
 .vcheck {
-  --vcheck-ink: #000;
+  --vcheck-ink: var(--black);
   display: inline-grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
 }
 
 .vcheck > svg {
   display: block;
-  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.6));
+  filter: drop-shadow(0 0 3px rgb(var(--glow-rgb) / calc(0.6 * var(--glow-k))));
   transition:
     transform 0.35s var(--ease-spring),
     filter 0.2s ease;
@@ -1003,7 +1003,7 @@
 
 .vcheck:hover > svg {
   transform: scale(1.22) rotate(-10deg);
-  filter: drop-shadow(0 0 7px #fff);
+  filter: drop-shadow(0 0 7px rgb(var(--glow-rgb) / var(--glow-k)));
 }
 
 /* ============ профиль: имя, номер, сколько дней с нами ============ */
@@ -1033,9 +1033,9 @@
   align-items: baseline;
   gap: 3px;
   padding: 5px 9px;
-  border-radius: 99px;
+  border-radius: calc(99px * var(--rk));
   border: 1px solid var(--line-2);
-  background: rgba(0, 0, 0, 0.55);
+  background: rgb(var(--bg-rgb) / 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   font: 600 11px/1 var(--mono);
@@ -1052,7 +1052,7 @@
 .profile__number:hover {
   color: var(--text);
   border-color: var(--line-3);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 16px rgb(var(--glow-rgb) / calc(0.2 * var(--glow-k)));
   transform: scale(1.08);
 }
 
@@ -1068,14 +1068,14 @@
 }
 
 .profile__number.is-first {
-  color: #000;
-  background: #fff;
-  border-color: #fff;
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.6);
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgb(var(--glow-rgb) / calc(0.6 * var(--glow-k)));
 }
 
 .profile__number.is-first .profile__number-sign {
-  color: rgba(0, 0, 0, 0.55);
+  color: rgb(var(--on-accent-rgb) / 0.55);
 }
 
 .profile__days {
@@ -1108,11 +1108,11 @@
 .bdg-meter {
   position: relative;
   padding: 16px 18px 14px;
-  border-radius: 18px;
+  border-radius: calc(18px * var(--rk));
   border: 1px solid var(--line-2);
   background:
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.4px) 0 0 / 14px 14px,
-    rgba(255, 255, 255, 0.025);
+    radial-gradient(rgb(var(--fg-rgb) / 0.05) 1px, transparent 1.4px) 0 0 / 14px 14px,
+    rgb(var(--fg-rgb) / 0.025);
   transition:
     border-color 0.25s ease,
     box-shadow 0.3s ease;
@@ -1123,8 +1123,8 @@
 }
 
 .bdg-meter.is-done {
-  border-color: #fff;
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.14);
+  border-color: var(--accent);
+  box-shadow: 0 0 30px rgb(var(--glow-rgb) / calc(0.14 * var(--glow-k)));
 }
 
 .bdg-meter__top {
@@ -1182,7 +1182,7 @@
   gap: 8px;
   height: 30px;
   padding: 0 12px;
-  border-radius: 15px;
+  border-radius: calc(15px * var(--rk));
   border: 1px solid var(--line);
   font: 600 12px/1 var(--mono);
   color: var(--text);
@@ -1211,7 +1211,7 @@
   height: 34px;
   margin-left: auto;
   padding: 0 13px 0 5px;
-  border-radius: 17px;
+  border-radius: calc(17px * var(--rk));
   border: 1px solid var(--line-2);
   font-size: 13px;
   color: var(--text-2);
@@ -1227,8 +1227,8 @@
 }
 
 .bdg-summary__rarest:hover {
-  border-color: #fff;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgb(var(--glow-rgb) / calc(0.15 * var(--glow-k)));
   transform: translateY(-1px);
 }
 
@@ -1270,9 +1270,9 @@
   gap: 6px;
   min-height: 172px;
   padding: 20px 12px 12px;
-  border-radius: 18px;
+  border-radius: calc(18px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.022);
+  background: rgb(var(--fg-rgb) / 0.022);
   text-align: center;
   animation: rise-in 0.42s var(--ease-out) backwards;
   transition:
@@ -1285,8 +1285,8 @@
 .bdg-card:hover {
   transform: translateY(-3px);
   border-color: var(--line-3);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+  background: rgb(var(--fg-rgb) / 0.05);
+  box-shadow: 0 16px 34px rgb(var(--shade-rgb) / calc(0.55 * var(--shade-k)));
 }
 
 .bdg-card:active {
@@ -1294,21 +1294,21 @@
 }
 
 .bdg-card.is-open {
-  border-color: #fff;
+  border-color: var(--accent);
   box-shadow:
-    0 0 0 1px #fff,
-    0 0 30px rgba(255, 255, 255, 0.16);
+    0 0 0 1px var(--accent),
+    0 0 30px rgb(var(--glow-rgb) / calc(0.16 * var(--glow-k)));
 }
 
 .bdg-card.is-earned.bdg-card--epic {
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgb(var(--fg-rgb) / 0.3);
 }
 
 .bdg-card.is-earned.bdg-card--legendary {
-  border-color: rgba(255, 255, 255, 0.45);
+  border-color: rgb(var(--fg-rgb) / 0.45);
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.11), transparent 70%),
-    rgba(255, 255, 255, 0.03);
+    radial-gradient(circle at 50% 0%, rgb(var(--fg-rgb) / 0.11), transparent 70%),
+    rgb(var(--fg-rgb) / 0.03);
 }
 
 .bdg-card.is-secret {
@@ -1341,7 +1341,7 @@
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--line-2);
-  background: #0a0a0a;
+  background: var(--surface-3);
   color: var(--text-2);
 }
 
@@ -1393,11 +1393,11 @@
   }
   25% {
     transform: translate(-1px, 1px);
-    text-shadow: 2px 0 rgba(255, 255, 255, 0.4);
+    text-shadow: 2px 0 rgb(var(--fg-rgb) / 0.4);
   }
   50% {
     transform: translate(1px, -1px);
-    text-shadow: -2px 0 rgba(255, 255, 255, 0.4);
+    text-shadow: -2px 0 rgb(var(--fg-rgb) / 0.4);
   }
   75% {
     transform: translate(1px, 0);
@@ -1457,7 +1457,7 @@
 }
 
 .bdg-card.is-earned .bdg-card__tier--legendary {
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+  text-shadow: 0 0 10px rgb(var(--glow-rgb) / calc(0.7 * var(--glow-k)));
 }
 
 .bdg-card__pct {
@@ -1465,7 +1465,7 @@
   top: 8px;
   right: 9px;
   padding: 3px 5px;
-  border-radius: 6px;
+  border-radius: calc(6px * var(--rk));
   font: 600 10px/1 var(--mono);
   color: var(--text-3);
   transition:
@@ -1475,7 +1475,7 @@
 
 .bdg-card:hover .bdg-card__pct {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--fg-rgb) / 0.08);
 }
 
 .bdg-card--skeleton {
@@ -1497,9 +1497,9 @@
   gap: 10px;
   height: 44px;
   padding: 0 12px 0 7px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--rk));
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--fg-rgb) / 0.025);
   animation: rise-in 0.4s var(--ease-out) backwards;
   transition:
     border-color 0.2s ease,
@@ -1508,7 +1508,7 @@
 
 .bdg-egg:hover {
   border-color: var(--line-3);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--fg-rgb) / 0.05);
 }
 
 .bdg-egg__icon {
@@ -1522,9 +1522,9 @@
 }
 
 .bdg-egg.is-found .bdg-egg__icon {
-  background: #fff;
-  color: #000;
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.4);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb) / calc(0.4 * var(--glow-k)));
 }
 
 .bdg-egg.is-found:hover .bdg-egg__icon {
