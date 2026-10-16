@@ -737,11 +737,19 @@ a.media-file:hover .media-file__dl,
   display: grid;
 }
 
+/* баннер — сверху во всю ширину поля, под ним кнопки */
+.pf-pick--banner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
 .pf-pick__banner {
   position: relative;
   display: block;
-  width: 168px;
-  height: 56px;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 3 / 1;
   overflow: hidden;
   border-radius: var(--r-m);
   border: 1px solid var(--line);
@@ -872,14 +880,14 @@ a.media-file:hover .media-file__dl,
 .pf-accents {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
   margin-bottom: 10px;
 }
 
 .pf-swatch {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -976,19 +984,18 @@ a.media-file:hover .media-file__dl,
     align-items: flex-start;
   }
 
-  .pf-pick__banner {
-    width: 120px;
-    height: 40px;
-  }
-
   .pf-crop {
     max-width: none;
     padding: 12px;
   }
 
+  .pf-accents {
+    gap: 8px;
+  }
+
   .pf-swatch {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
   }
 }
 
