@@ -695,6 +695,8 @@ export function lookVars(t: ThemeInfo, look: LookColors): Record<string, string>
   const sphere = tint ? mix(rgb(p.sphere), accent, tint * (dark ? 0.6 : 0.4)) : rgb(p.sphere)
   // акцент как цвет текста (ссылки, @упоминания): на фоне и в пузырях — контраст ≥ 4.5:1
   const ink = ensureContrast(accent, [bg, surface, bubble], 4.6, t.tone)
+  // красный «опасного» — тоже текст (ошибки, «Удалить»): на фоне, окнах и меню ≥ 4.5:1
+  const danger = ensureContrast(rgb(p.danger), [bg, surface, rgb(p.pop)], 4.6, t.tone)
   // «свои сообщения нейтральным»: пузырь чуть заметнее чужих, текст — как в пузырях
   const ownN = mix(bubble, fg, dark ? 0.07 : 0.045)
 
@@ -725,7 +727,7 @@ export function lookVars(t: ThemeInfo, look: LookColors): Record<string, string>
     '--text-1': p.text1,
     '--text-2': rgbToHex(text2),
     '--text-3': rgbToHex(text3),
-    '--danger': p.danger,
+    '--danger': rgbToHex(danger),
     '--accent-ink-rgb': channels(ink),
     '--own-n-rgb': channels(ownN),
     '--own-n-ink-rgb': channels(bubbleText),

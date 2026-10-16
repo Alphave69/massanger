@@ -47,6 +47,11 @@
   color: color-mix(in oklab, var(--role, var(--text-3)) 60%, rgb(var(--fg-rgb)));
 }
 
+/* шапка настроек на телефоне: под светлой полупрозрачной шапкой тёмные миниатюры тем просвечивали слишком сильно */
+:root[data-themed][data-tone='light'] .settings__mbar {
+  background: rgb(var(--pop-rgb) / 0.96);
+}
+
 /* белые и светло-серые аватарки — тонкий контур, чтобы не растворялись в светлом фоне */
 :root[data-themed][data-tone='light'] .avatar__face:not(.avatar__face--dark),
 .theme-scope[data-tone='light'] .avatar__face:not(.avatar__face--dark) {
