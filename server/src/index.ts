@@ -22,6 +22,7 @@ import { broadcastGuild, serializeGuild } from './guildView.js'
 import { hasChannelPermission } from './permissions.js'
 import { RateLimiter, waitText } from './ratelimit.js'
 import { allowedOrigins, originAllowed } from './origins.js'
+import { registerFileRoutes, registerProfileMediaRoutes, registerUploadRoute, startUploads, uploadLimits } from './uploads.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 
@@ -35,6 +36,8 @@ app.use('/api', (req, res, next) => {
   fail(res, 403, 'Запросы к Nuntius разрешены только с его собственного сайта')
 })
 app.use('/api', cors((req, cb) => cb(null, { origin: originAllowed(req.headers.origin, req.headers.host) })))
+// загрузка файлов читает сырое тело — до express.json (uploads.ts)
+registerUploadRoute(app)
 app.use(express.json())
 
 const http = createServer(app)
@@ -362,12 +365,13 @@ app.get('/api/state', requireAuth, (req, res) => {
     presence: presenceMap(),
     voice: voice.visibleTo(user.id),
     rings: voice.ringsFor(user.id),
+    uploads: uploadLimits(),
   })
 })
 
 app.patch('/api/me', requireAuth, async (req, res) => {
   const { user } = req as AuthedRequest
-  const { displayName, customStatus, status, username, bio, privacy } = req.body ?? {}
+  const { displayName, customStatus, status, username, bio, privacy, accent } = req.body ?? {}
   const patch: store.UserPatch = {}
 
   if (username !== undefined) {
@@ -410,6 +414,11 @@ app.patch('/api/me', requireAuth, async (req, res) => {
   if (status !== undefined) {
     if (!store.STATUSES.includes(status)) return fail(res, 400, 'Неизвестный статус')
     patch.status = status
+  }
+  // цвет профиля: '#rrggbb' или null — без цвета
+  if (accent !== undefined) {
+    if (accent !== null && (typeof accent !== 'string' || !/^#[0-9a-f]{6}$/i.test(accent))) return fail(res, 400, 'Неверный цвет профиля')
+    patch.accent = accent ? accent.toLowerCase() : null
   }
 
   store.updateUser(user, patch)
@@ -595,6 +604,10 @@ registerGuildRoutes(app, { io, voice, fail, emitGuild })
 registerRoleRoutes(app, { voice, fail, emitGuild })
 registerGroupRoutes(app, { io, voice, fail, dmView, systemMessage, badges })
 registerAdminRoutes(app, { io, voice, badges, fail, changed: userChanged, kickStaleSockets, isOnline: (id) => (socketCount.get(id) ?? 0) > 0 })
+// файлы: раздача /files/… (до отдачи клиента — иначе их перехватил бы index.html), аватарки и баннеры
+registerFileRoutes(app)
+registerProfileMediaRoutes(app, { fail, changed: userChanged, selfUser })
+startUploads()
 
 // --- значки и пасхалки ---
 
@@ -613,7 +626,8 @@ app.post('/api/me/eggs', requireAuth, (req, res) => {
 const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../client/dist')
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist))
-  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile(resolve(clientDist, 'index.html')))
+  // root, а не абсолютный путь: send не отдаёт файлы, если в пути есть папка с точкой (.claude/…)
+  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile('index.html', { root: clientDist }))
 } else {
   // В режиме разработки интерфейс отдаёт Vite — перекидываем туда
   app.get('/', (_req, res) => res.redirect('http://localhost:5173'))

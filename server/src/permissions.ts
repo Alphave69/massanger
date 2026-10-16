@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   'CREATE_INVITE',
   'VIEW_CHANNEL',
   'SEND_MESSAGES',
+  'ATTACH_FILES',
   'MANAGE_MESSAGES',
   'MENTION_EVERYONE',
   'CONNECT',
@@ -32,10 +33,10 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 /** Права, которые можно выставить отдельному каналу (остальные действуют на весь сервер) */
-export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
+export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
 
 /** Что по умолчанию может любой участник (@everyone) */
-export const DEFAULT_EVERYONE: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'CREATE_INVITE']
+export const DEFAULT_EVERYONE: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'CONNECT', 'SPEAK', 'VIDEO', 'CREATE_INVITE']
 
 export const isPermission = (p: unknown): p is Permission => typeof p === 'string' && (PERMISSIONS as readonly string[]).includes(p)
 
@@ -177,6 +178,7 @@ const NO_PERMISSION: Record<Permission, string> = {
   CREATE_INVITE: 'Нет права приглашать людей',
   VIEW_CHANNEL: 'Нет доступа к этому каналу',
   SEND_MESSAGES: 'Нет прав писать в этом канале',
+  ATTACH_FILES: 'Нет прав прикреплять файлы в этом канале',
   MANAGE_MESSAGES: 'Нет права удалять чужие сообщения',
   MENTION_EVERYONE: 'Нет права упоминать @everyone и @here',
   CONNECT: 'Нет доступа к этому каналу',

@@ -41,6 +41,28 @@ const reactLimit = createLimiter({ max: 12, windowMs: 4000, cooldowns: [1500, 30
 const editLimit = createLimiter({ max: 6, windowMs: 5000, cooldowns: [2000, 4000, 6000], forgiveMs: 30_000 })
 const forwardLimit = createLimiter({ max: 5, windowMs: 5000, cooldowns: [2000, 4000, 8000], forgiveMs: 30_000 })
 
+/** Больше файлов в одном сообщении не принимаем */
+const MAX_ATTACHMENTS = 10
+
+/** Можно ли прикреплять файлы в этом канале (в личках и группах — всегда) */
+const canAttach = (access: store.ChannelAccess, userId: string) =>
+  access.kind !== 'guild' || hasChannelPermission(access.guild, access.channel, userId, 'ATTACH_FILES')
+
+/** Файлы к новому сообщению: только свои и ещё ни к чему не прикреплённые загрузки */
+function pickUploads(raw: unknown, userId: string): { files: store.Attachment[] } | { error: string } {
+  if (raw == null) return { files: [] }
+  if (!Array.isArray(raw)) return { error: 'Не удалось прикрепить файлы' }
+  const ids = [...new Set(raw.map(str).filter(Boolean))]
+  if (ids.length > MAX_ATTACHMENTS) return { error: `Не больше ${MAX_ATTACHMENTS} файлов в одном сообщении` }
+  const files: store.Attachment[] = []
+  for (const id of ids) {
+    const u = store.findUpload(id)
+    if (!u || u.ownerId !== userId || u.attachedTo) return { error: 'Файл не найден — загрузи его ещё раз' }
+    files.push(store.attachmentOf(u))
+  }
+  return { files }
+}
+
 /** Как назвать место, откуда переслали: «#общий · Nuntius», «личка» или название группы */
 function placeName(access: store.ChannelAccess) {
   if (access.kind === 'guild') return `#${access.channel.name} · ${access.guild.name}`
@@ -84,7 +106,7 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
   const publishUpdate = (access: store.ChannelAccess, message: store.Message) => emitTo(store.viewersOf(access), 'message:update', message)
 
   function attach(socket: Socket, userId: string) {
-    on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown }, ack?: unknown) => {
+    on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown; attachments?: unknown }, ack?: unknown) => {
       const answer = reply(ack)
       // Строчит слишком быстро — сообщение не доходит, клиент покажет «полегче» с отсчётом
       const wait = sendLimit.hit(userId)
@@ -95,13 +117,24 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
       const channelId = str(payload?.channelId)
       const content = store.snip(str(payload?.content).trim(), MAX_LENGTH)
       const access = channelId ? store.channelAccess(channelId, userId) : undefined
-      if (!content || !access || (access.kind === 'guild' && access.channel.type !== 'text')) {
+      // файлы: можно и без текста
+      const picked = pickUploads(payload?.attachments, userId)
+      if ('error' in picked) {
+        answer({ error: picked.error })
+        return
+      }
+      const { files } = picked
+      if ((!content && !files.length) || !access || (access.kind === 'guild' && access.channel.type !== 'text')) {
         answer({ error: 'Не удалось отправить сообщение' })
         return
       }
       const problem = writeProblem(access, userId)
       if (problem) {
         answer({ error: problem })
+        return
+      }
+      if (files.length && !canAttach(access, userId)) {
+        answer({ error: 'Нет прав прикреплять файлы в этом канале' })
         return
       }
       // Ответ: только на сообщение из этого же канала; храним снимок оригинала
@@ -114,8 +147,8 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
         }
         replyTo = store.replyRef(original)
       }
-      // Команды: /roll, /flip, /8ball, /me…
-      const command = runCommand(content)
+      // Команды: /roll, /flip, /8ball, /me… (с файлами текст — просто подпись)
+      const command = files.length ? null : runCommand(content)
       if (command && 'error' in command) {
         answer({ error: command.error })
         return
@@ -123,6 +156,7 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
       const text = command ? command.content : content
       const mentions = parseMentions(text, access, userId, { isOnline })
       const message = store.addMessage(channelId, userId, text, command?.flavor, { replyTo, mentions })
+      store.setAttachments(message, files)
       const author = store.findUser(userId)
       if (author) {
         badges.onMessage(author, message.createdAt)
@@ -192,7 +226,8 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
         return
       }
       const content = str(payload?.content).trim()
-      if (!content) {
+      // у сообщения с файлами подпись можно и стереть
+      if (!content && !message.attachments?.length) {
         answer({ error: 'Сообщение не может быть пустым — его можно удалить' })
         return
       }
@@ -236,6 +271,16 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
         answer({ error: problem })
         return
       }
+      // файлы пересылаются ссылками на те же самые (если их ещё не удалили)
+      const files = (source.attachments ?? []).filter((a) => store.findUpload(a.id))
+      if (files.length && !canAttach(to, userId)) {
+        answer({ error: 'Нет прав прикреплять файлы в этом канале' })
+        return
+      }
+      if (!source.content && !files.length) {
+        answer({ error: 'Файлы этого сообщения уже удалены' })
+        return
+      }
       const wait = forwardLimit.hit(userId)
       if (wait !== null) {
         answer(slowDown(wait, 'Полегче с пересылкой — подожди пару секунд'))
@@ -246,6 +291,7 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
       // Упоминания проверяем заново — уже для нового места (позвать их пересылка не зовёт: это делает клиент)
       const mentions = parseMentions(source.content, to, userId, { isOnline })
       const message = store.addMessage(toId, userId, source.content, source.flavor, { forwarded, mentions })
+      store.setAttachments(message, files.map((a) => ({ ...a })))
       const author = store.findUser(userId)
       if (author) badges.onMessage(author, message.createdAt)
       publish(to, message)

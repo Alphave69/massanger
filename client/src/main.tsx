@@ -24,6 +24,7 @@ import './styles/admin.css'
 import './styles/eggs.css'
 import './styles/landing.css'
 import './styles/messages.css'
+import './styles/media.css'
 // последним: правки для телефона перекрывают остальное
 import './styles/mobile.css'
 

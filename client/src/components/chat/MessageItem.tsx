@@ -11,6 +11,7 @@ import { mentionsMe } from '../../lib/mentions'
 import { MessageActions } from '../guild/MessageActions'
 import { MentionText } from './MentionText'
 import { MessageEditor } from './MessageEditor'
+import { isBareMedia, MessageMedia } from './MessageMedia'
 import { Reactions } from './Reactions'
 import { ReplyQuote } from './ReplyQuote'
 
@@ -88,6 +89,12 @@ export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
       {m.replyTo && <ReplyQuote reply={m.replyTo} channelId={m.channelId} />}
       {editing ? (
         <div className="bubble bubble--editing">
+          {/* правится только подпись — файлы остаются как были */}
+          {!m.forwarded && m.attachments?.length ? (
+            <div className="msg-editor__media">
+              <MessageMedia attachments={m.attachments} />
+            </div>
+          ) : null}
           <MessageEditor message={m} />
         </div>
       ) : (
@@ -129,12 +136,34 @@ export function Wish() {
 function Bubble({ message: m, fresh, name, color }: ItemProps) {
   const flavor = m.flavor
   const kind = m.forwarded ? ' bubble--fwd' : flavor === 'me' ? ' bubble--me' : flavor ? ' bubble--cmd' : ''
+  // с файлами: сверху вложения, под ними подпись и время; только фото/видео — без пузыря, время поверх
+  const media = !m.forwarded && m.attachments?.length ? (isBareMedia(m) ? ' bubble--media bubble--bare' : ' bubble--media') : ''
+  const time = (
+    <time className="bubble__time" title={formatStamp(m.createdAt)}>
+      {formatTime(m.createdAt)}
+    </time>
+  )
   return (
-    <div className={`bubble${kind}${fresh ? ' bubble--fresh' : ''}`}>
-      {m.forwarded ? <ForwardedBody message={m} /> : <Body message={m} name={name} color={color} />}
-      <time className="bubble__time" title={formatStamp(m.createdAt)}>
-        {formatTime(m.createdAt)}
-      </time>
+    <div className={`bubble${kind}${media}${fresh ? ' bubble--fresh' : ''}`}>
+      {m.forwarded ? (
+        <>
+          <ForwardedBody message={m} />
+          {time}
+        </>
+      ) : media ? (
+        <>
+          <MessageMedia attachments={m.attachments!} />
+          <div className="bubble__caption">
+            {(m.content || m.editedAt) && <Body message={m} name={name} color={color} />}
+            {time}
+          </div>
+        </>
+      ) : (
+        <>
+          <Body message={m} name={name} color={color} />
+          {time}
+        </>
+      )}
       {isWishTime(m.createdAt) && <Wish />}
       <MessageActions message={m} />
     </div>
@@ -178,7 +207,8 @@ function ForwardedBody({ message: m }: { message: Message }) {
         <b className="truncate">{name}</b>
       </div>
       <div className={`fwd__quote${m.flavor === 'me' ? ' fwd__quote--me' : ''}`}>
-        <Body message={m} name={name} color={null} />
+        {m.attachments?.length ? <MessageMedia attachments={m.attachments} /> : null}
+        {(m.content || !m.attachments?.length) && <Body message={m} name={name} color={null} />}
       </div>
       <div className="fwd__from" title={`Написано ${formatStamp(fwd.createdAt).toLowerCase()}`}>
         {fwd.from} · {formatStamp(fwd.createdAt)}

@@ -32,6 +32,9 @@ import { VoiceUserMenu } from './voice/VoiceUserMenu'
 import { MediaHelp } from './voice/MediaHelp'
 import { useVoiceMenu, voiceMenu } from '../lib/voiceMenu'
 import { closeMediaHelp, useMediaHelp } from '../lib/mediaHelp'
+import { lightbox, useLightbox } from '../lib/lightbox'
+import { setUploadLimits } from '../lib/uploads'
+import { Lightbox } from './chat/Lightbox'
 
 interface Props {
   onLogout: () => void
@@ -55,7 +58,7 @@ const QUOTES: [string, string][] = [
 function hasOpenLayer() {
   const u = useUi.getState()
   const m = useMsgUi.getState()
-  if (useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
+  if (useLightbox.getState().open || useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
   return Boolean(
     m.menu || m.forward || u.channelModal || u.groupModal || u.modal || u.profile || u.settings || u.serverSettings || u.asideOpen || u.mobileMain,
   )
@@ -73,7 +76,8 @@ function hasOverlay() {
 function closeTopLayer() {
   const u = useUi.getState()
   const m = useMsgUi.getState()
-  if (useVoiceMenu.getState().menu) voiceMenu.close()
+  if (useLightbox.getState().open) lightbox.close()
+  else if (useVoiceMenu.getState().menu) voiceMenu.close()
   else if (useMediaHelp.getState().denied) closeMediaHelp()
   else if (m.menu) msgUi.closeMenu()
   else if (m.forward) msgUi.closeForward()
@@ -121,6 +125,7 @@ export function Shell({ onLogout }: Props) {
         if (!alive) return
         chat.init(state)
         initVoice(state.voice, state.rings)
+        setUploadLimits(state.uploads)
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) onLogout()
@@ -156,7 +161,9 @@ export function Shell({ onLogout }: Props) {
     const offMsg = useMsgUi.subscribe(back.sync)
     const offVoiceMenu = useVoiceMenu.subscribe(back.sync)
     const offMediaHelp = useMediaHelp.subscribe(back.sync)
+    const offLightbox = useLightbox.subscribe(back.sync)
     return () => {
+      offLightbox()
       offUi()
       offMsg()
       offVoiceMenu()
@@ -252,6 +259,8 @@ export function Shell({ onLogout }: Props) {
     {/* меню участника голоса (правый клик) и помощь с доступом к микрофону/камере/экрану */}
     <VoiceUserMenu />
     <MediaHelp />
+    {/* фото на весь экран */}
+    <Lightbox />
     <IncomingCall />
     {/* уведомления — поверх всего, в том числе поверх настроек */}
     <Toasts />

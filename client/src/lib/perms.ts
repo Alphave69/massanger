@@ -24,6 +24,7 @@ export const PERMISSION_INFO: Record<Permission, { label: string; description: s
   CREATE_INVITE: { label: 'Приглашать', description: 'Видеть код приглашения и звать друзей на сервер.' },
   VIEW_CHANNEL: { label: 'Видеть каналы', description: 'Видеть канал и читать в нём сообщения. Без этого канала как будто нет.' },
   SEND_MESSAGES: { label: 'Отправлять сообщения', description: 'Писать в текстовых каналах.' },
+  ATTACH_FILES: { label: 'Прикреплять файлы', description: 'Отправлять фото, видео и файлы в текстовых каналах (вместе с правом писать).' },
   MANAGE_MESSAGES: { label: 'Управлять сообщениями', description: 'Удалять чужие сообщения.' },
   MENTION_EVERYONE: {
     label: 'Упоминать @everyone и @here',
@@ -39,13 +40,13 @@ export const PERMISSION_INFO: Record<Permission, { label: string; description: s
 /** Группы прав в настройках роли */
 export const PERMISSION_GROUPS: { title: string; perms: Permission[] }[] = [
   { title: 'Общие', perms: ['ADMINISTRATOR', 'MANAGE_SERVER', 'MANAGE_ROLES', 'MANAGE_CHANNELS', 'KICK_MEMBERS', 'CREATE_INVITE'] },
-  { title: 'Текст', perms: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'] },
+  { title: 'Текст', perms: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'] },
   { title: 'Голос', perms: ['CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS'] },
 ]
 
 /** Какие права настраиваются в канале каждого типа */
 export const CHANNEL_PERMS_BY_TYPE: Record<Channel['type'], Permission[]> = {
-  text: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'],
+  text: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE'],
   voice: ['VIEW_CHANNEL', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS'],
 }
 
@@ -67,7 +68,7 @@ export const ROLE_COLORS: (string | null)[] = [
 
 export const isHexColor = (v: string) => /^#[0-9a-f]{6}$/i.test(v)
 
-const LEGACY_EVERYONE: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'CREATE_INVITE']
+const LEGACY_EVERYONE: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'ATTACH_FILES', 'CONNECT', 'SPEAK', 'VIDEO', 'CREATE_INVITE']
 
 export const isOwner =(guild: Guild | undefined, userId = myId()) => Boolean(guild && userId && guild.ownerId === userId)
 

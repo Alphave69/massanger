@@ -11,6 +11,7 @@ import { onAnnounce } from './admin'
 import { mentionsMe, readable } from './mentions'
 import { guildOfChannel } from './perms'
 import { nudgeSlow, slowDown, slowLeft } from './antispam'
+import { messagePreview } from './uploads'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -124,7 +125,8 @@ export function connectRealtime(onUnauthorized: () => void) {
     const st = useChat.getState()
     if (mine || isActive || m.authorId === SYSTEM_AUTHOR) return
     const author = st.users[m.authorId]
-    const text = readable(m.content, m.channelId).slice(0, 120)
+    // текст с понятными @именами; сообщение из одних файлов — «📷 Фото» и т. п.
+    const text = readable(messagePreview(m), m.channelId).slice(0, 120)
     // Упомянули меня (прямо, ролью, @everyone/@here) — «@» у канала и уведомление даже с сервера.
     // Пересланное не зовёт: упоминания там — из чужого разговора
     const pinged = !m.forwarded && mentionsMe(st, m)
@@ -205,8 +207,8 @@ function messageRequest(event: string, payload: object, failTitle: string, offli
   })
 }
 
-/** Отправить сообщение (replyTo — id сообщения, на которое отвечаем); true — если сервер принял */
-export async function sendMessage(channelId: string, content: string, replyTo?: string): Promise<boolean> {
+/** Отправить сообщение (replyTo — id сообщения, на которое отвечаем; attachments — id загруженных файлов); true — если сервер принял */
+export async function sendMessage(channelId: string, content: string, replyTo?: string, attachments?: string[]): Promise<boolean> {
   // пауза анти-спама ещё идёт — сервер всё равно не пропустит
   if (slowLeft() > 0) {
     nudgeSlow()
@@ -214,7 +216,7 @@ export async function sendMessage(channelId: string, content: string, replyTo?: 
   }
   const message = await messageRequest(
     'message:send',
-    { channelId, content, ...(replyTo ? { replyTo } : {}) },
+    { channelId, content, ...(replyTo ? { replyTo } : {}), ...(attachments?.length ? { attachments } : {}) },
     'Не отправлено',
     'Сообщение не отправлено — переподключаемся…',
   )

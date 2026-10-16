@@ -12,6 +12,8 @@ export function MessageEditor({ message }: { message: Message }) {
   // метки упоминаний в поле — читаемыми «@логин» / «@Роль», при сохранении — обратно
   const [value, setValue] = useState(() => readable(message.content, message.channelId, 'login'))
   const [busy, setBusy] = useState(false)
+  // у сообщения с файлами подпись можно стереть совсем
+  const canBeEmpty = Boolean(message.attachments?.length)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   // Поле растёт вместе с текстом
@@ -38,8 +40,8 @@ export function MessageEditor({ message }: { message: Message }) {
 
   const save = async () => {
     const typed = value.trim()
-    if (busy || !typed) return
-    const content = toTokens(typed, mentionables(useChat.getState(), message.channelId))
+    if (busy || (!typed && !canBeEmpty)) return
+    const content = typed ? toTokens(typed, mentionables(useChat.getState(), message.channelId)) : ''
     if (content === message.content) return stop()
     setBusy(true)
     const ok = await editMessage(message.id, content)
@@ -59,7 +61,7 @@ export function MessageEditor({ message }: { message: Message }) {
     }
   }
 
-  const empty = !value.trim()
+  const empty = !value.trim() && !canBeEmpty
 
   return (
     <div className="msg-editor">

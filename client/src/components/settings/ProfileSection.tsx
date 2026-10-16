@@ -7,10 +7,11 @@ import { STATUS_LABEL, selfPresence } from '../../lib/status'
 import { chat, useChat } from '../../lib/store'
 import { Avatar } from '../Avatar'
 import { BadgeRow } from '../badges/BadgeRow'
-import { UserNumber } from '../ProfileView'
+import { accentStyle, ProfileBanner, UserNumber } from '../ProfileView'
 import { StatusIcon } from '../StatusIcon'
 import { UserTags } from '../UserTags'
 import { SectionHead } from './controls'
+import { AccentPicker, ProfileImageField } from './ProfileMedia'
 
 const BIO_MAX = 190
 
@@ -19,10 +20,13 @@ export function ProfileSection() {
   const [displayName, setDisplayName] = useState(me.displayName)
   const [customStatus, setCustomStatus] = useState(me.customStatus)
   const [bio, setBio] = useState(me.bio)
+  // цвет профиля: сохраняется вместе с остальными полями
+  const savedAccent = me.accent ?? null
+  const [accent, setAccent] = useState<string | null>(savedAccent)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const dirty = displayName !== me.displayName || customStatus !== me.customStatus || bio !== me.bio
+  const dirty = displayName !== me.displayName || customStatus !== me.customStatus || bio !== me.bio || accent !== savedAccent
   const days = daysSince(me.createdAt)
   const status = selfPresence(me.status)
 
@@ -30,6 +34,7 @@ export function ProfileSection() {
     setDisplayName(me.displayName)
     setCustomStatus(me.customStatus)
     setBio(me.bio)
+    setAccent(savedAccent)
     setError(null)
   }
 
@@ -38,11 +43,12 @@ export function ProfileSection() {
     setBusy(true)
     setError(null)
     try {
-      const { user } = await api.updateMe({ displayName: displayName.trim(), customStatus: customStatus.trim(), bio: bio.trim() })
+      const { user } = await api.updateMe({ displayName: displayName.trim(), customStatus: customStatus.trim(), bio: bio.trim(), accent })
       chat.setMe(user)
       setDisplayName(user.displayName)
       setCustomStatus(user.customStatus)
       setBio(user.bio)
+      setAccent(user.accent ?? null)
       chat.toast({ title: 'Профиль сохранён', text: 'Друзья уже видят изменения' })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не получилось сохранить')
@@ -52,7 +58,7 @@ export function ProfileSection() {
 
   return (
     <>
-      <SectionHead title="Профиль" subtitle="Как тебя видят друзья: имя, статус и пара слов о себе." />
+      <SectionHead title="Профиль" subtitle="Как тебя видят друзья: аватар, баннер, имя, статус и пара слов о себе." />
 
       <div className="profile-edit">
         <div className="profile-edit__form">
@@ -86,19 +92,18 @@ export function ProfileSection() {
             />
           </label>
 
-          <div className="field-block">
-            <span className="set-group__title">Аватар</span>
-            <div className="muted">Сейчас аватар — инициалы на оттенке серого. Свою картинку добавим в одном из следующих обновлений.</div>
-          </div>
+          <ProfileImageField slot="avatar" />
+          <ProfileImageField slot="banner" />
+          <AccentPicker value={accent} onChange={setAccent} />
         </div>
 
         <div className="profile-edit__preview">
           <span className="set-group__title">Превью</span>
-          <div className="preview-card glow">
-            <div className="profile__banner" />
+          <div className={`preview-card glow${accent ? ' profile--accent' : ''}`} style={accentStyle(accent)}>
+            <ProfileBanner banner={me.banner} />
             {me.number > 0 && <UserNumber n={me.number} />}
             <div className="profile__avatar">
-              <Avatar user={{ id: me.id, displayName: displayName || me.displayName }} size={84} status={status} ring />
+              <Avatar user={{ id: me.id, displayName: displayName || me.displayName, avatar: me.avatar }} size={84} status={status} ring />
             </div>
             <div className="profile__body">
               <h3 className="profile__name">

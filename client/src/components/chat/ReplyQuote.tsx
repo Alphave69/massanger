@@ -5,6 +5,7 @@ import { findLoaded, focusComposer, jumpToMessage, msgUi, useMsgUi } from '../..
 import { guildOfChannel, roleColor } from '../../lib/perms'
 import { chat, useChat } from '../../lib/store'
 import { readable } from '../../lib/mentions'
+import { messagePreview } from '../../lib/uploads'
 import { Avatar } from '../Avatar'
 
 /** Текст для цитаты — в одну строку */
@@ -28,7 +29,10 @@ function useAuthor(authorId: string, channelId: string) {
  */
 export function ReplyQuote({ reply, channelId }: { reply: ReplyRef; channelId: string }) {
   const { user, name, color } = useAuthor(reply.authorId, channelId)
-  const live = useChat((s) => findLoaded(s, channelId, reply.id)?.content)
+  const live = useChat((s) => {
+    const m = findLoaded(s, channelId, reply.id)
+    return m ? messagePreview(m) : undefined
+  })
   // сохранённое начало оригинала могло оборвать метку упоминания посередине («<@9f3a…») — её хвост не показываем
   const text = oneLine(readable(live ?? reply.content.replace(/<@&?[\w-]*$/, ''), channelId))
 
@@ -68,7 +72,7 @@ export function ReplyBar({ channelId }: { channelId: string }) {
       <CornerUpLeft size={15} className="reply-bar__icon" />
       <span className="reply-bar__text truncate">
         Ответ <b style={color ? { color } : undefined}>{name}</b>
-        <span className="reply-bar__snippet">: {oneLine(readable(target.content, channelId))}</span>
+        <span className="reply-bar__snippet">: {oneLine(readable(messagePreview(target), channelId))}</span>
       </span>
       <button
         type="button"

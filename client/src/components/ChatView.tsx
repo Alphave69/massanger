@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ArrowLeft, ArrowUp, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
+import { ArrowLeft, ArrowUp, LoaderCircle, Lock, PanelRight, Phone, UserPlus, Users, Video } from 'lucide-react'
 import { api, SYSTEM_AUTHOR, type Message, type User, type VoiceMember } from '../lib/api'
 import { findEgg, introClick, isAprilFools } from '../lib/eggs'
 import { formatDay, formatStamp, MEMBERS, plural, sameDay } from '../lib/format'
@@ -22,6 +22,7 @@ import { MentionHints } from './chat/MentionHints'
 import { SlowWarning, useSlowLeft } from './chat/SlowWarning'
 import { mentionables, suggest, toTokens, type Suggestion } from '../lib/mentions'
 import { nudgeSlow, useSlow } from '../lib/antispam'
+import { AttachButton, AttachmentStrip, DropOverlay, useComposerFiles, useDropTarget, useFileDrop } from './chat/Attachments'
 import { VoiceStage } from './voice/VoiceStage'
 
 const GROUP_WINDOW = 7 * 60 * 1000
@@ -89,6 +90,8 @@ export function ChatView() {
   useSettings((s) => `${s.clock24}${s.clockSeconds}`)
   const asideOpen = useUi((s) => s.asideOpen)
   const mobile = useIsMobile()
+  // файлы, которые тащат мышью на чат
+  const drop = useFileDrop()
 
   const channel = guild?.channels.find((c) => c.id === channelId)
 
@@ -178,10 +181,13 @@ export function ChatView() {
   const groups = groupMessages(messages ?? [])
   // На сервере писать можно не везде — без права SEND_MESSAGES вместо поля ввода плашка
   const canSend = !guild || can(guild, 'SEND_MESSAGES', channelId)
+  // файлы — отдельное право (в личках и группах можно всегда)
+  const canAttach = canSend && (!guild || can(guild, 'ATTACH_FILES', channelId))
   const april = isAprilFools()
 
   return (
-    <section className="main panel glow chat">
+    <section className="main panel glow chat" {...drop.handlers}>
+      <DropOverlay on={drop.over} allowed={canAttach} />
       <header className="main__head">
         <BackButton />
         {group ? (
@@ -346,7 +352,7 @@ export function ChatView() {
       </div>
 
       {canSend ? (
-        <Composer key={channelId} channelId={channelId} placeholder={placeholder} />
+        <Composer key={channelId} channelId={channelId} placeholder={placeholder} canAttach={canAttach} />
       ) : (
         <div className="composer">
           <div className="composer__locked">
@@ -470,8 +476,10 @@ function TypingBar({ ids }: { ids: string[] }) {
   )
 }
 
-function Composer({ channelId, placeholder }: { channelId: string; placeholder: string }) {
+function Composer({ channelId, placeholder, canAttach }: { channelId: string; placeholder: string; canAttach: boolean }) {
   const [value, setValue] = useState('')
+  const files = useComposerFiles(canAttach)
+  useDropTarget(files.addFiles, canAttach)
   const [sending, setSending] = useState(false)
   const [burst, setBurst] = useState(0)
   // подсказка команд: закрыли по Esc — не показываем, пока не сотрут «/»
@@ -546,18 +554,26 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
 
   const send = async () => {
     const typed = value.trim()
-    if (!typed || sending) return
+    if ((!typed && !files.sendable) || sending) return
     if (slowLeft > 0) {
       nudgeSlow()
       return
     }
     // «@логин» и «@Роль» → метки упоминаний (их проверит сервер)
-    const content = toTokens(typed, mentionables(useChat.getState(), channelId))
+    const content = typed ? toTokens(typed, mentionables(useChat.getState(), channelId)) : ''
     setSending(true)
-    const ok = await sendMessage(channelId, content, replyId)
+    // файлы ещё грузятся — дожидаемся и отправляем вместе с текстом
+    await files.waitAll()
+    const done = files.done()
+    if (!content && !done.length) {
+      setSending(false)
+      return
+    }
+    const ok = await sendMessage(channelId, content, replyId, done.map((f) => f.attachment!.id))
     setSending(false)
     if (ok) {
       setValue('')
+      files.clear(done.map((f) => f.key))
       setBurst((n) => n + 1)
       msgUi.cancelReply(channelId)
     }
@@ -640,7 +656,7 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
     }
   }
 
-  const ready = value.trim().length > 0
+  const ready = value.trim().length > 0 || files.sendable
 
   return (
     <div className="composer">
@@ -674,7 +690,9 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
       )}
       <SlowWarning left={slowLeft} />
       <ReplyBar channelId={channelId} />
-      <div className={`composer__box glow${shake ? ' is-shake' : ''}${slowLeft > 0 ? ' is-cooling' : ''}`}>
+      <AttachmentStrip files={files} />
+      <div className={`composer__box glow${canAttach ? ' composer__box--attach' : ''}${shake ? ' is-shake' : ''}${slowLeft > 0 ? ' is-cooling' : ''}`}>
+        {canAttach && <AttachButton onFiles={files.addFiles} />}
         <textarea
           ref={ref}
           rows={1}
@@ -694,9 +712,10 @@ function Composer({ channelId, placeholder }: { channelId: string; placeholder: 
             if (v) sendTyping(channelId)
           }}
           onKeyDown={onKeyDown}
+          onPaste={files.onPaste}
         />
         <button className={`composer__send${ready ? ' is-ready' : ''}`} onClick={() => void send()} aria-label="Отправить" disabled={!ready || sending}>
-          <ArrowUp size={19} strokeWidth={2.5} />
+          {sending && files.busy ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={19} strokeWidth={2.5} />}
           {burst > 0 && <span key={burst} className="composer__ring" />}
         </button>
       </div>
