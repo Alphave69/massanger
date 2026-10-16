@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 import { initVoice, resetVoice } from '../lib/voice'
@@ -6,6 +6,7 @@ import { activeChannelId, chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { msgUi, useMsgUi } from '../lib/msgActions'
 import { isMobile, trackBackButton, trackViewport, useIsMobile } from '../lib/mobile'
+import { useShellSwipe } from '../lib/shellSwipe'
 import { Dock } from './Dock'
 import { HomeSidebar } from './HomeSidebar'
 import { GuildSidebar } from './GuildSidebar'
@@ -60,6 +61,14 @@ function hasOpenLayer() {
   )
 }
 
+/** Поверх главного экрана открыто окно, шторка или настройки — свайпы главного экрана ждут */
+function hasOverlay() {
+  const u = useUi.getState()
+  const m = useMsgUi.getState()
+  if (useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
+  return Boolean(m.menu || m.forward || u.channelModal || u.groupModal || u.modal || u.profile || u.settings || u.serverSettings)
+}
+
 /** «Назад» на телефоне: закрываем то, что лежит сверху */
 function closeTopLayer() {
   const u = useUi.getState()
@@ -99,6 +108,10 @@ export function Shell({ onLogout }: Props) {
   const viewGuild = useChat((s) => (s.view.kind === 'guild' ? s.guilds.find((g) => g.id === (s.view as { guildId: string }).guildId) : undefined))
   const totalUnread = useChat((s) => Object.values(s.unread).reduce((a, b) => a + b, 0))
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)])
+  const shellRef = useRef<HTMLDivElement>(null)
+
+  // Телефон: свайпы — чат ↔ список, панель справа
+  useShellSwipe(shellRef, ready && mobile, hasOverlay)
 
   useEffect(() => {
     let alive = true
@@ -200,6 +213,7 @@ export function Shell({ onLogout }: Props) {
   return (
     <>
     <div
+      ref={shellRef}
       className={`shell zoomed${hasAside && asideOpen ? ' shell--aside' : ''}${settingsOpen ? ' is-behind' : ''}${mobileMain ? ' shell--main' : ' shell--nav'}`}
       aria-hidden={settingsOpen}
       inert={settingsOpen}

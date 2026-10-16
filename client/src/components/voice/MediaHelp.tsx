@@ -1,8 +1,10 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Camera, ChevronDown, Lock, Mic, MonitorUp, RefreshCw, Settings2, X } from 'lucide-react'
 import { closeMediaHelp, hideAsk, retryMediaHelp, useMediaHelp, type MediaHelpState, type MediaKind } from '../../lib/mediaHelp'
 import { BROWSER_NAME, detectBrowser, detectMediaEnv, detectOs, type Browser, type MediaEnv, type Os } from '../../lib/platform'
+import { useIsMobile } from '../../lib/mobile'
+import { useSheetSwipe } from '../../lib/swipe'
 
 /**
  * Помощь с разрешениями (логика — в lib/mediaHelp.ts):
@@ -314,6 +316,9 @@ function DeniedModal({ denied }: { denied: NonNullable<MediaHelpState['denied']>
     : kind === 'screen'
       ? screenHelp(env, browser, os)
       : deviceHelp(kind, env, browser, os)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  // телефон: окно — шторкой снизу, смахивается вниз
+  useSheetSwipe(sheetRef, closeMediaHelp, useIsMobile())
 
   // Esc закрывает окно, а не настройки под ним
   useEffect(() => {
@@ -348,7 +353,7 @@ function DeniedModal({ denied }: { denied: NonNullable<MediaHelpState['denied']>
 
   return (
     <div className="modal-backdrop media-help" onPointerDown={(e) => e.target === e.currentTarget && closeMediaHelp()}>
-      <div className="modal glow media-help__modal" role="dialog" aria-modal="true" aria-label={help.title}>
+      <div ref={sheetRef} className="modal glow media-help__modal" role="dialog" aria-modal="true" aria-label={help.title}>
         <button className="modal__close icon-btn" onClick={closeMediaHelp} aria-label="Закрыть">
           <X size={20} />
         </button>

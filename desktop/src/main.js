@@ -95,6 +95,7 @@ let quitting = false
 let htmlFullscreen = false // сайт развернул видео или демонстрацию на весь экран
 let unread = 0
 let updateReady = false // новая версия скачана и ждёт перезапуска
+let picker = null // открытый выбор экрана для демонстрации: { view, resolve } — слой поверх сайта
 
 const site = () => view.webContents
 const isFullscreen = () => htmlFullscreen || win.isFullScreen()
@@ -168,7 +169,8 @@ function createWindow() {
   // Окно получило фокус — сразу в сайт, чтобы можно было печатать без лишнего клика
   win.on('focus', () => {
     win.flashFrame(false)
-    if (!site().isDestroyed()) site().focus()
+    if (picker) picker.view.webContents.focus()
+    else if (!site().isDestroyed()) site().focus()
     sendState()
   })
   win.on('blur', sendState)
@@ -187,12 +189,14 @@ function createWindow() {
   openApp()
 }
 
-/** Раскладка: полоска сверху, сайт под ней; в полном экране сайт на всё окно */
+/** Раскладка: полоска сверху, сайт под ней; в полном экране сайт на всё окно. Выбор экрана — поверх сайта */
 function layout() {
   if (!win || win.isDestroyed()) return
   const { width, height } = win.contentView.getBounds()
   const top = isFullscreen() ? 0 : BAR_HEIGHT
-  view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) })
+  const bounds = { x: 0, y: top, width, height: Math.max(0, height - top) }
+  view.setBounds(bounds)
+  picker?.view.setBounds(bounds)
 }
 
 /** Состояние для полоски заголовка: какие кнопки рисовать, тусклая ли она, есть ли непрочитанное */
@@ -237,7 +241,9 @@ function setupSite() {
     }
     showConnect(`Не удалось открыть ${host}: ${description}`)
   })
+  wc.on('did-navigate', () => closePicker(null))
   wc.on('render-process-gone', (_e, details) => {
+    closePicker(null)
     if (details.reason === 'clean-exit') return
     showConnect('Страница неожиданно закрылась — нажми «Повторить»')
   })
@@ -380,7 +386,8 @@ ipcMain.on('win:toggle-maximize', (e) => {
   if (!fromBar(e)) return
   if (win.isMaximized()) win.unmaximize()
   else win.maximize()
-  site().focus()
+  if (picker) picker.view.webContents.focus()
+  else site().focus()
 })
 ipcMain.on('win:close', (e) => fromBar(e) && win.close()) // close → прячем в трей
 ipcMain.on('win:update', (e) => fromBar(e) && installUpdate())
@@ -485,71 +492,121 @@ function setupPermissions() {
   })
   s.setPermissionCheckHandler((_wc, permission, origin) => ALLOWED.has(permission) && isAppUrl(origin))
 
-  // Демонстрация экрана: своё окно выбора экрана или окна (со звуком системы на Windows)
+  // Демонстрация экрана: свой выбор экрана или окна поверх сайта (со звуком системы на Windows)
   s.setDisplayMediaRequestHandler(async (request, callback) => {
-    if (!isAppUrl(request.securityOrigin || request.frame?.url || '')) return callback({})
+    // ответить сайту ровно один раз; null — отказ (пустой объект Electron не принимает и бросает ошибку,
+    // а сайт так и ждал бы ответа)
+    let answered = false
+    const reply = (streams) => {
+      if (answered) return
+      answered = true
+      try {
+        callback(streams)
+      } catch (err) {
+        console.warn('[демонстрация]', err?.message || err)
+        try {
+          callback(null)
+        } catch {
+          // уже отвечено
+        }
+      }
+    }
+    if (!isAppUrl(request.securityOrigin || request.frame?.url || '')) return reply(null)
     try {
       const choice = await pickSource()
-      if (!choice) return callback({})
+      if (!choice) return reply(null)
       const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
       const source = sources.find((x) => x.id === choice.id)
-      if (!source) return callback({})
-      callback(choice.audio && process.platform === 'win32' ? { video: source, audio: 'loopback' } : { video: source })
-    } catch {
-      callback({})
+      if (!source) return reply(null)
+      reply(choice.audio && process.platform === 'win32' ? { video: source, audio: 'loopback' } : { video: source })
+    } catch (err) {
+      console.warn('[демонстрация]', err?.message || err)
+      reply(null)
     }
   })
 }
 
-let picker = null
+// ============ выбор экрана: слой поверх сайта внутри окна, а не отдельное окно ============
+
+/**
+ * Карточка «Что показать?» по центру окна Nuntius: прозрачный слой (WebContentsView) поверх сайта,
+ * под полоской заголовка — окно можно двигать и растягивать, карточка остаётся посередине.
+ * Возвращает { id, audio } или null (отмена).
+ */
 function pickSource() {
   return new Promise((resolve) => {
-    if (picker) picker.close()
-    picker = new BrowserWindow({
-      parent: win,
-      modal: true,
-      width: 760,
-      height: 560,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      backgroundColor: '#000000',
-      title: 'Что показать?',
-      icon: ICON,
-      autoHideMenuBar: true,
-      show: false,
-      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    closePicker(null) // прошлый запрос ещё открыт — он отменяется
+    const pv = new WebContentsView({
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        spellcheck: false,
+      },
     })
-    let done = false
-    const finish = (value) => {
-      if (done) return
-      done = true
-      ipcMain.removeListener('picker:choose', onChoose)
-      if (picker && !picker.isDestroyed()) picker.close()
-      picker = null
-      resolve(value)
-    }
-    const onChoose = (e, value) => fromLocal(e) && finish(value || null)
-    ipcMain.on('picker:choose', onChoose)
-    picker.on('closed', () => finish(null))
-    picker.once('ready-to-show', () => picker.show())
-    void picker.loadFile(PICKER_PAGE)
+    pv.setBackgroundColor('#00000000') // прозрачный фон: под затемнением виден сам Nuntius
+    picker = { view: pv, resolve }
+    win.contentView.addChildView(pv) // добавлен последним — значит, поверх сайта
+    layout()
+    const wc = pv.webContents
+    // локальная страница: никуда не уходит и ничего не открывает
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }))
+    wc.on('will-navigate', (e) => e.preventDefault())
+    wc.on('render-process-gone', () => picker?.view === pv && closePicker(null))
+    wc.on('context-menu', (e) => e.preventDefault())
+    wc.once('did-finish-load', () => {
+      if (picker?.view !== pv) return
+      if (win.isMinimized()) win.restore()
+      win.focus()
+      wc.focus() // Esc, Enter и стрелки — сразу в карточку
+    })
+    void wc.loadFile(PICKER_PAGE)
   })
 }
+
+/** Убрать выбор экрана и ответить сайту (null — отмена) */
+function closePicker(value) {
+  if (!picker) return
+  const { view: pv, resolve } = picker
+  picker = null
+  if (win && !win.isDestroyed()) win.contentView.removeChildView(pv)
+  if (!pv.webContents.isDestroyed()) pv.webContents.close()
+  resolve(value)
+  if (win && !win.isDestroyed() && win.isFocused() && !site().isDestroyed()) site().focus()
+}
+
+/** Команды выбора принимаем только от открытой карточки выбора — не от сайта и не от других страниц */
+const fromPicker = (e) =>
+  Boolean(picker) && !picker.view.webContents.isDestroyed() && e.sender.id === picker.view.webContents.id && (e.senderFrame?.url || '').startsWith('file:')
+
+ipcMain.on('picker:choose', (e, value) => {
+  if (!fromPicker(e)) return
+  closePicker(value && typeof value.id === 'string' ? { id: value.id, audio: Boolean(value.audio) } : null)
+})
+
+ipcMain.handle('picker:sources', async (e) => {
+  if (!fromPicker(e)) return { audio: false, sources: [] }
+  const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 480, height: 270 }, fetchWindowIcons: true })
+  const screens = sources.filter((s) => s.id.startsWith('screen'))
+  return {
+    audio: process.platform === 'win32',
+    sources: sources.map((s) => {
+      const screen = s.id.startsWith('screen')
+      return {
+        id: s.id,
+        // «Entire screen», «Screen 1» — по-русски и по порядку
+        name: screen ? (screens.length === 1 ? 'Весь экран' : `Экран ${screens.indexOf(s) + 1}`) : s.name,
+        kind: screen ? 'screen' : 'window',
+        thumbnail: s.thumbnail.isEmpty() ? '' : s.thumbnail.toDataURL(),
+        icon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.resize({ width: 32, height: 32 }).toDataURL() : '',
+      }
+    }),
+  }
+})
 
 /** Команды принимаем только от своих локальных страниц, не от сайта */
 const fromLocal = (e) => (e.senderFrame?.url || '').startsWith('file:')
-
-ipcMain.handle('picker:sources', async (e) => {
-  if (!fromLocal(e)) return { audio: false, sources: [] }
-  const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true })
-  return {
-    audio: process.platform === 'win32',
-    sources: sources
-      .filter((s) => s.name !== 'Что показать?')
-      .map((s) => ({ id: s.id, name: s.name, kind: s.id.startsWith('screen') ? 'screen' : 'window', thumbnail: s.thumbnail.toDataURL() })),
-  }
-})
 
 // ============ страница подключения ============
 
@@ -582,7 +639,7 @@ if (!app.requestSingleInstanceLock()) {
   app.setAppUserModelId('ru.nuntius.app')
   app.whenReady().then(() => {
     config = loadConfig()
-    nativeTheme.themeSource = 'dark' // тёмные системные меню и рамка окна выбора экрана
+    nativeTheme.themeSource = 'dark' // тёмные системные меню
     Menu.setApplicationMenu(null)
     setupPermissions()
     createWindow()
