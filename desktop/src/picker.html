@@ -2,165 +2,764 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'self'"
+    />
     <title>Что показать?</title>
-    <link rel="stylesheet" href="style.css" />
+    <!-- Выбор экрана для демонстрации. Это не отдельное окно: слой поверх сайта внутри окна Nuntius
+         (main.js → pickSource), фон прозрачный — под затемнением виден сам Nuntius. -->
     <style>
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 400;
+        font-display: swap;
+        src: url(fonts/inter-cyrillic-400-normal.woff2) format('woff2');
+        unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 400;
+        font-display: swap;
+        src: url(fonts/inter-latin-400-normal.woff2) format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+          U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 600;
+        font-display: swap;
+        src: url(fonts/inter-cyrillic-600-normal.woff2) format('woff2');
+        unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 600;
+        font-display: swap;
+        src: url(fonts/inter-latin-600-normal.woff2) format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+          U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Unbounded';
+        font-weight: 700;
+        font-display: swap;
+        src: url(fonts/unbounded-cyrillic-700-normal.woff2) format('woff2');
+        unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+      }
+      @font-face {
+        font-family: 'Unbounded';
+        font-weight: 700;
+        font-display: swap;
+        src: url(fonts/unbounded-latin-700-normal.woff2) format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+          U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+
+      :root {
+        --text: #fff;
+        --text-1: #e6e6e6;
+        --text-2: #b0b0b0;
+        --text-3: #6e6e6e;
+        --line: rgba(255, 255, 255, 0.1);
+        --line-2: rgba(255, 255, 255, 0.18);
+        --line-3: rgba(255, 255, 255, 0.34);
+        --hover: rgba(255, 255, 255, 0.07);
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --font: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+        --display: 'Unbounded', var(--font);
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
       body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        color: var(--text-1);
+        font: 14px/1.4 var(--font);
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        cursor: default;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+      }
+      :focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 2px;
+      }
+
+      /* затемнение поверх Nuntius: щелчок по нему — «Отмена» */
+      .backdrop {
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.78));
+        animation: fade 0.22s ease both;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+
+      .card {
+        position: relative;
         display: flex;
         flex-direction: column;
-        place-items: stretch;
-        padding: 20px 22px;
-        gap: 14px;
+        width: min(880px, 100%);
+        max-height: 100%;
+        min-height: 0;
+        padding: 22px 22px 18px;
+        border-radius: 20px;
+        border: 1px solid var(--line-2);
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(5, 5, 5, 0.98));
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.6),
+          0 30px 90px rgba(0, 0, 0, 0.85),
+          0 0 48px rgba(255, 255, 255, 0.07),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        animation: rise 0.36s var(--ease-out) both;
       }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px) scale(0.97);
+        }
+      }
+
       header {
         display: flex;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 16px;
       }
-      header h1 {
-        margin: 0;
-        flex: 1;
-        font-size: 20px;
-      }
-      .tabs {
-        display: flex;
-        gap: 6px;
-      }
-      .tabs button {
-        height: 34px;
-        padding: 0 14px;
-        border-radius: 10px;
-        background: transparent;
-        color: #aaa;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        font-size: 13.5px;
-      }
-      .tabs button.on {
+      .mark {
+        flex: none;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 13px;
         background: #fff;
         color: #000;
+        box-shadow: 0 0 24px rgba(255, 255, 255, 0.28);
       }
+      .head-text {
+        flex: 1;
+        min-width: 0;
+      }
+      h1 {
+        margin: 1px 0 4px;
+        font: 700 19px/1.2 var(--display);
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+      .lead {
+        margin: 0;
+        color: var(--text-2);
+        font-size: 13.5px;
+      }
+      .x {
+        flex: none;
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        margin: -4px -6px 0 0;
+        border-radius: 11px;
+        color: var(--text-2);
+        transition:
+          background-color 0.15s ease,
+          color 0.15s ease;
+      }
+      .x:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+
+      /* вкладки «Экраны / Окна» — переключатель с ползущей подложкой */
+      .tabs {
+        position: relative;
+        display: inline-grid;
+        grid-template-columns: 1fr 1fr;
+        align-self: flex-start;
+        margin-bottom: 14px;
+        padding: 4px;
+        border-radius: 13px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .tabs__pill {
+        position: absolute;
+        top: 4px;
+        bottom: 4px;
+        left: 4px;
+        width: calc(50% - 4px);
+        border-radius: 9px;
+        background: #fff;
+        box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+        transition: translate 0.32s var(--ease-out);
+      }
+      .tabs.is-window .tabs__pill {
+        translate: 100% 0;
+      }
+      .tab {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 18px;
+        border-radius: 9px;
+        font-weight: 600;
+        font-size: 13.5px;
+        color: var(--text-2);
+        transition: color 0.2s ease;
+      }
+      .tab[aria-selected='true'] {
+        color: #000;
+      }
+      .tab:not([aria-selected='true']):hover {
+        color: var(--text);
+      }
+      .tab__count {
+        min-width: 20px;
+        height: 18px;
+        padding: 0 6px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.1);
+        font-size: 11px;
+        line-height: 18px;
+        text-align: center;
+      }
+      .tab[aria-selected='true'] .tab__count {
+        background: rgba(0, 0, 0, 0.1);
+      }
+
+      /* сетка превью */
       .grid {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 12px;
         align-content: start;
-        padding: 2px;
+        margin: 0 -8px;
+        padding: 4px 8px 8px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
       }
       .src {
+        position: relative;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        height: auto;
-        padding: 8px;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.03);
-        color: #ddd;
+        gap: 9px;
+        padding: 8px 8px 10px;
+        border-radius: 15px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.025);
         text-align: left;
-        font-weight: 500;
+        animation: pop 0.4s var(--ease-out) both;
+        transition:
+          border-color 0.15s ease,
+          background-color 0.15s ease,
+          box-shadow 0.2s ease,
+          transform 0.2s var(--ease-out);
       }
-      .src img {
-        width: 100%;
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+      }
+      .src:hover {
+        border-color: var(--line-3);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .src:active {
+        transform: scale(0.985);
+      }
+      .src.is-on {
+        border-color: #fff;
+        background: rgba(255, 255, 255, 0.07);
+        box-shadow:
+          0 0 0 1px #fff,
+          0 0 28px rgba(255, 255, 255, 0.22);
+      }
+      .src__thumb {
+        position: relative;
+        display: grid;
+        place-items: center;
         aspect-ratio: 16 / 9;
-        object-fit: contain;
-        border-radius: 8px;
-        background: #0a0a0a;
+        overflow: hidden;
+        border-radius: 10px;
+        background: #0b0b0b;
+        color: var(--text-3);
       }
-      .src span {
+      .src__thumb img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .src__check {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #fff;
+        color: #000;
+        box-shadow: 0 0 14px rgba(255, 255, 255, 0.5);
+        opacity: 0;
+        scale: 0.6;
+        transition:
+          opacity 0.15s ease,
+          scale 0.3s var(--ease-spring);
+      }
+      .src.is-on .src__check {
+        opacity: 1;
+        scale: 1;
+      }
+      .src__name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 0 2px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .src__name img,
+      .src__name svg {
+        flex: none;
+        width: 16px;
+        height: 16px;
+      }
+      .src__name span {
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        font-size: 13px;
       }
-      .src.on {
-        border-color: #fff;
-        box-shadow: 0 0 0 2px #fff, 0 0 30px rgba(255, 255, 255, 0.3);
+
+      /* пока превью грузятся — мерцающие заготовки */
+      .ghost {
+        aspect-ratio: 16 / 11;
+        border-radius: 15px;
+        border: 1px solid var(--line);
+        background: linear-gradient(100deg, rgba(255, 255, 255, 0.02) 30%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.02) 70%) 0 0 / 300% 100%;
+        animation: shimmer 1.4s linear infinite;
       }
+      @keyframes shimmer {
+        to {
+          background-position: -150% 0;
+        }
+      }
+      .empty {
+        grid-column: 1 / -1;
+        padding: 46px 12px;
+        text-align: center;
+        color: var(--text-3);
+      }
+
       footer {
         display: flex;
         align-items: center;
         gap: 10px;
+        margin-top: 14px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
       }
-      label {
+      .spacer {
         flex: 1;
-        display: flex;
+      }
+
+      /* «Со звуком системы» — переключатель как в настройках Nuntius */
+      .switch {
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        color: #bbb;
-        font-size: 14px;
+        gap: 10px;
+        color: var(--text-2);
+        font-size: 13.5px;
         cursor: pointer;
       }
-      label input {
-        width: 18px;
-        height: 18px;
-        accent-color: #fff;
+      .switch:hover {
+        color: var(--text);
+      }
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .switch__track {
+        position: relative;
+        width: 38px;
+        height: 22px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.14);
+        transition:
+          background-color 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+      .switch__knob {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #8a8a8a;
+        transition:
+          translate 0.3s var(--ease-spring),
+          background-color 0.2s ease;
+      }
+      .switch input:checked + .switch__track {
+        background: #fff;
+        box-shadow: 0 0 16px rgba(255, 255, 255, 0.3);
+      }
+      .switch input:checked + .switch__track .switch__knob {
+        translate: 16px 0;
+        background: #000;
+      }
+      .switch input:focus-visible + .switch__track {
+        outline: 2px solid var(--text);
+        outline-offset: 2px;
+      }
+
+      .btn {
+        height: 40px;
+        padding: 0 18px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 14px;
+        transition:
+          background-color 0.15s ease,
+          border-color 0.15s ease,
+          box-shadow 0.2s ease,
+          opacity 0.2s ease,
+          transform 0.15s ease;
+      }
+      .btn:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+      .btn--ghost {
+        border: 1px solid var(--line-2);
+        color: var(--text-1);
+      }
+      .btn--ghost:hover {
+        border-color: var(--line-3);
+        background: var(--hover);
+      }
+      .btn--primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        color: #000;
+      }
+      .btn--primary:hover:not(:disabled) {
+        box-shadow: 0 0 26px rgba(255, 255, 255, 0.4);
+      }
+      .btn--primary:disabled {
+        opacity: 0.35;
+      }
+      kbd {
+        font: 600 10.5px/1 var(--font);
+        padding: 3px 5px;
+        border-radius: 5px;
+        background: rgba(0, 0, 0, 0.1);
+      }
+
+      @media (max-height: 520px) {
+        body {
+          padding: 12px;
+        }
+        header {
+          margin-bottom: 10px;
+        }
+        .lead {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Что показать?</h1>
-      <div class="tabs">
-        <button id="t-screen" class="on" type="button">Экраны</button>
-        <button id="t-window" type="button">Окна</button>
+    <div class="backdrop" id="backdrop"></div>
+    <section class="card" role="dialog" aria-modal="true" aria-labelledby="title">
+      <header>
+        <span class="mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3" />
+            <path d="M8 21h8M12 17v4M17 8l5-5M17 3h5v5" />
+          </svg>
+        </span>
+        <div class="head-text">
+          <h1 id="title">Что показать?</h1>
+          <p class="lead">Выбери экран или окно — друзья в звонке увидят его вживую</p>
+        </div>
+        <button class="x" id="close" type="button" aria-label="Закрыть">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </header>
+
+      <div class="tabs" id="tabs" role="tablist" aria-label="Что показать">
+        <span class="tabs__pill" aria-hidden="true"></span>
+        <button class="tab" id="t-screen" type="button" role="tab" aria-selected="true">Экраны <span class="tab__count" id="c-screen">·</span></button>
+        <button class="tab" id="t-window" type="button" role="tab" aria-selected="false">Окна <span class="tab__count" id="c-window">·</span></button>
       </div>
-    </header>
-    <div class="grid" id="grid"></div>
-    <footer>
-      <label id="audio-wrap"><input type="checkbox" id="audio" checked /> Со звуком компьютера</label>
-      <button class="ghost" id="cancel" type="button">Отмена</button>
-      <button id="share" type="button" disabled>Поделиться</button>
-    </footer>
+
+      <div class="grid" id="grid" role="listbox" aria-label="Источники"></div>
+
+      <footer>
+        <label class="switch" id="audio-wrap" hidden>
+          <input type="checkbox" id="audio" checked />
+          <span class="switch__track"><span class="switch__knob"></span></span>
+          Со звуком системы
+        </label>
+        <span class="spacer"></span>
+        <button class="btn btn--ghost" id="cancel" type="button">Отмена</button>
+        <button class="btn btn--primary" id="share" type="button" disabled>Поделиться <kbd>Enter</kbd></button>
+      </footer>
+    </section>
+
     <script>
       const $ = (id) => document.getElementById(id)
       const api = window.nuntiusDesktop
+      const ICON = {
+        screen:
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+        window:
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>',
+        check:
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+      }
+      const AUDIO_KEY = 'nuntius.picker.audio'
+
       let all = []
       let kind = 'screen'
       let chosen = null
-      const draw = () => {
-        $('t-screen').classList.toggle('on', kind === 'screen')
-        $('t-window').classList.toggle('on', kind === 'window')
-        $('grid').replaceChildren(
-          ...all
-            .filter((s) => s.kind === kind)
-            .map((s) => {
-              const b = document.createElement('button')
-              b.type = 'button'
-              b.className = 'src' + (s.id === chosen ? ' on' : '')
-              const img = document.createElement('img')
-              img.src = s.thumbnail
-              const name = document.createElement('span')
-              name.textContent = s.name
-              b.append(img, name)
-              b.onclick = () => {
-                chosen = s.id
-                $('share').disabled = false
-                draw()
-              }
-              b.ondblclick = share
-              return b
-            }),
-        )
+      let loaded = false
+      let done = false
+      /** Кнопки источников по id — обновляем превью на месте, без перерисовки (не мигает и не сбивает фокус) */
+      const tiles = new Map()
+
+      try {
+        const saved = localStorage.getItem(AUDIO_KEY)
+        if (saved !== null) $('audio').checked = saved === '1'
+      } catch {}
+      $('audio').onchange = () => {
+        try {
+          localStorage.setItem(AUDIO_KEY, $('audio').checked ? '1' : '0')
+        } catch {}
       }
-      const share = () => chosen && api.choose({ id: chosen, audio: $('audio').checked })
-      $('t-screen').onclick = () => ((kind = 'screen'), draw())
-      $('t-window').onclick = () => ((kind = 'window'), draw())
-      $('cancel').onclick = () => api.choose(null)
-      $('share').onclick = share
-      addEventListener('keydown', (e) => e.key === 'Escape' && api.choose(null))
-      api.sources().then((res) => {
-        all = res.sources
-        $('audio-wrap').hidden = !res.audio
-        const screens = all.filter((s) => s.kind === 'screen')
-        if (screens.length === 1) {
-          chosen = screens[0].id
-          $('share').disabled = false
+
+      const finish = (value) => {
+        if (done) return
+        done = true
+        api.choose(value)
+      }
+      const cancel = () => finish(null)
+      const share = () => chosen && finish({ id: chosen, audio: $('audio').checked })
+
+      const select = (id, focus = false) => {
+        chosen = id
+        $('share').disabled = !chosen
+        for (const [key, b] of tiles) {
+          b.classList.toggle('is-on', key === chosen)
+          b.setAttribute('aria-selected', String(key === chosen))
         }
+        if (focus) tiles.get(id)?.focus()
+      }
+
+      const makeTile = (s, i) => {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'src'
+        b.setAttribute('role', 'option')
+        b.style.animationDelay = `${Math.min(i, 8) * 30}ms`
+        const thumb = document.createElement('span')
+        thumb.className = 'src__thumb'
+        thumb.innerHTML = ICON[s.kind].replace('<svg', '<svg width="34" height="34"')
+        const img = document.createElement('img')
+        img.alt = ''
+        img.hidden = !s.thumbnail
+        if (s.thumbnail) img.src = s.thumbnail
+        thumb.append(img)
+        const check = document.createElement('span')
+        check.className = 'src__check'
+        check.innerHTML = ICON.check
+        const name = document.createElement('span')
+        name.className = 'src__name'
+        if (s.icon) {
+          const ic = document.createElement('img')
+          ic.alt = ''
+          ic.src = s.icon
+          name.append(ic)
+        } else name.insertAdjacentHTML('beforeend', ICON[s.kind])
+        const label = document.createElement('span')
+        label.textContent = s.name
+        name.append(label)
+        b.title = s.name
+        b.append(thumb, check, name)
+        b.onclick = () => select(s.id)
+        b.ondblclick = () => (select(s.id), share())
+        b._img = img
+        return b
+      }
+
+      const draw = () => {
+        const list = all.filter((s) => s.kind === kind)
+        $('tabs').classList.toggle('is-window', kind === 'window')
+        $('t-screen').setAttribute('aria-selected', String(kind === 'screen'))
+        $('t-window').setAttribute('aria-selected', String(kind === 'window'))
+        $('c-screen').textContent = loaded ? all.filter((s) => s.kind === 'screen').length : '·'
+        $('c-window').textContent = loaded ? all.filter((s) => s.kind === 'window').length : '·'
+        tiles.clear()
+        if (!loaded) {
+          $('grid').replaceChildren(...Array.from({ length: 3 }, () => Object.assign(document.createElement('div'), { className: 'ghost' })))
+          return
+        }
+        if (!list.length) {
+          const empty = Object.assign(document.createElement('div'), { className: 'empty' })
+          empty.textContent = kind === 'screen' ? 'Экраны не нашлись' : 'Открытых окон не нашлось'
+          $('grid').replaceChildren(empty)
+          return
+        }
+        $('grid').replaceChildren(...list.map((s, i) => {
+          const b = makeTile(s, i)
+          tiles.set(s.id, b)
+          return b
+        }))
+        select(list.some((s) => s.id === chosen) ? chosen : null)
+      }
+
+      const setKind = (k) => {
+        if (kind === k) return
+        kind = k
         draw()
+      }
+
+      /** Свежие превью — раз в пару секунд, на месте; новые и закрытые окна — перерисовкой */
+      const refresh = async () => {
+        if (done) return
+        let res
+        try {
+          res = await api.sources()
+        } catch {
+          return
+        }
+        if (done) return
+        const first = !loaded
+        const before = all.filter((s) => s.kind === kind).map((s) => s.id).join('|')
+        all = res.sources || []
+        loaded = true
+        if (first) {
+          $('audio-wrap').hidden = !res.audio
+          const screens = all.filter((s) => s.kind === 'screen')
+          // один экран — сразу выбран: осталось нажать «Поделиться» (или Enter)
+          if (screens.length === 1) chosen = screens[0].id
+          // экранов нет совсем (бывает в виртуальных машинах) — сразу окна
+          if (!screens.length && all.length) kind = 'window'
+        }
+        const after = all.filter((s) => s.kind === kind).map((s) => s.id).join('|')
+        if (first || before !== after) {
+          if (chosen && !all.some((s) => s.id === chosen)) chosen = null
+          draw()
+          if (first) (tiles.get(chosen) || tiles.values().next().value || $('cancel')).focus()
+        } else {
+          for (const s of all) {
+            const b = tiles.get(s.id)
+            if (b && s.thumbnail) {
+              b._img.src = s.thumbnail
+              b._img.hidden = false
+            }
+          }
+          $('c-screen').textContent = all.filter((s) => s.kind === 'screen').length
+          $('c-window').textContent = all.filter((s) => s.kind === 'window').length
+        }
+      }
+
+      $('t-screen').onclick = () => setKind('screen')
+      $('t-window').onclick = () => setKind('window')
+      $('cancel').onclick = cancel
+      $('close').onclick = cancel
+      $('backdrop').onclick = cancel
+      $('share').onclick = share
+
+      // Esc — отмена, Enter — поделиться выбранным, стрелки — по превью, Tab не выпускает за пределы карточки
+      addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          return cancel()
+        }
+        const onTile = document.activeElement?.classList?.contains('src')
+        if (e.key === 'Enter') {
+          // Enter на превью — выбрать и сразу поделиться; на кнопках — как обычно
+          if (onTile || document.activeElement === document.body || !document.activeElement) {
+            e.preventDefault()
+            if (onTile) select([...tiles].find(([, b]) => b === document.activeElement)?.[0] ?? chosen)
+            share()
+          }
+          return
+        }
+        if (onTile && ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+          e.preventDefault()
+          const list = [...tiles.values()]
+          const i = list.indexOf(document.activeElement)
+          const cols = Math.max(1, getComputedStyle($('grid')).gridTemplateColumns.split(' ').length)
+          const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key]
+          const next = list[Math.max(0, Math.min(list.length - 1, i + step))]
+          if (next) {
+            next.focus()
+            select([...tiles].find(([, b]) => b === next)[0])
+          }
+          return
+        }
+        if (e.key === 'Tab') {
+          const focusable = [...document.querySelectorAll('.card button:not(:disabled), .card input')].filter((el) => !el.closest('[hidden]'))
+          const i = focusable.indexOf(document.activeElement)
+          e.preventDefault()
+          focusable[(i + (e.shiftKey ? focusable.length - 1 : 1) + focusable.length) % focusable.length]?.focus()
+        }
       })
+
+      draw()
+      void refresh()
+      setInterval(refresh, 2000)
     </script>
   </body>
 </html>
