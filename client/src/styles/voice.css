@@ -611,14 +611,11 @@
   top: calc(100% + 8px);
 }
 
-/* Щелчок по плитке — крупно, по крупной — обратно в сетку (как в Discord), двойной — во весь экран */
+/* Щелчок по плитке — крупно, по крупной — обратно в сетку (как в Discord), двойной — во весь экран.
+   Курсор — «пальчик», как у любой кнопки, а не лупа */
 .stage .tile {
-  cursor: zoom-in;
+  cursor: pointer;
   touch-action: manipulation;
-}
-
-.stage .tile.tile--focused {
-  cursor: zoom-out;
 }
 
 .stage .tile:fullscreen {

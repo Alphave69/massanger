@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'VIEW_CHANNEL',
   'SEND_MESSAGES',
   'MANAGE_MESSAGES',
+  'MENTION_EVERYONE',
   'CONNECT',
   'SPEAK',
   'VIDEO',
@@ -31,7 +32,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 /** Права, которые можно выставить отдельному каналу (остальные действуют на весь сервер) */
-export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
+export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
 
 /** Что по умолчанию может любой участник (@everyone) */
 export const DEFAULT_EVERYONE: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'CREATE_INVITE']
@@ -177,6 +178,7 @@ const NO_PERMISSION: Record<Permission, string> = {
   VIEW_CHANNEL: 'Нет доступа к этому каналу',
   SEND_MESSAGES: 'Нет прав писать в этом канале',
   MANAGE_MESSAGES: 'Нет права удалять чужие сообщения',
+  MENTION_EVERYONE: 'Нет права упоминать @everyone и @here',
   CONNECT: 'Нет доступа к этому каналу',
   SPEAK: 'Нет права говорить в этом канале',
   VIDEO: 'Нет прав на видео в этом канале',

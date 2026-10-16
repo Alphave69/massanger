@@ -23,6 +23,8 @@ export interface MenuState {
   selection: string
   /** Откуда открыли: правый клик, кнопки у сообщения или «+» у реакций (подсвечиваем нажатую кнопку) */
   source: 'context' | 'toolbar' | 'reactions'
+  /** Ссылка под курсором (пальцем) — «Открыть ссылку» и «Копировать ссылку» */
+  link?: string
 }
 
 interface MsgUiState {
@@ -49,10 +51,10 @@ export const msgUi = {
   reset() {
     useMsgUi.setState({ menu: null, replies: {}, editing: null, forward: null, flash: null })
   },
-  openMenu(message: Message, anchor: MenuAnchor, mode: MenuState['mode'], source: MenuState['source'], selection = '') {
+  openMenu(message: Message, anchor: MenuAnchor, mode: MenuState['mode'], source: MenuState['source'], selection = '', link = '') {
     const active = document.activeElement
     focusBefore = active instanceof HTMLElement && active !== document.body ? active : null
-    useMsgUi.setState({ menu: { seq: ++menuSeq, messageId: message.id, channelId: message.channelId, anchor, mode, source, selection } })
+    useMsgUi.setState({ menu: { seq: ++menuSeq, messageId: message.id, channelId: message.channelId, anchor, mode, source, selection, ...(link ? { link } : {}) } })
   },
   /** restoreFocus — закрыли по Esc: фокус туда, где он был до меню */
   closeMenu(restoreFocus = false) {

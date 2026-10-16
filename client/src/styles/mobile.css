@@ -404,6 +404,21 @@
     display: none;
   }
 
+  /* «полегче» — по краям поуже, крестик крупнее под палец */
+  .slow-warn {
+    margin: 0 2px 8px;
+  }
+
+  .slow-warn__close {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* полоска упоминания — ближе к пузырю */
+  .msg.is-mention::before {
+    left: -6px;
+  }
+
   /* «печатает…» — плашкой над полем ввода, а не отдельной строкой под ним */
   .chat > .typing {
     order: 1;

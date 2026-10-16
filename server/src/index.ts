@@ -144,7 +144,7 @@ const canWriteDm = (fromId: string, to: store.User, dmId?: string) =>
 /** Собеседник в 1:1 личке */
 const otherIn = (dm: store.Dm, userId: string) => store.findUser(dm.memberIds.find((id) => id !== userId) ?? '')
 
-const messages = createMessages({ io, badges, dmView, canWriteDm, emitTo })
+const messages = createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnline: (id) => isPresent(id) })
 
 const voice = createVoice(io, {
   canCall: (fromId, dm) => {
@@ -183,6 +183,9 @@ function presenceMap() {
 }
 
 const broadcastPresence = () => io.emit('presence', presenceMap())
+
+/** В сети и не невидимка — для @here */
+const isPresent = (userId: string) => (socketCount.get(userId) ?? 0) > 0 && store.findUser(userId)?.status !== 'invisible'
 
 // ============ REST ============
 

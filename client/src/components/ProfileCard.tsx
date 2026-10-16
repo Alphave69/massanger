@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useIsMobile } from '../lib/mobile'
 import { uiZoom } from '../lib/settings'
+import { useSheetSwipe } from '../lib/swipe'
 import { useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
 import { ProfileView } from './ProfileView'
@@ -13,6 +15,8 @@ export function ProfileCard() {
   const view = useChat((s) => s.view)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  // телефон: карточка — шторкой снизу, смахивается вниз
+  useSheetSwipe(ref, ui.hideProfile, useIsMobile() && Boolean(profile))
 
   // Сменился экран — карточку закрываем
   useEffect(() => ui.hideProfile(), [view])

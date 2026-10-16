@@ -9,8 +9,11 @@ import { useLongPress } from '../lib/mobile'
 import { joinVoice, useVoice, watchScreen } from '../lib/voice'
 import { useVoiceMenu, voiceMenu } from '../lib/voiceMenu'
 import { Avatar } from './Avatar'
+import { plural } from '../lib/format'
 import { UserBar } from './UserBar'
 import { VoicePanel } from './voice/VoicePanel'
+
+const TIMES: [string, string, string] = ['раз', 'раза', 'раз']
 
 const NO_MEMBERS: VoiceMember[] = []
 
@@ -18,6 +21,7 @@ export function GuildSidebar({ guildId, onLogout }: { guildId: string; onLogout:
   const guild = useChat((s) => s.guilds.find((g) => g.id === guildId))
   const activeId = useChat((s) => activeChannelId(s))
   const unread = useChat((s) => s.unread)
+  const pings = useChat((s) => s.mentions)
   const presence = useChat((s) => s.presence)
   const meId = useChat((s) => s.me?.id)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -82,6 +86,7 @@ export function GuildSidebar({ guildId, onLogout }: { guildId: string; onLogout:
         <ChannelGroup title="Текстовые каналы" onAdd={canChannels ? () => ui.openChannelModal({ mode: 'create', guildId: guild.id, type: 'text' }) : undefined}>
           {text.map((c) => {
             const count = unread[c.id] ?? 0
+            const pinged = c.id !== activeId ? (pings[c.id] ?? 0) : 0
             return (
               <div key={c.id} className={`channel${c.id === activeId ? ' is-active' : ''}${count ? ' has-unread' : ''}`}>
                 <button
@@ -94,7 +99,13 @@ export function GuildSidebar({ guildId, onLogout }: { guildId: string; onLogout:
                   <ChannelGlyph guild={guild} channel={c} />
                   <span className="truncate">{c.name}</span>
                 </button>
-                {count > 0 && c.id !== activeId && <span className="channel__dot" />}
+                {pinged > 0 ? (
+                  <span className="mention-badge" data-tip={pinged === 1 ? 'Тебя упомянули' : `Тебя упомянули ${plural(pinged, TIMES)}`}>
+                    @{pinged > 1 ? pinged : ''}
+                  </span>
+                ) : (
+                  count > 0 && c.id !== activeId && <span className="channel__dot" />
+                )}
                 {canTune && <ChannelGear guild={guild} channel={c} />}
               </div>
             )

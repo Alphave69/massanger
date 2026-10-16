@@ -106,6 +106,7 @@ export const PERMISSIONS = [
   'VIEW_CHANNEL',
   'SEND_MESSAGES',
   'MANAGE_MESSAGES',
+  'MENTION_EVERYONE',
   'CONNECT',
   'SPEAK',
   'VIDEO',
@@ -116,7 +117,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 /** Права, которые можно настроить отдельному каналу */
-export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
+export const CHANNEL_PERMISSIONS: Permission[] = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'MANAGE_MESSAGES', 'MENTION_EVERYONE', 'CONNECT', 'SPEAK', 'VIDEO', 'MUTE_MEMBERS', 'MOVE_MEMBERS']
 
 export interface Role {
   id: string
@@ -230,6 +231,16 @@ export interface Message {
   forwarded?: Forwarded
   /** Когда текст меняли в последний раз */
   editedAt?: number
+  /** Кого упомянули (проверено сервером): в тексте это <@id>, <@&idРоли>, @everyone, @here */
+  mentions?: Mentions
+}
+
+/** Упоминания в сообщении. here — кто был в сети, когда написали @here */
+export interface Mentions {
+  users: string[]
+  roles: string[]
+  everyone: boolean
+  here?: string[]
 }
 
 // ============ админка ============

@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
-import { Check, Copy, Forward, IdCard, Pencil, Plus, Reply, Trash2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, Forward, IdCard, Link2, Pencil, Plus, Reply, Trash2 } from 'lucide-react'
 import type { Message } from '../../lib/api'
 import { copyText, deleteMessage, findLoaded, messageRights, msgUi, QUICK_REACTIONS, rememberEmoji, useMsgUi, type MenuState } from '../../lib/msgActions'
 import { reactToMessage } from '../../lib/realtime'
+import { readable } from '../../lib/mentions'
 import { uiZoom, useSettings } from '../../lib/settings'
 import { activeChannelId, useChat } from '../../lib/store'
 import { useUi } from '../../lib/ui'
 import { useIsMobile } from '../../lib/mobile'
+import { useSheetSwipe } from '../../lib/swipe'
 import { EmojiPicker } from './EmojiPicker'
 
 /**
@@ -52,13 +54,15 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
   const [pos, setPos] = useState<{ left: number; top: number; origin: string } | null>(null)
   const [armed, setArmed] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState<'text' | 'id' | null>(null)
+  const [copied, setCopied] = useState<'text' | 'id' | 'link' | null>(null)
   const rights = useChat(useShallow((s) => messageRights(s, message)))
   const meId = useChat((s) => s.me?.id ?? '')
   const devMode = useSettings((s) => s.devMode)
   const sheet = useIsMobile()
   const sheetRef = useRef(sheet)
   sheetRef.current = sheet
+  // телефон: шторку смахивают вниз, затемнение бледнеет вместе с ней
+  useSheetSwipe(popRef, () => msgUi.closeMenu(), sheet, () => popRef.current?.parentElement?.querySelector<HTMLElement>('.msg-sheet-backdrop'))
 
   const isMine = (emoji: string) => Boolean(message.reactions?.[emoji]?.includes(meId))
 
@@ -154,8 +158,9 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
     msgUi.closeMenu(true)
   }
 
-  const copy = async (what: 'text' | 'id') => {
-    const ok = await copyText(what === 'id' ? message.id : menu.selection || message.content)
+  const copy = async (what: 'text' | 'id' | 'link') => {
+    const text = what === 'id' ? message.id : what === 'link' ? (menu.link ?? '') : menu.selection || readable(message.content, message.channelId)
+    const ok = await copyText(text)
     if (!ok) return msgUi.closeMenu(true)
     // коротко показываем «Скопировано» — и закрываем
     setCopied(what)
@@ -266,6 +271,21 @@ function MenuPop({ menu, message }: { menu: MenuState; message: Message }) {
             </div>
           )}
           <div className="msg-menu__list">
+            {menu.link && (
+              <>
+                {item('Открыть ссылку', <ExternalLink size={16} />, () => {
+                  window.open(menu.link, '_blank', 'noopener,noreferrer')
+                  msgUi.closeMenu()
+                })}
+                {item(
+                  copied === 'link' ? 'Скопировано' : 'Копировать ссылку',
+                  copied === 'link' ? <Check size={16} /> : <Link2 size={16} />,
+                  () => void copy('link'),
+                  copied === 'link' ? ' is-done' : '',
+                )}
+                <div className="msg-menu__sep" role="separator" />
+              </>
+            )}
             {rights.canReply &&
               item('Ответить', <Reply size={16} />, () => {
                 msgUi.closeMenu()

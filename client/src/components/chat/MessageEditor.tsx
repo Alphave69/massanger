@@ -2,12 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import type { Message } from '../../lib/api'
 import { focusComposer, msgUi } from '../../lib/msgActions'
 import { editMessage } from '../../lib/realtime'
+import { mentionables, readable, toTokens } from '../../lib/mentions'
+import { useChat } from '../../lib/store'
 
 const MAX_LENGTH = 4000
 
 /** Правка прямо в пузыре: Enter — сохранить, Shift+Enter — новая строка, Esc — отмена */
 export function MessageEditor({ message }: { message: Message }) {
-  const [value, setValue] = useState(message.content)
+  // метки упоминаний в поле — читаемыми «@логин» / «@Роль», при сохранении — обратно
+  const [value, setValue] = useState(() => readable(message.content, message.channelId, 'login'))
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -34,8 +37,9 @@ export function MessageEditor({ message }: { message: Message }) {
   }
 
   const save = async () => {
-    const content = value.trim()
-    if (busy || !content) return
+    const typed = value.trim()
+    if (busy || !typed) return
+    const content = toTokens(typed, mentionables(useChat.getState(), message.channelId))
     if (content === message.content) return stop()
     setBusy(true)
     const ok = await editMessage(message.id, content)

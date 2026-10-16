@@ -175,6 +175,16 @@ export interface Message {
   forwarded?: Forwarded
   /** Когда текст меняли в последний раз */
   editedAt?: number
+  /** Кого упомянули (проверено при отправке): в тексте это <@id>, <@&idРоли>, @everyone, @here */
+  mentions?: Mentions
+}
+
+/** Упоминания в сообщении. here — кто был в сети, когда написали @here */
+export interface Mentions {
+  users: string[]
+  roles: string[]
+  everyone: boolean
+  here?: string[]
 }
 
 export const REPLY_SNIPPET = 200
@@ -551,7 +561,7 @@ export function addMessage(
   authorId: string,
   content: string,
   flavor?: MessageFlavor,
-  extra: Pick<Message, 'replyTo' | 'forwarded'> = {},
+  extra: Pick<Message, 'replyTo' | 'forwarded' | 'mentions'> = {},
 ): Message {
   const message: Message = {
     id: id(),
@@ -562,6 +572,7 @@ export function addMessage(
     ...(flavor ? { flavor } : {}),
     ...(extra.replyTo ? { replyTo: extra.replyTo } : {}),
     ...(extra.forwarded ? { forwarded: extra.forwarded } : {}),
+    ...(extra.mentions ? { mentions: extra.mentions } : {}),
   }
   data.messages.push(message)
   const dm = findDm(channelId)
@@ -600,9 +611,11 @@ export function toggleReaction(message: Message, emoji: string, userId: string):
   return 'added'
 }
 
-export function editMessage(message: Message, content: string) {
+export function editMessage(message: Message, content: string, mentions?: Mentions) {
   message.content = content
   message.editedAt = Date.now()
+  if (mentions) message.mentions = mentions
+  else delete message.mentions
   save()
 }
 

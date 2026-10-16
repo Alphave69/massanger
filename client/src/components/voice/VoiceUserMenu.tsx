@@ -4,6 +4,7 @@ import { Check, MessageCircle, Mic, MicOff, MonitorUp, PhoneOff, Shield, UserMin
 import { openDmWith } from '../../lib/actions'
 import { api, ApiError } from '../../lib/api'
 import { useIsMobile } from '../../lib/mobile'
+import { useSheetSwipe } from '../../lib/swipe'
 import { can, guildOfChannel, outranks } from '../../lib/perms'
 import { uiZoom } from '../../lib/settings'
 import { chat, useChat } from '../../lib/store'
@@ -58,6 +59,8 @@ function MenuPop({ menu, sheet }: { menu: VoiceMenuState; sheet: boolean }) {
   const screenMuted = useVoice((s) => Boolean(s.screenMutes[userId]))
   const isMe = userId === meId
   const name = user?.displayName ?? 'участник'
+  // телефон: шторку смахивают вниз, затемнение бледнеет вместе с ней
+  useSheetSwipe(popRef, () => voiceMenu.close(), sheet, () => popRef.current?.parentElement?.querySelector<HTMLElement>('.vmenu-backdrop'))
 
   // Человек вышел из голоса — меню о нём больше не нужно (себя показываем и до подтверждения входа)
   const gone = !isMe && !member

@@ -3,8 +3,9 @@ import * as store from './store.js'
 import { on, reply } from './safe.js'
 import { runCommand } from './commands.js'
 import { hasChannelPermission } from './permissions.js'
+import { parseMentions } from './mentions.js'
+import { createLimiter, slowDown } from './spam.js'
 import type { Badges } from './badges.js'
-import { RateLimiter } from './ratelimit.js'
 
 /**
  * Сообщения в реальном времени: отправить (в том числе ответом), реакции, правка, пересылка.
@@ -18,6 +19,8 @@ interface Deps {
   /** Может ли человек писать в личку другому (с учётом приватности) */
   canWriteDm: (fromId: string, to: store.User, dmId?: string) => boolean
   emitTo: (userIds: string[], event: string, payload: unknown, except?: Socket) => void
+  /** В сети ли человек сейчас (для @here) */
+  isOnline: (userId: string) => boolean
 }
 
 const MAX_LENGTH = 4000
@@ -28,9 +31,15 @@ const validEmoji = (emoji: string) => emoji.length > 0 && emoji.length <= MAX_EM
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
 
-/** Антиспам: не больше 5 сообщений за 4 секунды от одного человека (во все каналы вместе) */
-const sendLimit = new RateLimiter(5, 4000)
-const SLOW_DOWN = ['Воу-воу, полегче, амиго 🤠', 'Клавиатура дымится — дай ей остыть', 'Ты печатаешь быстрее, чем мы читаем']
+/**
+ * Анти-спам, общий на все каналы: больше 5 сообщений за 4 секунды — пауза 2 с,
+ * попался снова в течение полуминуты — пауза дольше (до 10 с). Сообщения во время паузы не доходят.
+ * Реакции, правки и пересылки ограничены мягче.
+ */
+const sendLimit = createLimiter({ max: 5, windowMs: 4000, cooldowns: [2000, 3000, 5000, 8000, 10_000], forgiveMs: 30_000 })
+const reactLimit = createLimiter({ max: 12, windowMs: 4000, cooldowns: [1500, 3000, 5000], forgiveMs: 30_000 })
+const editLimit = createLimiter({ max: 6, windowMs: 5000, cooldowns: [2000, 4000, 6000], forgiveMs: 30_000 })
+const forwardLimit = createLimiter({ max: 5, windowMs: 5000, cooldowns: [2000, 4000, 8000], forgiveMs: 30_000 })
 
 /** Как назвать место, откуда переслали: «#общий · Nuntius», «личка» или название группы */
 function placeName(access: store.ChannelAccess) {
@@ -38,7 +47,7 @@ function placeName(access: store.ChannelAccess) {
   return access.dm.kind === 'dm' ? 'личка' : access.dm.name || 'группа'
 }
 
-export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps) {
+export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnline }: Deps) {
   /** Собеседник в 1:1 личке */
   const otherIn = (dm: store.Dm, userId: string) => store.findUser(dm.memberIds.find((id) => id !== userId) ?? '')
 
@@ -77,13 +86,12 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
   function attach(socket: Socket, userId: string) {
     on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown }, ack?: unknown) => {
       const answer = reply(ack)
-      const wait = sendLimit.retryAfter(userId)
-      if (wait) {
-        // слишком часто — сообщение не доставляем, клиент покажет причину
-        answer({ error: `${SLOW_DOWN[Math.floor(Math.random() * SLOW_DOWN.length)]} Подожди ${Math.ceil(wait / 1000)} с`, retryAfter: Math.ceil(wait / 1000) })
+      // Строчит слишком быстро — сообщение не доходит, клиент покажет «полегче» с отсчётом
+      const wait = sendLimit.hit(userId)
+      if (wait !== null) {
+        answer(slowDown(wait))
         return
       }
-      sendLimit.hit(userId)
       const channelId = str(payload?.channelId)
       const content = store.snip(str(payload?.content).trim(), MAX_LENGTH)
       const access = channelId ? store.channelAccess(channelId, userId) : undefined
@@ -112,7 +120,9 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
         answer({ error: command.error })
         return
       }
-      const message = store.addMessage(channelId, userId, command ? command.content : content, command?.flavor, { replyTo })
+      const text = command ? command.content : content
+      const mentions = parseMentions(text, access, userId, { isOnline })
+      const message = store.addMessage(channelId, userId, text, command?.flavor, { replyTo, mentions })
       const author = store.findUser(userId)
       if (author) {
         badges.onMessage(author, message.createdAt)
@@ -140,6 +150,11 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
         return
       }
       const { message, access } = found
+      const wait = reactLimit.hit(userId)
+      if (wait !== null) {
+        answer(slowDown(wait, 'Полегче с реакциями — секундочку'))
+        return
+      }
       // Снять свою реакцию можно всегда, поставить — только там, где можно писать
       const removing = Boolean(message.reactions?.[emoji]?.includes(userId))
       const problem = removing ? null : writeProblem(access, userId)
@@ -186,7 +201,12 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
         return
       }
       if (content !== message.content) {
-        store.editMessage(message, content)
+        const wait = editLimit.hit(userId)
+        if (wait !== null) {
+          answer(slowDown(wait, 'Слишком часто правишь — выдохни пару секунд'))
+          return
+        }
+        store.editMessage(message, content, parseMentions(content, access, userId, { isOnline, previous: message.mentions }))
         publishUpdate(access, message)
       }
       answer({ message })
@@ -216,9 +236,16 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo }: Deps)
         answer({ error: problem })
         return
       }
+      const wait = forwardLimit.hit(userId)
+      if (wait !== null) {
+        answer(slowDown(wait, 'Полегче с пересылкой — подожди пару секунд'))
+        return
+      }
       // Пересылают пересланное — указываем настоящего автора и исходное место
       const forwarded: store.Forwarded = source.forwarded ?? { authorId: source.authorId, from: placeName(from), createdAt: source.createdAt }
-      const message = store.addMessage(toId, userId, source.content, source.flavor, { forwarded })
+      // Упоминания проверяем заново — уже для нового места (позвать их пересылка не зовёт: это делает клиент)
+      const mentions = parseMentions(source.content, to, userId, { isOnline })
+      const message = store.addMessage(toId, userId, source.content, source.flavor, { forwarded, mentions })
       const author = store.findUser(userId)
       if (author) badges.onMessage(author, message.createdAt)
       publish(to, message)

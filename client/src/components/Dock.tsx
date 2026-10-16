@@ -16,6 +16,7 @@ export function Dock() {
   const view = useChat((s) => s.view)
   const guilds = useChat((s) => s.guilds)
   const unread = useChat((s) => s.unread)
+  const pings = useChat((s) => s.mentions)
   const dms = useChat((s) => s.dms)
   const requests = useChat((s) => s.friends.filter((f) => f.state === 'incoming').length)
 
@@ -47,12 +48,15 @@ export function Dock() {
       <div className="dock__list">
         {guilds.map((g, i) => {
           const hasUnread = g.channels.some((c) => (unread[c.id] ?? 0) > 0)
+          // упоминания меня на этом сервере — «@N» вместо точки
+          const mentioned = g.channels.reduce((sum, c) => sum + (pings[c.id] ?? 0), 0)
           return (
             <DockItem
               key={g.id}
               tip={g.name}
               active={view.kind === 'guild' && view.guildId === g.id}
               dot={hasUnread}
+              mention={mentioned}
               delay={i * 60}
               onClick={() => chat.setView({ kind: 'guild', guildId: g.id })}
             >
@@ -85,20 +89,27 @@ interface ItemProps {
   active?: boolean
   badge?: number
   dot?: boolean
+  /** Сколько раз меня упомянули на сервере */
+  mention?: number
   delay?: number
   className?: string
   onClick: () => void
   children: ReactNode
 }
 
-function DockItem({ tip, active, badge, dot, delay = 0, className = '', onClick, children }: ItemProps) {
+function DockItem({ tip, active, badge, dot, mention, delay = 0, className = '', onClick, children }: ItemProps) {
   return (
-    <div className={`dock__item${active ? ' is-active' : ''}${dot && !active ? ' has-dot' : ''}`} style={{ animationDelay: `${delay}ms` }}>
+    <div className={`dock__item${active ? ' is-active' : ''}${dot && !active && !mention ? ' has-dot' : ''}`} style={{ animationDelay: `${delay}ms` }}>
       <span className="dock__indicator" />
       <button className={`dock__tile ${className}`} data-tip={tip} aria-label={tip} onClick={onClick}>
         {children}
       </button>
       {!!badge && <span className="dock__badge">{badge > 99 ? '99+' : badge}</span>}
+      {!badge && !!mention && (
+        <span className="dock__badge dock__badge--mention" aria-label={`Упоминаний: ${mention}`}>
+          @{mention > 1 ? (mention > 99 ? '99+' : mention) : ''}
+        </span>
+      )}
     </div>
   )
 }
