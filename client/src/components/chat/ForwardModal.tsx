@@ -5,6 +5,7 @@ import { MEMBERS, plural } from '../../lib/format'
 import { findLoaded, msgUi, useMsgUi } from '../../lib/msgActions'
 import { can } from '../../lib/perms'
 import { forwardMessage } from '../../lib/realtime'
+import { readable } from '../../lib/mentions'
 import { chat, dmTitle, useChat, type View } from '../../lib/store'
 import { Avatar } from '../Avatar'
 import { GroupAvatar } from '../groups/GroupAvatar'
@@ -89,7 +90,7 @@ function ForwardPicker({ message }: { message: Message }) {
     msgUi.closeForward()
     const where = t.kind === 'channel' ? `#${t.title}` : t.kind === 'group' ? `«${t.title}»` : t.title
     const action: View | undefined = t.kind === 'channel' ? undefined : { kind: 'dm', dmId: t.id }
-    chat.toast({ title: `Переслано в ${where}`, text: oneLine(message.content).slice(0, 120), action })
+    chat.toast({ title: `Переслано в ${where}`, text: oneLine(readable(message.content, message.channelId)).slice(0, 120), action })
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -113,7 +114,7 @@ function ForwardPicker({ message }: { message: Message }) {
           <CornerUpRight size={15} className="fwd-preview__icon" />
           {author && <Avatar user={author} size={20} />}
           <b className="fwd-preview__name">{authorName}</b>
-          <span className="fwd-preview__text truncate">{oneLine(message.content)}</span>
+          <span className="fwd-preview__text truncate">{oneLine(readable(message.content, message.channelId))}</span>
         </div>
         <div className="picker__search">
           <Search size={16} />

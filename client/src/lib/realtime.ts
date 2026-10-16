@@ -8,6 +8,9 @@ import { ui } from './ui'
 import { onBadgeEarned } from './badges'
 import { onEggFound, onMessageSent } from './eggs'
 import { onAnnounce } from './admin'
+import { mentionsMe, readable } from './mentions'
+import { guildOfChannel } from './perms'
+import { nudgeSlow, slowDown, slowLeft } from './antispam'
 
 const TYPING_TTL = 3500
 const IDLE_AFTER = 5 * 60 * 1000 // через 5 минут без движений — «не активен»
@@ -119,13 +122,28 @@ export function connectRealtime(onUnauthorized: () => void) {
     if (!isNew) return
     if (isActive) pulseSphere(mine ? 1 : 0.6)
     const st = useChat.getState()
-    if (!mine && !isActive && m.authorId !== SYSTEM_AUTHOR && isDmChannel(st, m.channelId)) {
-      const author = st.users[m.authorId]
+    if (mine || isActive || m.authorId === SYSTEM_AUTHOR) return
+    const author = st.users[m.authorId]
+    const text = readable(m.content, m.channelId).slice(0, 120)
+    // Упомянули меня (прямо, ролью, @everyone/@here) — «@» у канала и уведомление даже с сервера.
+    // Пересланное не зовёт: упоминания там — из чужого разговора
+    const pinged = !m.forwarded && mentionsMe(st, m)
+    if (pinged) chat.bumpMention(m.channelId)
+    if (isDmChannel(st, m.channelId)) {
       const dm = st.dms.find((d) => d.id === m.channelId)
       const title = dm?.kind === 'group' ? `${dmTitle(st, dm)} · ${author?.displayName ?? '…'}` : (author?.displayName ?? 'Новое сообщение')
-      notify(title, m.content.slice(0, 120), {
+      notify(title, text, {
         userId: m.authorId,
         action: { kind: 'dm', dmId: m.channelId },
+      })
+      return
+    }
+    const guild = guildOfChannel(st.guilds, m.channelId)
+    const channel = guild?.channels.find((c) => c.id === m.channelId)
+    if (pinged && guild && channel) {
+      notify(`${author?.displayName ?? 'Кто-то'} упоминает тебя`, `#${channel.name} · ${guild.name}: ${text}`, {
+        userId: m.authorId,
+        action: { kind: 'guild', guildId: guild.id, channelId: channel.id },
       })
     }
   })
@@ -170,7 +188,13 @@ function messageRequest(event: string, payload: object, failTitle: string, offli
       resolve(null)
       return
     }
-    socket.timeout(8000).emit(event, payload, (err: Error | null, res: { error?: string; message?: Message }) => {
+    socket.timeout(8000).emit(event, payload, (err: Error | null, res: { error?: string; message?: Message; code?: string; retryAfter?: number; retryAfterMs?: number }) => {
+      // Строчим слишком быстро: для сообщений — предупреждение с отсчётом над полем ввода, а не тост
+      if (event === 'message:send' && res?.code === 'slow_down') {
+        slowDown(res.retryAfterMs ?? (res.retryAfter ?? 2) * 1000)
+        resolve(null)
+        return
+      }
       if (err || !res?.message) {
         chat.toast({ title: failTitle, text: res?.error ?? 'Сервер не ответил' })
         resolve(null)
@@ -183,6 +207,11 @@ function messageRequest(event: string, payload: object, failTitle: string, offli
 
 /** Отправить сообщение (replyTo — id сообщения, на которое отвечаем); true — если сервер принял */
 export async function sendMessage(channelId: string, content: string, replyTo?: string): Promise<boolean> {
+  // пауза анти-спама ещё идёт — сервер всё равно не пропустит
+  if (slowLeft() > 0) {
+    nudgeSlow()
+    return false
+  }
   const message = await messageRequest(
     'message:send',
     { channelId, content, ...(replyTo ? { replyTo } : {}) },

@@ -107,9 +107,10 @@ All limits are in-memory sliding windows and reset when the server restarts.
 | Failed logins per login/e-mail from all IPs together | 30 per hour |
 | Failed logins per IP (any logins) | 20 per 15 min |
 | Code e-mails per IP (register, reset, e-mail change) | 10 per hour |
-| Messages per user (`message:send`) | 5 per 4 s |
+| Messages per user (`message:send`) | 5 per 4 s, then a 2 s pause; repeated within 30 s — 3, 5, 8, up to 10 s |
+| Reactions / edits / forwards per user | 12 per 4 s / 6 per 5 s / 5 per 5 s, then a short pause |
 
-Requests over a limit get HTTP 429 with `Retry-After`. Messages over the limit are not delivered.
+Requests over a limit get HTTP 429 with `Retry-After`. Messages over the limit are not delivered: the socket ack is `{ error, code: "slow_down", retryAfter }` (seconds; `retryAfterMs` is exact), and the client shows a warning with a countdown above the composer.
 
 The app runs behind Caddy on the same machine. Express uses `trust proxy = loopback`, so `req.ip` is the real client address from `X-Forwarded-For`, and only the local proxy is trusted to set that header.
 

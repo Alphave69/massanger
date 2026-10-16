@@ -7,7 +7,9 @@ import { formatStamp, formatTime } from '../../lib/format'
 import { useLongPress } from '../../lib/mobile'
 import { messageRights, msgUi, useMsgUi } from '../../lib/msgActions'
 import { useChat } from '../../lib/store'
+import { mentionsMe } from '../../lib/mentions'
 import { MessageActions } from '../guild/MessageActions'
+import { MentionText } from './MentionText'
 import { MessageEditor } from './MessageEditor'
 import { Reactions } from './Reactions'
 import { ReplyQuote } from './ReplyQuote'
@@ -25,8 +27,11 @@ function onContextMenu(e: MouseEvent<HTMLElement>, message: Message) {
   // выделили кусок текста в этом сообщении — предложим скопировать именно его
   const sel = window.getSelection()
   const selection = sel && !sel.isCollapsed && sel.anchorNode && e.currentTarget.contains(sel.anchorNode) ? sel.toString().trim() : ''
-  msgUi.openMenu(message, { kind: 'point', x: e.clientX, y: e.clientY }, 'menu', 'context', selection)
+  msgUi.openMenu(message, { kind: 'point', x: e.clientX, y: e.clientY }, 'menu', 'context', selection, linkAt(e.target))
 }
+
+/** Ссылка в тексте сообщения под курсором или пальцем */
+const linkAt = (el: EventTarget | Element | null) => (el instanceof Element ? (el.closest('a.msg-link')?.getAttribute('href') ?? '') : '')
 
 /**
  * Долгое нажатие пальцем — то же меню (iPhone не присылает contextmenu).
@@ -37,7 +42,7 @@ function useTouchMenu(message: Message) {
     // клавиатуру убираем — меню выезжает снизу на её место
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     window.getSelection()?.removeAllRanges()
-    msgUi.openMenu(message, { kind: 'point', x, y }, 'menu', 'context')
+    msgUi.openMenu(message, { kind: 'point', x, y }, 'menu', 'context', '', linkAt(document.elementFromPoint(x, y)))
   })
   const onMenu = (e: MouseEvent<HTMLElement>) => {
     press.cancel()
@@ -71,10 +76,12 @@ interface ItemProps {
 export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
   const { flash, active, editing } = useRowState(m.id)
   const canReact = useChat((s) => messageRights(s, m).canReact)
+  // меня упомянули — полоска слева и мягкий фон (пересланное не в счёт: это чужой разговор)
+  const pinged = useChat((s) => !m.forwarded && mentionsMe(s, m))
   const touch = useTouchMenu(m)
   return (
     <div
-      className={`msg${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}${editing ? ' is-editing' : ''}`}
+      className={`msg${flash ? ' is-flash' : ''}${active ? ' is-active' : ''}${editing ? ' is-editing' : ''}${pinged ? ' is-mention' : ''}`}
       data-mid={m.id}
       {...touch}
     >
@@ -146,7 +153,7 @@ function Body({ message: m, name, color }: { message: Message; name: string; col
             <b style={color ? { color } : undefined}>{name}</b>{' '}
           </>
         )}
-        {m.content}
+        <MentionText message={m} />
         {m.editedAt && (
           <span className="bubble__edited" data-tip={`Изменено: ${formatStamp(m.editedAt).toLowerCase()}`}>
             (изменено)
