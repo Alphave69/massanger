@@ -333,7 +333,8 @@
   min-height: 0;
   overflow: hidden;
   background: rgba(128, 128, 128, 0.16);
-  cursor: zoom-in;
+  /* «пальчик», не лупа — как везде в приложении */
+  cursor: pointer;
 }
 
 .media-tile img {
@@ -614,7 +615,7 @@ a.media-file:hover .media-file__dl,
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 20px 80px rgb(var(--shade-rgb) / 0.6);
-  cursor: zoom-in;
+  cursor: pointer;
   transition: transform 0.28s var(--ease-out);
   will-change: transform;
   animation: lb-img 0.3s var(--ease-out);
