@@ -356,6 +356,11 @@
   margin-bottom: 0;
 }
 
+/* ровно три варианта (скругления) — всегда в один ряд, даже на телефоне */
+.look-seg:has(> :nth-child(3):last-child) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .look-seg__item {
   display: flex;
   flex-direction: column;
