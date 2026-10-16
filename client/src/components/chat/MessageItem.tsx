@@ -82,6 +82,12 @@ export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
       {m.replyTo && <ReplyQuote reply={m.replyTo} channelId={m.channelId} />}
       {editing ? (
         <div className="bubble bubble--editing">
+          {/* правится только подпись — файлы остаются как были */}
+          {!m.forwarded && m.attachments?.length ? (
+            <div className="msg-editor__media">
+              <MessageMedia attachments={m.attachments} />
+            </div>
+          ) : null}
           <MessageEditor message={m} />
         </div>
       ) : (

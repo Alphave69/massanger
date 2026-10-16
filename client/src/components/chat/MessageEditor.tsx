@@ -9,6 +9,8 @@ const MAX_LENGTH = 4000
 export function MessageEditor({ message }: { message: Message }) {
   const [value, setValue] = useState(message.content)
   const [busy, setBusy] = useState(false)
+  // у сообщения с файлами подпись можно стереть совсем
+  const canBeEmpty = Boolean(message.attachments?.length)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   // Поле растёт вместе с текстом
@@ -35,7 +37,7 @@ export function MessageEditor({ message }: { message: Message }) {
 
   const save = async () => {
     const content = value.trim()
-    if (busy || !content) return
+    if (busy || (!content && !canBeEmpty)) return
     if (content === message.content) return stop()
     setBusy(true)
     const ok = await editMessage(message.id, content)
@@ -55,7 +57,7 @@ export function MessageEditor({ message }: { message: Message }) {
     }
   }
 
-  const empty = !value.trim()
+  const empty = !value.trim() && !canBeEmpty
 
   return (
     <div className="msg-editor">
