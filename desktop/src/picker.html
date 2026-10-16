@@ -74,6 +74,10 @@
       * {
         box-sizing: border-box;
       }
+      /* hidden сильнее любых display (иначе «Со звуком системы» видно и там, где звука нет) */
+      [hidden] {
+        display: none !important;
+      }
       html,
       body {
         margin: 0;
@@ -702,13 +706,18 @@
       }
 
       /** Свежие превью — раз в пару секунд, на месте; новые и закрытые окна — перерисовкой */
+      let asking = false
       const refresh = async () => {
-        if (done) return
+        // прошлый запрос ещё идёт (много окон, медленный компьютер) — не копим новые
+        if (done || asking) return
+        asking = true
         let res
         try {
           res = await api.sources()
         } catch {
           return
+        } finally {
+          asking = false
         }
         if (done) return
         const first = !loaded
