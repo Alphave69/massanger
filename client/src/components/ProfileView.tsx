@@ -1,7 +1,9 @@
+import { useState, type CSSProperties } from 'react'
 import { Check, MessageCircle, UserMinus, UserPlus, X } from 'lucide-react'
 import { acceptFriend, openDmWith, removeFriend, sendFriendRequest } from '../lib/actions'
 import { DAYS, daysSince } from '../lib/badges'
 import { formatSince, plural } from '../lib/format'
+import { accentRgb } from '../lib/profileMedia'
 import { STATUS_LABEL } from '../lib/status'
 import { chat, presenceOf, useChat } from '../lib/store'
 import { ui } from '../lib/ui'
@@ -34,8 +36,8 @@ export function ProfileView({ userId, inDm }: Props) {
   }
 
   return (
-    <div className="profile">
-      <div className="profile__banner" />
+    <div className={`profile${user.accent ? ' profile--accent' : ''}`} style={accentStyle(user.accent)}>
+      <ProfileBanner banner={user.banner} />
       {user.number > 0 && <UserNumber n={user.number} />}
       <div className="profile__avatar">
         <Avatar user={user} size={84} status={status} ring />
@@ -130,5 +132,23 @@ export function UserNumber({ n }: { n: number }) {
       <span className="profile__number-sign">№</span>
       {n}
     </span>
+  )
+}
+
+/** Цвет профиля — CSS-переменная для лёгкого оттенка (полоска сверху, свечение у аватарки, градиент баннера) */
+export function accentStyle(accent: string | null | undefined): CSSProperties | undefined {
+  const rgb = accentRgb(accent)
+  return rgb ? ({ '--pf-accent-rgb': rgb } as CSSProperties) : undefined
+}
+
+/** Баннер профиля: своя картинка, иначе — узор (с цветом профиля — в его оттенке) */
+export function ProfileBanner({ banner }: { banner?: string | null }) {
+  // картинка не загрузилась — показываем обычный узор
+  const [broken, setBroken] = useState<string | null>(null)
+  const src = banner && banner !== broken ? banner : null
+  return (
+    <div className={`profile__banner${src ? ' profile__banner--img' : ''}`}>
+      {src && <img src={src} alt="" decoding="async" draggable={false} onError={() => setBroken(src)} />}
+    </div>
   )
 }
