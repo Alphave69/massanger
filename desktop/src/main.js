@@ -494,16 +494,34 @@ function setupPermissions() {
 
   // Демонстрация экрана: свой выбор экрана или окна поверх сайта (со звуком системы на Windows)
   s.setDisplayMediaRequestHandler(async (request, callback) => {
-    if (!isAppUrl(request.securityOrigin || request.frame?.url || '')) return callback({})
+    // ответить сайту ровно один раз; null — отказ (пустой объект Electron не принимает и бросает ошибку,
+    // а сайт так и ждал бы ответа)
+    let answered = false
+    const reply = (streams) => {
+      if (answered) return
+      answered = true
+      try {
+        callback(streams)
+      } catch (err) {
+        console.warn('[демонстрация]', err?.message || err)
+        try {
+          callback(null)
+        } catch {
+          // уже отвечено
+        }
+      }
+    }
+    if (!isAppUrl(request.securityOrigin || request.frame?.url || '')) return reply(null)
     try {
       const choice = await pickSource()
-      if (!choice) return callback({})
+      if (!choice) return reply(null)
       const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
       const source = sources.find((x) => x.id === choice.id)
-      if (!source) return callback({})
-      callback(choice.audio && process.platform === 'win32' ? { video: source, audio: 'loopback' } : { video: source })
-    } catch {
-      callback({})
+      if (!source) return reply(null)
+      reply(choice.audio && process.platform === 'win32' ? { video: source, audio: 'loopback' } : { video: source })
+    } catch (err) {
+      console.warn('[демонстрация]', err?.message || err)
+      reply(null)
     }
   })
 }
@@ -559,7 +577,8 @@ function closePicker(value) {
 }
 
 /** Команды выбора принимаем только от открытой карточки выбора — не от сайта и не от других страниц */
-const fromPicker = (e) => Boolean(picker) && e.sender === picker.view.webContents && (e.senderFrame?.url || '').startsWith('file:')
+const fromPicker = (e) =>
+  Boolean(picker) && !picker.view.webContents.isDestroyed() && e.sender.id === picker.view.webContents.id && (e.senderFrame?.url || '').startsWith('file:')
 
 ipcMain.on('picker:choose', (e, value) => {
   if (!fromPicker(e)) return

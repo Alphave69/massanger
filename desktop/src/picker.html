@@ -496,6 +496,28 @@
         background: rgba(0, 0, 0, 0.1);
       }
 
+      /* выбрали или отменили — карточка тает, и только потом слой убирается */
+      body.is-leaving {
+        pointer-events: none;
+      }
+      body.is-leaving .backdrop {
+        animation: fade-out 0.14s ease forwards;
+      }
+      body.is-leaving .card {
+        animation: sink 0.14s ease forwards;
+      }
+      @keyframes fade-out {
+        to {
+          opacity: 0;
+        }
+      }
+      @keyframes sink {
+        to {
+          opacity: 0;
+          transform: scale(0.98);
+        }
+      }
+
       @media (max-height: 520px) {
         body {
           padding: 12px;
@@ -572,6 +594,8 @@
       let all = []
       let kind = 'screen'
       let chosen = null
+      /** Выбор на каждой вкладке свой: сходил в «Окна» и вернулся — выбранный экран на месте */
+      const picked = { screen: null, window: null }
       let loaded = false
       let done = false
       /** Кнопки источников по id — обновляем превью на месте, без перерисовки (не мигает и не сбивает фокус) */
@@ -590,13 +614,16 @@
       const finish = (value) => {
         if (done) return
         done = true
-        api.choose(value)
+        document.body.classList.add('is-leaving')
+        const calm = matchMedia('(prefers-reduced-motion: reduce)').matches
+        setTimeout(() => api.choose(value), calm ? 0 : 130)
       }
       const cancel = () => finish(null)
       const share = () => chosen && finish({ id: chosen, audio: $('audio').checked })
 
       const select = (id, focus = false) => {
         chosen = id
+        picked[kind] = id
         $('share').disabled = !chosen
         for (const [key, b] of tiles) {
           b.classList.toggle('is-on', key === chosen)
@@ -664,7 +691,7 @@
           tiles.set(s.id, b)
           return b
         }))
-        select(list.some((s) => s.id === chosen) ? chosen : null)
+        select(list.some((s) => s.id === picked[kind]) ? picked[kind] : null)
       }
 
       const setKind = (k) => {
@@ -691,13 +718,13 @@
           $('audio-wrap').hidden = !res.audio
           const screens = all.filter((s) => s.kind === 'screen')
           // один экран — сразу выбран: осталось нажать «Поделиться» (или Enter)
-          if (screens.length === 1) chosen = screens[0].id
+          if (screens.length === 1) picked.screen = screens[0].id
           // экранов нет совсем (бывает в виртуальных машинах) — сразу окна
           if (!screens.length && all.length) kind = 'window'
         }
         const after = all.filter((s) => s.kind === kind).map((s) => s.id).join('|')
         if (first || before !== after) {
-          if (chosen && !all.some((s) => s.id === chosen)) chosen = null
+          for (const k of ['screen', 'window']) if (picked[k] && !all.some((s) => s.id === picked[k])) picked[k] = null
           draw()
           if (first) (tiles.get(chosen) || tiles.values().next().value || $('cancel')).focus()
         } else {
