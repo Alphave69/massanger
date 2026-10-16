@@ -152,8 +152,10 @@ export function suggest(st: ChatState, channelId: string, query: string, limit =
     if (s.kind === 'mass') score -= 3
     scored.push({ s, score })
   }
+  // при равенстве — сначала люди, потом роли
+  const kindOrder = { user: 0, role: 1, mass: 2 }
   return scored
-    .sort((a, b) => b.score - a.score || a.s.label.localeCompare(b.s.label, 'ru'))
+    .sort((a, b) => b.score - a.score || kindOrder[a.s.kind] - kindOrder[b.s.kind] || a.s.label.localeCompare(b.s.label, 'ru'))
     .slice(0, limit)
     .map((x) => x.s)
 }
