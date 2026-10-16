@@ -206,11 +206,12 @@ run ufw allow 49152:65535/udp
 run ufw --force enable
 ok "Открыты только нужные порты (сайт, голос, SSH)"
 
-say "Ежедневная копия базы"
+say "Ежедневная копия базы и файлов"
 run chmod +x "$APP/deploy/backup.sh" "$APP/deploy/update.sh"
 CRON_LINE="17 4 * * * root $APP/deploy/backup.sh"
 if [ "$DRY" = 1 ]; then echo "  [dry-run] /etc/cron.d/nuntius-backup: $CRON_LINE"; else echo "$CRON_LINE" >/etc/cron.d/nuntius-backup; fi
-ok "Копии — в /var/backups/nuntius (14 дней)"
+# backup.sh копирует и db.json, и server/data/uploads (фото, видео, аватарки) — см. сам скрипт
+ok "Копии базы и файлов — в /var/backups/nuntius (14 дней)"
 
 echo
 echo "  ✦ Готово! Nuntius: https://$DOMAIN"

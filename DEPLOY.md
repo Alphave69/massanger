@@ -98,8 +98,9 @@ sudo bash /opt/nuntius/deploy/update.sh
 | Перезапустить | `systemctl restart nuntius` |
 | Работает ли | `systemctl status nuntius` |
 | Проверить почту | `cd /opt/nuntius && sudo -u nuntius npm run check-mail` |
-| Копии базы | `ls /var/backups/nuntius` |
+| Копии базы и файлов | `ls /var/backups/nuntius` (`db-ДАТА.json` и папки `uploads-ДАТА` с фото, видео и аватарками) |
 | Восстановить копию | `cp /var/backups/nuntius/db-ДАТА.json /opt/nuntius/server/data/db.json && chown nuntius:nuntius /opt/nuntius/server/data/db.json && systemctl restart nuntius` |
+| Вернуть файлы из копии | `cp -an /var/backups/nuntius/uploads-ДАТА/. /opt/nuntius/server/data/uploads/ && chown -R nuntius:nuntius /opt/nuntius/server/data/uploads` |
 | Поменять настройки | `nano /opt/nuntius/server/.env`, потом `systemctl restart nuntius` |
 
 ## Если что-то не так

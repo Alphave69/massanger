@@ -1,5 +1,7 @@
 # Nuntius: Caddy сам получает и продлевает HTTPS-сертификат
 __DOMAIN__ {
 	encode zstd gzip
+	# Размер тела запроса Caddy по умолчанию не ограничивает — файлы до UPLOAD_MAX_MB (25 МБ) проходят;
+	# лимит и проверки — на стороне Nuntius (server/src/uploads.ts)
 	reverse_proxy 127.0.0.1:3001
 }

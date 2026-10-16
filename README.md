@@ -12,6 +12,8 @@
 - **Статусы:** в сети ● · не активен ◐ (ставится сам через 5 минут бездействия) · спит ☾ · не беспокоить ⊖ (без звуков и уведомлений) · невидимка ○. Плюс свой текстовый статус.
 - **Профили:** карточка по клику на любого человека, профиль собеседника справа в личке.
 - **Чат:** пузыри сообщений, группировка, разделители по дням, «печатает…», анимации появления.
+- **Фото, видео и файлы:** скрепка, перетаскивание и вставка из буфера; фото — сеткой с просмотром на весь экран, видео и аудио — плеером, остальное — карточкой «скачать».
+- **Свой профиль:** аватарка (в том числе живая GIF), баннер и неброский цвет профиля.
 - Голосовые каналы пока заглушка, это следующий этап.
 
 ## Стек
@@ -108,6 +110,8 @@ All limits are in-memory sliding windows and reset when the server restarts.
 | Failed logins per IP (any logins) | 20 per 15 min |
 | Code e-mails per IP (register, reset, e-mail change) | 10 per hour |
 | Messages per user (`message:send`) | 5 per 4 s |
+| File uploads per user | 60 per 10 min, 500 MB per day (`UPLOAD_DAILY_MB`) |
+| Size of one file | 25 MB (`UPLOAD_MAX_MB`); avatar 2 MB, banner 5 MB |
 
 Requests over a limit get HTTP 429 with `Retry-After`. Messages over the limit are not delivered.
 
@@ -124,6 +128,15 @@ The app runs behind Caddy on the same machine. Express uses `trust proxy = loopb
 - Every socket event and REST route checks server permissions with role hierarchy and per-channel overrides on the server (`server/src/permissions.ts`), not only in the UI.
 - Message, typing, voice and presence events are sent only to users who can see the channel.
 
+### Files (photos, videos, attachments)
+
+- Uploads go to `POST /api/uploads` (login required) and are stored in `server/data/uploads/` under a random 128-bit id. The file name the user picked is kept only as metadata.
+- The type is detected from the file's first bytes (magic numbers), not from its name or `Content-Type`. A text file renamed to `.png` is stored and served as a generic file.
+- Only PNG, JPEG, GIF, WebP images and MP4/MOV/WebM video and MP3/OGG/WAV/M4A audio are served inline with their real type. Everything else (PDF, ZIP, HTML, SVG, unknown) is served as `application/octet-stream` with `Content-Disposition: attachment`, so the browser downloads it instead of rendering it. Every file response also has `X-Content-Type-Options: nosniff` and a sandboxing `Content-Security-Policy`.
+- A message may reference only the sender's own uploads that are not attached to anything yet. Attaching files to messages in server channels needs the `ATTACH_FILES` permission (in addition to `SEND_MESSAGES`).
+- Deleting a message deletes its files once nothing else (a forwarded copy, an avatar) references them. Replacing an avatar or banner deletes the old image. Uploads that were never attached are removed after 24 hours.
+- `deploy/backup.sh` keeps 14 daily snapshots of the uploads folder next to the database copies (hard links, so unchanged files take no extra space).
+
 ### Deployment hardening (`deploy/`)
 
 - **HTTPS.** Caddy obtains TLS certificates automatically.
@@ -138,6 +151,7 @@ The app runs behind Caddy on the same machine. Express uses `trust proxy = loopb
 - Rate-limit counters live in memory and are lost on restart.
 - The TURN credentials are static, not short-lived TURN REST credentials.
 - There is no 2FA yet.
+- **Files use capability URLs.** `GET /files/<id>.<ext>` needs no login, so `<img>` and `<video>` tags work without auth headers. The 128-bit random id is the only protection: anyone who gets the link (for example, someone forwards it outside Nuntius, or it ends up in a browser history or a proxy log) can open the file until it is deleted. Responses are marked `Cache-Control: private` and `Referrer-Policy: no-referrer` to limit leaks, but a leaked link can't be revoked except by deleting the message. Files are stored unencrypted on the server.
 
 ### Security fixes
 
