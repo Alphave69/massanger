@@ -37,6 +37,16 @@
   filter: brightness(0.45) saturate(1.3);
 }
 
+/* …и там, где цвет роли приходит переменной --role: заголовок роли в настройках, группы участников */
+:root[data-themed][data-tone='light'] .role-head__text h3 {
+  color: color-mix(in oklab, var(--role, var(--text)) 55%, rgb(var(--fg-rgb)));
+  filter: none;
+}
+
+:root[data-themed][data-tone='light'] .members__group--role .side__label {
+  color: color-mix(in oklab, var(--role, var(--text-3)) 60%, rgb(var(--fg-rgb)));
+}
+
 /* белые и светло-серые аватарки — тонкий контур, чтобы не растворялись в светлом фоне */
 :root[data-themed][data-tone='light'] .avatar__face:not(.avatar__face--dark),
 .theme-scope[data-tone='light'] .avatar__face:not(.avatar__face--dark) {
