@@ -926,8 +926,8 @@ button.mention:hover {
 
 /* в своём (белом) пузыре — тёмные плашки */
 .mgroup--mine .mention {
-  background: rgba(0, 0, 0, 0.09);
-  color: var(--black);
+  background: rgb(var(--on-accent-rgb, 0 0 0) / 0.09);
+  color: var(--on-accent, var(--black));
   box-shadow: none;
 }
 
@@ -949,8 +949,8 @@ button.mention:hover {
   bottom: 3px;
   width: 3px;
   border-radius: 3px;
-  background: var(--text);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  background: var(--accent, var(--text));
+  box-shadow: 0 0 10px rgb(var(--glow-rgb, 255 255 255) / calc(0.55 * var(--glow-k, 1)));
   pointer-events: none;
 }
 
@@ -968,10 +968,10 @@ button.mention:hover {
   border-radius: 9px;
   display: inline-grid;
   place-items: center;
-  background: var(--text);
-  color: var(--black);
+  background: var(--accent, var(--text));
+  color: var(--on-accent, var(--black));
   font: 700 10.5px/1 var(--mono);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 12px rgb(var(--glow-rgb, 255 255 255) / calc(0.55 * var(--glow-k, 1)));
   animation: pop-in 0.4s var(--ease-spring);
 }
 
@@ -1099,7 +1099,7 @@ button.mention:hover {
   border-radius: 16px;
   border: 1px solid var(--line-2);
   background: var(--raise);
-  box-shadow: 0 0 28px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 28px rgb(var(--glow-rgb, 255 255 255) / calc(0.08 * var(--glow-k, 1)));
   animation: slow-in 0.45s var(--ease-spring);
 }
 
@@ -1121,7 +1121,7 @@ button.mention:hover {
   border: 2px solid var(--line-2);
   color: var(--text);
   font: 700 14px/1 var(--mono);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 14px rgb(var(--glow-rgb, 255 255 255) / calc(0.35 * var(--glow-k, 1)));
 }
 
 /* колечко обратного отсчёта: тает по часовой стрелке */
@@ -1136,7 +1136,7 @@ button.mention:hover {
 
 .slow-warn__ring circle {
   fill: none;
-  stroke: var(--text);
+  stroke: var(--accent, var(--text));
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-dasharray: 100;
