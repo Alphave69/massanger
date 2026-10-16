@@ -623,7 +623,8 @@ app.post('/api/me/eggs', requireAuth, (req, res) => {
 const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../client/dist')
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist))
-  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile(resolve(clientDist, 'index.html')))
+  // root, а не абсолютный путь: send не отдаёт файлы, если в пути есть папка с точкой (.claude/…)
+  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile('index.html', { root: clientDist }))
 } else {
   // В режиме разработки интерфейс отдаёт Vite — перекидываем туда
   app.get('/', (_req, res) => res.redirect('http://localhost:5173'))
