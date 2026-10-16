@@ -48,6 +48,12 @@
   color: color-mix(in oklab, var(--mention) 55%, rgb(var(--fg-rgb)));
 }
 
+/* @Роль в своём пузыре: на цветном акценте (розовом, синем…) цвет роли сильнее уводим к цвету текста на акценте.
+   В «Чёрной» с белым акцентом остаётся как было (messages.css) */
+:root[data-themed]:is(:not([data-theme='black']), [data-accent='custom']) .mgroup--mine .mention--role.has-color {
+  color: color-mix(in oklab, var(--mention) 25%, var(--on-accent));
+}
+
 :root[data-themed][data-tone='light'] .members__group--role .side__label {
   color: color-mix(in oklab, var(--role, var(--text-3)) 60%, rgb(var(--fg-rgb)));
 }

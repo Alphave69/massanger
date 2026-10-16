@@ -165,6 +165,7 @@ function applyLook(s: Settings) {
   root.dataset.theme = theme.id
   root.dataset.tone = theme.tone
   root.dataset.own = s.ownBubble
+  root.dataset.accent = /^#[0-9a-f]{6}$/i.test(s.accent) ? 'custom' : 'theme'
   const colors: LookColors = { accent: s.accent, tint: s.surfaceTint }
   const vars: Record<string, string> = {
     ...lookVars(theme, colors),
