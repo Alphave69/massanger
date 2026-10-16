@@ -68,7 +68,7 @@ function hasOpenLayer() {
 function hasOverlay() {
   const u = useUi.getState()
   const m = useMsgUi.getState()
-  if (useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
+  if (useLightbox.getState().open || useVoiceMenu.getState().menu || useMediaHelp.getState().denied) return true
   return Boolean(m.menu || m.forward || u.channelModal || u.groupModal || u.modal || u.profile || u.settings || u.serverSettings)
 }
 
