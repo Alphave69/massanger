@@ -95,6 +95,7 @@ let quitting = false
 let htmlFullscreen = false // сайт развернул видео или демонстрацию на весь экран
 let unread = 0
 let updateReady = false // новая версия скачана и ждёт перезапуска
+let theme = null // цвета темы сайта для полоски заголовка: { bg, fg, accent, onAccent, dark }
 
 const site = () => view.webContents
 const isFullscreen = () => htmlFullscreen || win.isFullScreen()
@@ -203,6 +204,7 @@ function windowState() {
     fullscreen: isFullscreen(),
     unread,
     update: updateReady ? 'ready' : null,
+    theme,
   }
 }
 
@@ -384,6 +386,17 @@ ipcMain.on('win:toggle-maximize', (e) => {
 })
 ipcMain.on('win:close', (e) => fromBar(e) && win.close()) // close → прячем в трей
 ipcMain.on('win:update', (e) => fromBar(e) && installUpdate())
+
+// Сайт сменил тему — полоска заголовка и фон окна в тех же цветах. Принимаем только цвета вида #rrggbb.
+const HEX = /^#[0-9a-f]{6}$/i
+ipcMain.on('site:theme', (e, t) => {
+  if (!view || view.webContents.isDestroyed() || e.sender.id !== site().id || !t || typeof t !== 'object') return
+  if (![t.bg, t.fg, t.accent, t.onAccent].every((c) => typeof c === 'string' && HEX.test(c))) return
+  theme = { bg: t.bg, fg: t.fg, accent: t.accent, onAccent: t.onAccent, dark: t.dark !== false }
+  view.setBackgroundColor(theme.bg)
+  win.setBackgroundColor(theme.bg)
+  sendState()
+})
 
 // ============ трей ============
 

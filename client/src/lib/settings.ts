@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { rgbToHex, type RGB } from './color'
 import { cssBlock, lookVars, THEMES, themeInfo, type LookColors, type ThemeId } from './themes'
 
 /**
@@ -188,8 +189,22 @@ function applyLook(s: Settings) {
     ).join('\n')
   }
   bgColor = `rgb(${vars['--bg-rgb'].replace(/ /g, ',')})`
+  const hex = (k: string) => rgbToHex(vars[k].split(' ').map(Number) as RGB)
+  deskTheme = { bg: hex('--bg-rgb'), fg: hex('--fg-rgb'), accent: hex('--accent-rgb'), onAccent: hex('--on-accent-rgb'), dark: theme.tone === 'dark' }
   updateThemeColor()
 }
+
+/** Цвета для полоски заголовка в приложении для Windows */
+interface DesktopTheme {
+  bg: string
+  fg: string
+  accent: string
+  onAccent: string
+  dark: boolean
+}
+const DESK_BLACK: DesktopTheme = { bg: '#000000', fg: '#ffffff', accent: '#ffffff', onAccent: '#000000', dark: true }
+let deskTheme = DESK_BLACK
+let deskSent = ''
 
 const RADIUS: Record<Settings['radius'], number> = { sharp: 0.35, normal: 1, round: 1.5 }
 
@@ -223,10 +238,20 @@ export function setThemed(on: boolean) {
   updateThemeColor()
 }
 
-/** Цвет системной полосы (телефон, PWA) — под фон темы */
+/** Цвет системной полосы (телефон, PWA) и полоски заголовка приложения для Windows — под фон темы */
 function updateThemeColor() {
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', themed ? bgColor : '#000000')
+  const desk = themed ? deskTheme : DESK_BLACK
+  const key = JSON.stringify(desk)
+  if (key === deskSent) return
+  deskSent = key
+  try {
+    // старые версии приложения этого не умеют — тогда полоска просто остаётся чёрной
+    ;(window as { nuntiusDesktop?: { setTheme?: (t: DesktopTheme) => void } }).nuntiusDesktop?.setTheme?.(desk)
+  } catch {
+    // мостик недоступен — не страшно
+  }
 }
 
 apply(useSettings.getState())
