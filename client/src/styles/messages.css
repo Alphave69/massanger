@@ -932,7 +932,7 @@ button.mention:hover {
 }
 
 .mgroup--mine .mention--role.has-color {
-  color: color-mix(in srgb, var(--mention) 55%, black);
+  color: color-mix(in srgb, var(--mention) 55%, var(--on-accent, black));
   background: color-mix(in srgb, var(--mention) 22%, transparent);
 }
 
