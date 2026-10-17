@@ -111,10 +111,10 @@ All limits are in-memory sliding windows and reset when the server restarts.
 | Code e-mails per IP (register, reset, e-mail change) | 10 per hour |
 | Messages per user (`message:send`) | 5 per 4 s, then a 2 s pause; repeated within 30 s — 3, 5, 8, up to 10 s |
 | Reactions / edits / forwards per user | 12 per 4 s / 6 per 5 s / 5 per 5 s, then a short pause |
-| File uploads per user | 60 per 10 min, 500 MB per day (`UPLOAD_DAILY_MB`) |
-| Size of one file | 25 MB (`UPLOAD_MAX_MB`); avatar 2 MB, banner 5 MB |
+| File uploads per user | 60 per 10 min, 500 MB per day (`UPLOAD_DAILY_MB`); at most 3 at the same time (8 for the whole server) |
+| Size of one file | 25 MB (`UPLOAD_MAX_MB`); avatar 2 MB and 1024×1024 px, banner 5 MB and 1920×640 px |
 
-Requests over a limit get HTTP 429 with `Retry-After`. Messages over the limit are not delivered: the socket ack is `{ error, code: "slow_down", retryAfter }` (seconds; `retryAfterMs` is exact), and the client shows a warning with a countdown above the composer.
+Requests over a limit get HTTP 429 with `Retry-After` (for the daily upload quota: when the oldest upload of the last 24 hours stops counting). Messages over the limit are not delivered: the socket ack is `{ error, code: "slow_down", retryAfter }` (seconds; `retryAfterMs` is exact), and the client shows a warning with a countdown above the composer.
 
 The app runs behind Caddy on the same machine. Express uses `trust proxy = loopback`, so `req.ip` is the real client address from `X-Forwarded-For`, and only the local proxy is trusted to set that header.
 
@@ -127,12 +127,18 @@ The app runs behind Caddy on the same machine. Express uses `trust proxy = loopb
 ### Authorization
 
 - Every socket event and REST route checks server permissions with role hierarchy and per-channel overrides on the server (`server/src/permissions.ts`), not only in the UI.
-- Message, typing, voice and presence events are sent only to users who can see the channel.
+- Message, typing and voice events are sent only to users who can see the channel. Presence (online status) and public profile updates (name, status, badges, avatar/banner URLs) are broadcast to all signed-in users.
+- A role can be mentioned (`<@&role>`) by any member only if the role is marked mentionable («Можно упоминать»). Otherwise only members with `MENTION_EVERYONE` in the channel or `MANAGE_ROLES` on the server can ping it.
+- Links with a user name or password in the URL (`https://site@other.host`) are not turned into links. Shortened links always keep the host visible, and hosts that mix alphabets (e.g. a Cyrillic «а» in `apple.com`) are shown in punycode (`xn--…`).
 
 ### Files (photos, videos, attachments)
 
 - Uploads go to `POST /api/uploads` (login required) and are stored in `server/data/uploads/` under a random 128-bit id. The file name the user picked is kept only as metadata.
-- The type is detected from the file's first bytes (magic numbers), not from its name or `Content-Type`. A text file renamed to `.png` is stored and served as a generic file.
+- The body is streamed to a temporary file on disk (never buffered whole in memory). The daily quota is reserved from `Content-Length` before reading, so parallel uploads cannot exceed it.
+- The type is detected from the file's first bytes (magic numbers), not from its name or `Content-Type`. A text file renamed to `.png` is stored and served as a generic file. MP3 needs a valid MPEG frame header (and a second frame where the file is long enough), so UTF-16 text with a BOM is not mistaken for audio.
+- Images larger than 8192 px on a side or 16.7 MP (4096×4096) are served only as downloads, because every viewer's browser would have to decode them.
+- Metadata is removed on the server, for every client: JPEG loses EXIF/XMP (APP1), IPTC (APP13), comments and anything after the image (MPF secondary images, «motion photo» videos); only the EXIF orientation is written back. PNG loses `eXIf`, `tEXt`, `iTXt`, `zTXt`, `tIME`. WebP loses its `EXIF` and `XMP ` chunks. In MP4/MOV/M4A the `udta` and `meta` boxes inside `moov` and each track (Android `©xyz`, iPhone `com.apple.quicktime.location.ISO6709`, camera model) and the top-level XMP `uuid` box are renamed to `free` and zeroed in place, so sample offsets stay valid. **Not stripped:** GIF comments, MP3 ID3 tags, WebM/Ogg/WAV tags and files served only as downloads (HEIC, PDF, ZIP, etc.).
+- File names are cleaned (no paths, control or direction characters, no broken emoji halves) and sent in `Content-Disposition` as an ASCII fallback plus RFC 5987 `filename*`. A `Range` past the end of a file gets 416.
 - Only PNG, JPEG, GIF, WebP images and MP4/MOV/WebM video and MP3/OGG/WAV/M4A audio are served inline with their real type. Everything else (PDF, ZIP, HTML, SVG, unknown) is served as `application/octet-stream` with `Content-Disposition: attachment`, so the browser downloads it instead of rendering it. Every file response also has `X-Content-Type-Options: nosniff` and a sandboxing `Content-Security-Policy`.
 - A message may reference only the sender's own uploads that are not attached to anything yet. Attaching files to messages in server channels needs the `ATTACH_FILES` permission (in addition to `SEND_MESSAGES`).
 - Deleting a message deletes its files once nothing else (a forwarded copy, an avatar) references them. Replacing an avatar or banner deletes the old image. Uploads that were never attached are removed after 24 hours.
