@@ -63,11 +63,20 @@ export interface Settings {
   labRetro: boolean // «Ретро-терминал» — зелёный фосфор
 }
 
+/** Телефон (палец и узкий экран): тяжёлый фон по умолчанию выключен, сфера рисуется экономнее */
+export function isPhoneDevice() {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches && Math.min(window.screen.width, window.screen.height) <= 760
+  } catch {
+    return false
+  }
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
   chatFontSize: 15,
   compact: false,
-  sphere: true,
+  sphere: !isPhoneDevice(),
   sphereBrightness: 0.5,
   cursorGlow: true,
   reduceMotion: false,

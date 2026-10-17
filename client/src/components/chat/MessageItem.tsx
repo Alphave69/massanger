@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import { memo, type MouseEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { CornerUpRight } from 'lucide-react'
 import type { Message, MessageFlavor } from '../../lib/api'
@@ -7,6 +7,7 @@ import { formatStamp, formatTime } from '../../lib/format'
 import { useLongPress } from '../../lib/mobile'
 import { messageRights, msgUi, useMsgUi } from '../../lib/msgActions'
 import { useChat } from '../../lib/store'
+import { useSettings } from '../../lib/settings'
 import { mentionsMe } from '../../lib/mentions'
 import { MessageActions } from '../guild/MessageActions'
 import { MentionText } from './MentionText'
@@ -73,9 +74,13 @@ interface ItemProps {
   color: string | null
 }
 
+/** Строка перерисовывается, только когда поменялись её данные (memo) — и ещё при смене формата времени */
+const useClockFormat = () => useSettings((s) => `${s.clock24}${s.clockSeconds}`)
+
 /** Сообщение человека: цитата ответа, пузырь, реакции */
-export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
+export const MessageItem = memo(function MessageItem({ message: m, fresh, name, color }: ItemProps) {
   const { flash, active, editing } = useRowState(m.id)
+  useClockFormat()
   const canReact = useChat((s) => messageRights(s, m).canReact)
   // меня упомянули — полоска слева и мягкий фон (пересланное не в счёт: это чужой разговор)
   const pinged = useChat((s) => !m.forwarded && mentionsMe(s, m))
@@ -103,11 +108,12 @@ export function MessageItem({ message: m, fresh, name, color }: ItemProps) {
       <Reactions message={m} canReact={canReact} />
     </div>
   )
-}
+})
 
 /** Служебное сообщение («теперь вы друзья») — по центру, тоже с реакциями */
-export function SystemItem({ message: m, fresh }: { message: Message; fresh: boolean }) {
+export const SystemItem = memo(function SystemItem({ message: m, fresh }: { message: Message; fresh: boolean }) {
   const { flash, active } = useRowState(m.id)
+  useClockFormat()
   const canReact = useChat((s) => messageRights(s, m).canReact)
   const touch = useTouchMenu(m)
   return (
@@ -121,7 +127,7 @@ export function SystemItem({ message: m, fresh }: { message: Message; fresh: boo
       <Reactions message={m} canReact={canReact} />
     </div>
   )
-}
+})
 
 /** Звёздочка у времени 11:11 и 22:22 */
 export function Wish() {

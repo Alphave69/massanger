@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useSettings } from '../lib/settings'
+import { isPhoneDevice, useSettings } from '../lib/settings'
 import { useVoice } from '../lib/voice'
 
 /**
@@ -60,7 +60,9 @@ export function ParticleSphere({ mode, className }: Props) {
 
     const prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const reduced = () => prefersReduce || useSettings.getState().reduceMotion
-    const count = window.innerWidth < 700 ? 800 : 1600
+    // Телефон: точек меньше, холст без ретины и кадров реже — иначе фон съедает почти весь процессор
+    const phone = isPhoneDevice()
+    const count = phone ? 360 : window.innerWidth < 700 ? 800 : 1600
 
     // --- точки на единичной сфере (спираль Фибоначчи) ---
     const bx = new Float32Array(count)
@@ -99,7 +101,7 @@ export function ParticleSphere({ mode, className }: Props) {
     let h = 0
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = phone ? 1 : Math.min(window.devicePixelRatio || 1, 2)
       w = rect.width
       h = rect.height
       canvas.width = Math.round(w * dpr)
@@ -197,8 +199,22 @@ export function ParticleSphere({ mode, className }: Props) {
     // Цвет точек — из темы (--sphere-rgb); перечитываем раз в полсекунды, не каждый кадр
     let dot = '#fff'
     let frameNo = 0
+    // телефон: пока листают чат — сфера стоит (кадры нужнее прокрутке)
+    let scrolledAt = 0
+    const onScroll = () => (scrolledAt = performance.now())
+    if (phone) document.addEventListener('scroll', onScroll, { capture: true, passive: true })
 
     const frame = (now: number) => {
+      if (phone) {
+        // ~30 кадров на заставке, ~20 фоном в приложении; на прокрутке и при наборе текста — пауза
+        const typing = document.activeElement instanceof HTMLTextAreaElement
+        const minGap = modeRef.current === 'hero' ? 32 : 48
+        if (now - last < minGap || (modeRef.current !== 'hero' && (now - scrolledAt < 400 || typing))) {
+          if (now - last >= minGap) last = now
+          raf = requestAnimationFrame(frame)
+          return
+        }
+      }
       const dt = Math.min((now - last) / 16.667, 3)
       last = now
       const hero = modeRef.current === 'hero'
@@ -312,6 +328,7 @@ export function ParticleSphere({ mode, className }: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      document.removeEventListener('scroll', onScroll, { capture: true })
       ro.disconnect()
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerdown', onDown)
