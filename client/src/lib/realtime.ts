@@ -244,11 +244,15 @@ function watchLink(s: Socket) {
     if (s.connected) s.io.engine?.close()
   }
   const onPageShow = (e: PageTransitionEvent) => e.persisted && probe(s)
+  // Chrome «заморозил» вкладку в фоне и разморозил (Page Lifecycle)
+  const onResume = () => probe(s)
+  document.addEventListener('resume', onResume)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
   window.addEventListener('pageshow', onPageShow)
   return () => {
+    document.removeEventListener('resume', onResume)
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
