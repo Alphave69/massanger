@@ -53,29 +53,47 @@ export function loadBadges(force = false): Promise<void> {
   return inflight
 }
 
-/** Сервер прислал «значок получен» */
-export function onBadgeEarned(e: EarnedEvent): void {
-  if (!e?.badge) return
-  useBadges.setState((s) =>
-    s.queue.some((q) => q.badge.id === e.badge.id && q.at === e.at) ? s : { queue: [...s.queue, { badge: e.badge, at: e.at || Date.now() }] },
-  )
+/** Добавить в очередь то, чего там ещё нет; true — если что-то добавилось */
+function enqueue(list: EarnedEvent[]) {
+  const fresh = list.filter((e) => e?.badge && !useBadges.getState().queue.some((q) => q.badge.id === e.badge.id))
+  if (!fresh.length) return false
+  useBadges.setState((s) => ({ queue: [...s.queue, ...fresh.map((e) => ({ badge: e.badge, at: e.at || Date.now() }))] }))
+  return true
+}
+
+const cheer = (list: EarnedEvent[]) => {
   void blip()
-  pulseSphere(e.badge.tier === 'legendary' ? 2.4 : 1.4)
+  pulseSphere(list.some((e) => e.badge.tier === 'legendary') ? 2.4 : 1.4)
   // Прогресс и «у скольких есть» поменялись
   if (useBadges.getState().catalog) void loadBadges(true)
 }
 
-/** Убрать показанный праздник из очереди */
-export function shiftCelebration() {
-  useBadges.setState((s) => ({ queue: s.queue.slice(1) }))
+/** Сервер прислал «значок получен» */
+export function onBadgeEarned(e: EarnedEvent): void {
+  if (e?.badge && enqueue([e])) cheer([e])
 }
 
-// Сменился аккаунт — чужой прогресс и праздники забываем
+/** Значки, полученные, пока приложение было закрыто или спрятано (приходят в /api/state) */
+export function onUnseenBadges(list: EarnedEvent[] | undefined): void {
+  if (list?.length && enqueue(list)) cheer(list)
+}
+
+/** Убрать показанный праздник из очереди и сказать серверу, что его видели (больше не пришлёт) */
+export function shiftCelebration() {
+  const shown = useBadges.getState().queue[0]
+  useBadges.setState((s) => ({ queue: s.queue.slice(1) }))
+  if (shown) api.badgesSeen([shown.badge.id]).catch(() => {})
+}
+
+// Сменился аккаунт — чужой прогресс и праздники забываем. Вход (null → id) — не смена:
+// значок, пришедший до загрузки профиля, иначе пропадал бы без праздника
 let lastMe: string | null = null
 useChat.subscribe((st) => {
   const id = st.me?.id ?? null
   if (id === lastMe) return
+  const switched = lastMe !== null
   lastMe = id
+  if (!switched) return
   loadedAt = 0
   useBadges.setState({ catalog: null, queue: [], failed: false })
 })

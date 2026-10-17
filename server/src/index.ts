@@ -187,6 +187,11 @@ function presenceMap() {
 
 const broadcastPresence = () => io.emit('presence', presenceMap())
 
+// Значки за стаж приходят и тем, кто просто держит приложение открытым (без новых сообщений и переподключений)
+setInterval(() => {
+  for (const userId of socketCount.keys()) badges.syncId(userId)
+}, 10 * 60_000).unref()
+
 /** В сети и не невидимка — для @here */
 const isPresent = (userId: string) => (socketCount.get(userId) ?? 0) > 0 && store.findUser(userId)?.status !== 'invisible'
 
@@ -357,8 +362,11 @@ app.get('/api/me', requireAuth, (req, res) => {
 /** Всё, что нужно клиенту при старте, одним запросом */
 app.get('/api/state', requireAuth, (req, res) => {
   const { user } = req as AuthedRequest
+  // Значки — до снимка профиля: иначе выданный при входе значок пришёл бы раньше и снимок его бы «затёр»
+  badges.sync(user)
   res.json({
     user: selfUser(user),
+    badgesUnseen: badges.unseenFor(user),
     guilds: store.guildsOf(user.id).map((g) => serializeGuild(g, user.id)),
     friends: friendEntries(user.id),
     dms: dmsFor(user.id),
@@ -612,7 +620,17 @@ startUploads()
 // --- значки и пасхалки ---
 
 app.get('/api/badges', requireAuth, (req, res) => {
-  res.json(badges.catalogFor((req as AuthedRequest).user))
+  const { user } = req as AuthedRequest
+  badges.sync(user) // открыли «Значки» — не показываем закрытую карточку «7 / 7»
+  res.json(badges.catalogFor(user))
+})
+
+/** Клиент показал «Новый значок!» — больше не присылаем этот праздник */
+app.post('/api/badges/seen', requireAuth, (req, res) => {
+  const ids: unknown = req.body?.ids
+  if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === 'string')) return fail(res, 400, 'Нужен список значков')
+  badges.markSeen((req as AuthedRequest).user, ids as string[])
+  res.json({ ok: true })
 })
 
 app.post('/api/me/eggs', requireAuth, (req, res) => {
@@ -656,7 +674,11 @@ io.on('connection', (socket) => {
   const me = store.findUser(userId)
   const tz = socket.handshake.auth?.tz
   if (me && typeof tz === 'number' && Number.isInteger(tz) && Math.abs(tz) <= 840 && tz !== me.tz) store.updateUser(me, { tz })
-  if (me) badges.sync(me)
+  if (me) {
+    badges.sync(me)
+    // значки, полученные, пока его не было (праздник ещё не видел), — этой вкладке
+    for (const e of badges.unseenFor(me)) socket.emit('badge:earned', e)
+  }
 
   // отправка, ответы, реакции, правка и пересылка — messages.ts
   messages.attach(socket, userId)

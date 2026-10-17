@@ -157,8 +157,17 @@ export const chat = {
     const keepView =
       st.ready &&
       (v.kind === 'home' || (v.kind === 'dm' && s.dms.some((d) => d.id === v.dmId)) || (v.kind === 'guild' && s.guilds.some((g) => g.id === v.guildId)))
+    // Снимок мог собраться раньше, чем пришёл me:update с новым значком, — новое не теряем
+    const me =
+      st.me?.id === s.user.id
+        ? {
+            ...s.user,
+            badges: [...s.user.badges, ...st.me.badges.filter((b) => !s.user.badges.some((x) => x.id === b.id))],
+            eggs: [...s.user.eggs, ...st.me.eggs.filter((e) => !s.user.eggs.some((x) => x.id === e.id))],
+          }
+        : s.user
     set({
-      me: s.user,
+      me,
       users: withUsers(st.users, [
         s.user,
         ...s.guilds.flatMap((g) => g.members),

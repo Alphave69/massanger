@@ -49,11 +49,20 @@ export function BadgeCelebration() {
     [dismiss],
   )
 
-  // Новый значок — заводим таймер заново
+  // Новый значок — заводим таймер заново. Пока вкладка или окно спрятаны, таймер стоит:
+  // значок, полученный «в фоне», дождётся, когда на него посмотрят (и покажется целиком)
   useEffect(() => {
     if (!current) return
-    run(SHOW_MS)
-    return () => window.clearTimeout(timer.current)
+    const sync = () => {
+      if (document.visibilityState === 'visible') run(SHOW_MS)
+      else window.clearTimeout(timer.current)
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      window.clearTimeout(timer.current)
+    }
   }, [current, run])
 
   useEffect(() => {

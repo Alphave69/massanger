@@ -353,6 +353,14 @@ if (!data.migrations.includes('attach-files')) {
   save()
 }
 
+// Счётчик сообщений для значков появился позже самих сообщений: при запуске досчитываем по базе
+// (иначе у старых аккаунтов и после восстановления из бэкапа «Первое слово», «Болтун»… не выдаются)
+{
+  const written = new Map<string, number>()
+  for (const m of data.messages) written.set(m.authorId, (written.get(m.authorId) ?? 0) + 1)
+  for (const u of data.users) u.stats.messages = Math.max(u.stats.messages, written.get(u.id) ?? 0)
+}
+
 export const id = () => randomUUID()
 
 /** Редкость значка для сортировки (задаёт badges.ts, чтобы store не зависел от каталога) */

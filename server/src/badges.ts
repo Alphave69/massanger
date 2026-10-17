@@ -162,7 +162,9 @@ export function localTime(tz: number | null, at = Date.now()) {
 }
 
 const friendsCount = (userId: string) => store.relationsOf(userId).filter((r) => r.state === 'friends').length
-const tenureDays = (user: store.User) => Math.floor((Date.now() - user.createdAt) / DAY)
+/** Номер календарного дня по местному времени человека (как в профиле: «Ты с нами N дней») */
+const localDay = (at: number, tz: number | null) => Math.floor((at - (tz ?? 0) * 60_000) / DAY)
+const tenureDays = (user: store.User) => Math.max(0, localDay(Date.now(), user.tz) - localDay(user.createdAt, user.tz))
 const isPalindrome = (s: string) => {
   const t = s.toLowerCase().replace(/[_.]/g, '')
   return t.length >= 3 && t === [...t].reverse().join('')
@@ -184,12 +186,18 @@ export const eggsOf = (user: store.User): FoundEgg[] =>
  *   (index.ts рассылает обновлённый профиль ему и остальным)
  */
 export function createBadges(io: Server, changed: (user: store.User) => void) {
-  /** Выдать значок; true — если он новый. Сам «праздник» видит только получатель */
-  function give(user: store.User, id: string) {
+  /**
+   * Выдать значок; true — если он новый. Сам «праздник» видит только получатель.
+   * Пока он его не увидел (приложение закрыто, вкладка спрятана), значок лежит в unseenBadges —
+   * придёт вместе с /api/state при следующем открытии. Забранные админом автоматические значки сами не возвращаются
+   */
+  function give(user: store.User, id: string, byAdmin = false) {
     const badge = byId.get(id)
     if (!badge || user.badges[id]) return false
+    if (!byAdmin && user.revokedBadges?.includes(id)) return false
     const at = Date.now()
     user.badges[id] = at
+    if (!user.unseenBadges?.includes(id)) user.unseenBadges = [...(user.unseenBadges ?? []), id]
     io.to(`user:${user.id}`).emit('badge:earned', { badge, at })
     return true
   }
@@ -208,6 +216,9 @@ export function createBadges(io: Server, changed: (user: store.User) => void) {
     if (n >= 1 && n <= 10) want.push('founder')
     if (n === 1) want.push('first')
     if (store.allGuilds().some((g) => g.isLobby && g.ownerId === user.id)) want.push('creator')
+    // «Архитектор» и «Собиратель» — и по данным: у старых аккаунтов и после восстановления из бэкапа
+    if (store.allGuilds().some((g) => !g.isLobby && g.ownerId === user.id)) want.push('architect')
+    if (store.dmsOf(user.id).some((d) => d.kind === 'group' && d.ownerId === user.id)) want.push('gatherer')
     if (isPalindrome(user.username)) want.push('palindrome')
     if (user.bio.trim() && user.customStatus.trim()) want.push('stylish')
     const days = tenureDays(user)
@@ -291,18 +302,40 @@ export function createBadges(io: Server, changed: (user: store.User) => void) {
       return { isNew: true, egg: { ...egg, at } }
     },
 
-    /** Админ выдал / забрал значок */
+    /** Админ выдал / забрал значок. Забранный автоматический значок помечаем — sync его больше не вернёт */
     grant(user: store.User, id: string) {
       if (!byId.has(id)) return false
-      finish(user, give(user, id))
+      if (user.revokedBadges?.includes(id)) {
+        user.revokedBadges = user.revokedBadges.filter((x) => x !== id)
+        store.persist()
+      }
+      finish(user, give(user, id, true))
       return true
     },
     revoke(user: store.User, id: string) {
       if (!user.badges[id]) return false
       delete user.badges[id]
+      user.unseenBadges = user.unseenBadges?.filter((x) => x !== id)
+      if (!byId.get(id)?.manual && !user.revokedBadges?.includes(id)) user.revokedBadges = [...(user.revokedBadges ?? []), id]
       store.persist()
       changed(user)
       return true
+    },
+
+    /** Значки, «праздник» которых человек ещё не видел (в /api/state) */
+    unseenFor(user: store.User) {
+      return (user.unseenBadges ?? []).flatMap((id) => {
+        const badge = byId.get(id)
+        return badge && user.badges[id] ? [{ badge, at: user.badges[id] }] : []
+      })
+    },
+    /** Клиент показал праздник — больше не присылаем */
+    markSeen(user: store.User, ids: string[]) {
+      if (!user.unseenBadges?.length) return
+      const rest = user.unseenBadges.filter((id) => !ids.includes(id))
+      if (rest.length === user.unseenBadges.length) return
+      user.unseenBadges = rest
+      store.persist()
     },
 
     /** Каталог для человека: секретные неполученные — «???», плюс редкость и его прогресс */

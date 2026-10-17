@@ -5,7 +5,7 @@ import { attachVoice, initVoice } from './voice'
 import { blip, desktopNotify, pulseSphere } from './fx'
 import { useSettings } from './settings'
 import { ui } from './ui'
-import { onBadgeEarned } from './badges'
+import { onBadgeEarned, onUnseenBadges } from './badges'
 import { onEggFound, onMessageSent } from './eggs'
 import { onAnnounce } from './admin'
 import { mentionsMe, readable } from './mentions'
@@ -65,6 +65,7 @@ export function connectRealtime(onUnauthorized: () => void) {
           chat.init(state)
           initVoice(state.voice, state.rings)
           chat.clearMessages()
+          onUnseenBadges(state.badgesUnseen)
         })
         .catch(() => {})
     }

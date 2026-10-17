@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
+import { onUnseenBadges } from '../lib/badges'
 import { initVoice, resetVoice } from '../lib/voice'
 import { activeChannelId, chat, useChat } from '../lib/store'
 import { ui, useUi } from '../lib/ui'
@@ -126,6 +127,7 @@ export function Shell({ onLogout }: Props) {
         chat.init(state)
         initVoice(state.voice, state.rings)
         setUploadLimits(state.uploads)
+        onUnseenBadges(state.badgesUnseen)
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) onLogout()

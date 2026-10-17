@@ -312,6 +312,8 @@ export interface InitialState {
   voice: Record<string, VoiceMember[]>
   rings: { roomId: string; from: string }[]
   uploads?: UploadLimits
+  /** Значки, «праздник» которых ещё не показан (получены, пока приложение было закрыто) */
+  badgesUnseen?: { badge: BadgeDef; at: number }[]
 }
 
 const TOKEN_KEY = 'nuntius.token'
@@ -436,6 +438,7 @@ export const api = {
 
   // --- значки и пасхалки ---
   badges: () => request<BadgeCatalog>('/badges'),
+  badgesSeen: (ids: string[]) => request<{ ok: true }>('/badges/seen', { method: 'POST', body: { ids } }),
   findEgg: (id: string) => request<{ isNew: boolean; egg: FoundEgg | null; user: Me }>('/me/eggs', { method: 'POST', body: { id } }),
 
   // --- админка ---
