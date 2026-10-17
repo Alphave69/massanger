@@ -108,11 +108,12 @@ export function ChatView() {
     let fails = 0
     const load = () => {
       timer = 0
+      const startedAt = Date.now()
       api
         .messages(channelId)
         .then(({ messages: list }) => {
           if (!alive) return
-          chat.replaceMessages(channelId, list)
+          chat.replaceMessages(channelId, list, startedAt)
           setHistoryFailed(false)
         })
         .catch(() => {

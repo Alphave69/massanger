@@ -148,10 +148,13 @@ export const isDmChannel = (st: ChatState, channelId: string) => st.dms.some((d)
 let toastSeq = 0
 /** Каналы, чья загруженная история могла устареть (было переподключение) — перезагрузим при открытии */
 const staleChannels = new Set<string>()
+/** Когда пришли по сокету свежие сообщения (id → время): их не теряем, если история грузилась в это время */
+const arrivals = new Map<string, number>()
 
 export const chat = {
   reset() {
     staleChannels.clear()
+    arrivals.clear()
     set(initial, true)
   },
 
@@ -317,13 +320,12 @@ export const chat = {
     return staleChannels.has(channelId)
   },
 
-  /** Свежая история с сервера вместо прежней; пришедшее по сокету, пока она грузилась, сохраняем */
-  replaceMessages(channelId: string, list: Message[]) {
+  /** Свежая история с сервера вместо прежней; пришедшее по сокету после startedAt (начала загрузки) сохраняем */
+  replaceMessages(channelId: string, list: Message[], startedAt: number) {
     staleChannels.delete(channelId)
     set((st) => {
       const known = new Set(list.map((m) => m.id))
-      const last = list[list.length - 1]?.createdAt ?? 0
-      const extra = (st.messages[channelId] ?? []).filter((m) => !known.has(m.id) && m.createdAt >= last)
+      const extra = (st.messages[channelId] ?? []).filter((m) => !known.has(m.id) && (arrivals.get(m.id) ?? 0) >= startedAt)
       return { messages: { ...st.messages, [channelId]: extra.length ? [...list, ...extra] : list } }
     })
   },
@@ -348,6 +350,14 @@ export const chat = {
       typing = { ...st.typing, [m.channelId]: rest }
     }
 
+    if (list) {
+      const now = Date.now()
+      for (const [id, at] of arrivals) {
+        if (now - at < 60_000) break
+        arrivals.delete(id)
+      }
+      arrivals.set(m.id, now)
+    }
     set({
       messages: list ? { ...st.messages, [m.channelId]: [...list, m] } : st.messages,
       // служебные сообщения («теперь вы друзья») не считаем непрочитанными

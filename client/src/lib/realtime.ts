@@ -42,9 +42,10 @@ function notify(title: string, text: string, extra: { userId?: string; action?: 
 function refreshOpenChannel(retry = true) {
   const channelId = activeChannelId(useChat.getState())
   if (!channelId || !useChat.getState().messages[channelId]) return
+  const startedAt = Date.now()
   api
     .messages(channelId)
-    .then(({ messages }) => chat.replaceMessages(channelId, messages))
+    .then(({ messages }) => chat.replaceMessages(channelId, messages, startedAt))
     .catch(() => retry && window.setTimeout(() => refreshOpenChannel(false), 3000))
 }
 
