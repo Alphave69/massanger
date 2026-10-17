@@ -11,7 +11,7 @@ import * as store from './store.js'
 import { checkCode, cooldownLeft, issueCode, pendingData, RESEND_AFTER } from './codes.js'
 import { explainMailError, mailConfigured, sendCode, verifyMail, type CodePurpose } from './mail.js'
 import { createVoice } from './voice.js'
-import { on } from './safe.js'
+import { on, reply } from './safe.js'
 import { createBadges, eggsOf, EGGS } from './badges.js'
 import { createMessages } from './messages.js'
 import { registerAdminRoutes } from './admin.js'
@@ -43,6 +43,9 @@ app.use(express.json())
 const http = createServer(app)
 const io = new Server(http, {
   cors: { origin: allowedOrigins },
+  // «Мёртвую» связь (телефон сменил сеть, уснул) замечаем за ≤18 с, а не за 45 с по умолчанию
+  pingInterval: 10_000,
+  pingTimeout: 8_000,
   // WebSocket CORS не проверяет — Origin смотрим сами ещё до рукопожатия
   allowRequest: (req, cb) => cb(null, originAllowed(req.headers.origin, req.headers.host)),
 })
@@ -682,6 +685,9 @@ io.on('connection', (socket) => {
 
   // отправка, ответы, реакции, правка и пересылка — messages.ts
   messages.attach(socket, userId)
+
+  // «Ты тут?» — клиент проверяет, жива ли связь (вернулся из фона, сменилась сеть)
+  on(socket, 'alive', (_payload: unknown, ack?: unknown) => reply(ack)({ ok: true }))
 
   on(socket, 'typing', (payload: { channelId?: unknown }) => {
     const channelId = typeof payload?.channelId === 'string' ? payload.channelId : ''

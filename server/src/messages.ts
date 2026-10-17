@@ -36,6 +36,22 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
  * попался снова в течение полуминуты — пауза дольше (до 10 с). Сообщения во время паузы не доходят.
  * Реакции, правки и пересылки ограничены мягче.
  */
+/**
+ * Повтор отправки после обрыва (клиент шлёт тот же nonce): «userId:nonce» → id сообщения, ~2 минуты.
+ * Сообщение могло дойти, а ответ — потеряться; второй копии не создаём.
+ */
+const NONCE_TTL = 2 * 60_000
+const sentNonces = new Map<string, { id: string; at: number }>()
+function rememberNonce(key: string, id: string) {
+  const now = Date.now()
+  // Map хранит порядок вставки — старые записи в начале
+  for (const [k, v] of sentNonces) {
+    if (now - v.at < NONCE_TTL) break
+    sentNonces.delete(k)
+  }
+  sentNonces.set(key, { id, at: now })
+}
+
 const sendLimit = createLimiter({ max: 5, windowMs: 4000, cooldowns: [2000, 3000, 5000, 8000, 10_000], forgiveMs: 30_000 })
 const reactLimit = createLimiter({ max: 12, windowMs: 4000, cooldowns: [1500, 3000, 5000], forgiveMs: 30_000 })
 const editLimit = createLimiter({ max: 6, windowMs: 5000, cooldowns: [2000, 4000, 6000], forgiveMs: 30_000 })
@@ -106,8 +122,17 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
   const publishUpdate = (access: store.ChannelAccess, message: store.Message) => emitTo(store.viewersOf(access), 'message:update', message)
 
   function attach(socket: Socket, userId: string) {
-    on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown; attachments?: unknown }, ack?: unknown) => {
+    on(socket, 'message:send', (payload: { channelId?: unknown; content?: unknown; replyTo?: unknown; attachments?: unknown; nonce?: unknown }, ack?: unknown) => {
       const answer = reply(ack)
+      // Повтор того, что уже дошло, — отдаём то же сообщение (без лимита и без второй рассылки)
+      const nonce = str(payload?.nonce).slice(0, 64)
+      const nonceKey = nonce ? `${userId}:${nonce}` : ''
+      const seen = nonceKey ? sentNonces.get(nonceKey) : undefined
+      const already = seen && Date.now() - seen.at < NONCE_TTL ? store.findMessage(seen.id) : undefined
+      if (already && already.authorId === userId) {
+        answer({ message: already })
+        return
+      }
       // Строчит слишком быстро — сообщение не доходит, клиент покажет «полегче» с отсчётом
       const wait = sendLimit.hit(userId)
       if (wait !== null) {
@@ -166,6 +191,7 @@ export function createMessages({ io, badges, dmView, canWriteDm, emitTo, isOnlin
         }
       }
       // серверный канал — только тем, кто его видит; личка — её участникам
+      if (nonceKey) rememberNonce(nonceKey, message.id)
       publish(access, message)
       answer({ message })
     })

@@ -170,42 +170,151 @@ export function connectRealtime(onUnauthorized: () => void) {
   })
 
   const stopIdle = trackIdle()
+  const stopWatch = watchLink(s)
   const typingTimer = window.setInterval(chat.pruneTyping, 1000)
 
   return () => {
     stopIdle()
+    stopWatch()
     window.clearInterval(typingTimer)
     s.disconnect()
     if (socket === s) socket = null
   }
 }
 
+const ACK_MS = 8000
+/** После «зависшей» связи столько ждём переподключения, чтобы дослать сообщение само */
+const RESEND_WAIT = 20_000
+
+const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+
+/** Переподключиться сейчас: «зависший» транспорт рвём (Socket.IO поднимет новый), паузу между попытками не ждём */
+function reconnectNow(s: Socket) {
+  if (s.connected) {
+    s.io.engine?.close()
+    return
+  }
+  s.disconnect()
+  s.connect()
+}
+
+/** Жива ли связь: короткий вопрос серверу; не ответил — переподключаемся */
+function probe(s: Socket) {
+  if (!s.connected) {
+    reconnectNow(s)
+    return
+  }
+  s.timeout(4000).emit('alive', null, (err: Error | null) => {
+    if (err && s.connected && socket === s) reconnectNow(s)
+  })
+}
+
 /**
- * Событие сообщений с ответом сервера (ack): сообщение — если вышло,
- * null — если нет (тост с причиной уже показан).
+ * Телефон: вернулись из фона, сменилась сеть, страница из bfcache — сокет может быть «зомби»
+ * (считает себя на связи, а данные не идут). Проверяем и переподключаемся, не дожидаясь heartbeat.
  */
-function messageRequest(event: string, payload: object, failTitle: string, offlineText: string): Promise<Message | null> {
-  return new Promise((resolve) => {
-    if (!socket?.connected) {
-      chat.toast({ title: 'Нет соединения', text: offlineText })
-      resolve(null)
+function watchLink(s: Socket) {
+  let hiddenAt = document.hidden ? Date.now() : 0
+  const onVisibility = () => {
+    if (document.hidden) {
+      hiddenAt = Date.now()
       return
     }
-    socket.timeout(8000).emit(event, payload, (err: Error | null, res: { error?: string; message?: Message; code?: string; retryAfter?: number; retryAfterMs?: number }) => {
-      // Строчим слишком быстро: для сообщений — предупреждение с отсчётом над полем ввода, а не тост
-      if (event === 'message:send' && res?.code === 'slow_down') {
-        slowDown(res.retryAfterMs ?? (res.retryAfter ?? 2) * 1000)
-        resolve(null)
+    const away = hiddenAt ? Date.now() - hiddenAt : 0
+    hiddenAt = 0
+    if (away > 5000) probe(s)
+  }
+  const onOnline = () => (s.connected ? probe(s) : reconnectNow(s))
+  // сети нет — честно показываем «Переподключаемся», а старое соединение бросаем
+  const onOffline = () => {
+    chat.setConnected(false)
+    if (s.connected) s.io.engine?.close()
+  }
+  const onPageShow = (e: PageTransitionEvent) => e.persisted && probe(s)
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
+  window.addEventListener('pageshow', onPageShow)
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
+    window.removeEventListener('pageshow', onPageShow)
+  }
+}
+
+/** Дождаться подключения (не дольше ms); true — на связи */
+function waitConnected(ms: number): Promise<boolean> {
+  const s = socket
+  if (!s) return Promise.resolve(false)
+  if (s.connected) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const done = (ok: boolean) => {
+      window.clearTimeout(timer)
+      s.off('connect', onConnect)
+      resolve(ok)
+    }
+    const onConnect = () => done(true)
+    const timer = window.setTimeout(() => done(false), ms)
+    s.on('connect', onConnect)
+  })
+}
+
+type Ack = { error?: string; message?: Message; code?: string; retryAfter?: number; retryAfterMs?: number }
+
+/** Один запрос с ответом: ответ сервера, 'offline' — связи нет, 'lost' — ответа нет за 8 с или связь оборвалась */
+function emitAck(event: string, payload: object): Promise<Ack | 'offline' | 'lost'> {
+  return new Promise((resolve) => {
+    const s = socket
+    if (!s?.connected || offline()) {
+      resolve('offline')
+      return
+    }
+    s.timeout(ACK_MS).emit(event, payload, (err: Error | null, res: Ack) => {
+      if (!err) {
+        resolve(res ?? {})
         return
       }
-      if (err || !res?.message) {
-        chat.toast({ title: failTitle, text: res?.error ?? 'Сервер не ответил' })
-        resolve(null)
-        return
-      }
-      resolve(res.message)
+      // Ответа нет, а сокет «на связи» — связь зависла (сменилась сеть, лифт): рвём и переподключаемся сразу,
+      // вместо того чтобы ждать heartbeat; остальные ждущие запросы оборвутся вместе с ним
+      if (s.connected && socket === s) reconnectNow(s)
+      resolve('lost')
     })
   })
+}
+
+const newNonce = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+
+/**
+ * Событие сообщений с ответом сервера (ack): сообщение — если вышло,
+ * null — если нет (тост с причиной уже показан, одна ошибка за раз).
+ * resend — сообщение с nonce: если связь зависла, дождаться переподключения и дослать то же самое
+ * (сервер по nonce не создаст вторую копию, если первое всё-таки дошло).
+ */
+async function messageRequest(event: string, payload: object, failTitle: string, offlineText: string, resend = false): Promise<Message | null> {
+  let res = await emitAck(event, payload)
+  if (res === 'lost' && resend) {
+    // пока ждём — сверху «Переподключаемся», без тостов; текст остаётся в поле, кнопка — с крутилкой
+    res = (await waitConnected(RESEND_WAIT)) ? await emitAck(event, payload) : 'offline'
+  }
+  if (res === 'offline') {
+    chat.toast({ title: 'Нет соединения', text: offlineText, error: true })
+    return null
+  }
+  if (res === 'lost') {
+    chat.toast({ title: failTitle, text: 'Связь пропала — переподключаемся, попробуй ещё раз', error: true })
+    return null
+  }
+  // Строчим слишком быстро: для сообщений — предупреждение с отсчётом над полем ввода, а не тост
+  if (event === 'message:send' && res.code === 'slow_down') {
+    slowDown(res.retryAfterMs ?? (res.retryAfter ?? 2) * 1000)
+    return null
+  }
+  if (!res.message) {
+    chat.toast({ title: failTitle, text: res.error ?? 'Сервер не ответил', error: true })
+    return null
+  }
+  return res.message
 }
 
 /** Отправить сообщение (replyTo — id сообщения, на которое отвечаем; attachments — id загруженных файлов); true — если сервер принял */
@@ -217,9 +326,10 @@ export async function sendMessage(channelId: string, content: string, replyTo?: 
   }
   const message = await messageRequest(
     'message:send',
-    { channelId, content, ...(replyTo ? { replyTo } : {}), ...(attachments?.length ? { attachments } : {}) },
+    { channelId, content, nonce: newNonce(), ...(replyTo ? { replyTo } : {}), ...(attachments?.length ? { attachments } : {}) },
     'Не отправлено',
     'Сообщение не отправлено — переподключаемся…',
+    true,
   )
   if (!message) return false
   if (chat.addMessage(message).isNew) pulseSphere(1)

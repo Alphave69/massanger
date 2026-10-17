@@ -481,6 +481,13 @@ function Composer({ channelId, placeholder, canAttach }: { channelId: string; pl
   const files = useComposerFiles(canAttach)
   useDropTarget(files.addFiles, canAttach)
   const [sending, setSending] = useState(false)
+  // отправка затянулась (связь зависла, досылаем после переподключения) — крутилка на кнопке
+  const [slowSend, setSlowSend] = useState(false)
+  useEffect(() => {
+    if (!sending) return setSlowSend(false)
+    const timer = window.setTimeout(() => setSlowSend(true), 800)
+    return () => window.clearTimeout(timer)
+  }, [sending])
   const [burst, setBurst] = useState(0)
   // подсказка команд: закрыли по Esc — не показываем, пока не сотрут «/»
   const [hintsClosed, setHintsClosed] = useState(false)
@@ -572,7 +579,8 @@ function Composer({ channelId, placeholder, canAttach }: { channelId: string; pl
     const ok = await sendMessage(channelId, content, replyId, done.map((f) => f.attachment!.id))
     setSending(false)
     if (ok) {
-      setValue('')
+      // пока связь восстанавливалась и сообщение досылалось, могли набрать новое — его не стираем
+      setValue((v) => (v.trim() === typed ? '' : v))
       files.clear(done.map((f) => f.key))
       setBurst((n) => n + 1)
       msgUi.cancelReply(channelId)
@@ -715,7 +723,7 @@ function Composer({ channelId, placeholder, canAttach }: { channelId: string; pl
           onPaste={files.onPaste}
         />
         <button className={`composer__send${ready ? ' is-ready' : ''}`} onClick={() => void send()} aria-label="Отправить" disabled={!ready || sending}>
-          {sending && files.busy ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={19} strokeWidth={2.5} />}
+          {sending && (files.busy || slowSend) ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={19} strokeWidth={2.5} />}
           {burst > 0 && <span key={burst} className="composer__ring" />}
         </button>
       </div>

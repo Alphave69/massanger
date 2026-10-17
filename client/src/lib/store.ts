@@ -32,6 +32,8 @@ export interface Toast {
   text?: string
   userId?: string
   action?: View
+  /** ошибка: на экране одновременно не больше одной такой */
+  error?: boolean
 }
 
 interface ChatState {
@@ -353,7 +355,10 @@ export const chat = {
 
   toast(t: Omit<Toast, 'id'>) {
     const id = ++toastSeq
-    set((st) => ({ toasts: [...st.toasts.slice(-3), { ...t, id }] }))
+    // Такой же уже на экране — не дублируем, а показываем заново (таймер с начала);
+    // новая ошибка заменяет прежнюю — стопки «Не отправлено» сверху не будет
+    const same = (x: Toast) => x.title === t.title && x.text === t.text && x.userId === t.userId
+    set((st) => ({ toasts: [...st.toasts.filter((x) => !same(x) && !(t.error && x.error)).slice(-3), { ...t, id }] }))
     window.setTimeout(() => chat.dismissToast(id), 4500)
   },
 
