@@ -41,6 +41,8 @@ registerUploadRoute(app)
 app.use(express.json())
 
 const http = createServer(app)
+// файл до 100 МБ с медленного интернета грузится дольше 5 минут — столько Node по умолчанию ждёт тело запроса
+http.requestTimeout = 60 * 60_000
 const io = new Server(http, {
   cors: { origin: allowedOrigins },
   // «Мёртвую» связь (телефон сменил сеть, уснул) замечаем за ≤18 с, а не за 45 с по умолчанию

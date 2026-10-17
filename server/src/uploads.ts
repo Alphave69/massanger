@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
-import { open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { open, readFile, rename, rm, statfs, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -26,9 +26,9 @@ export const UPLOAD_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../d
 const MB = 1024 * 1024
 const positive = (v: string | undefined, def: number) => (Number(v) > 0 ? Number(v) : def)
 /** Самый большой файл (UPLOAD_MAX_MB в server/.env) */
-export const MAX_BYTES = Math.round(positive(process.env.UPLOAD_MAX_MB, 25) * MB)
+export const MAX_BYTES = Math.round(positive(process.env.UPLOAD_MAX_MB, 100) * MB)
 /** Сколько один человек может загрузить за сутки */
-const DAILY_BYTES = Math.round(positive(process.env.UPLOAD_DAILY_MB, 500) * MB)
+const DAILY_BYTES = Math.round(positive(process.env.UPLOAD_DAILY_MB, 1000) * MB)
 /** Аватарка (в том числе анимированная GIF) и баннер */
 const AVATAR_MAX = 2 * MB
 const BANNER_MAX = 5 * MB
@@ -44,6 +44,31 @@ const PROFILE_PIXELS = { avatar: { w: 1024, h: 1024 }, banner: { w: 1920, h: 640
 /** Сколько загрузок идёт одновременно — у одного человека и у всех вместе (диск и процессор не резиновые) */
 const INFLIGHT_PER_USER = 3
 const INFLIGHT_TOTAL = 8
+
+/**
+ * Картинку для вырезания EXIF читаем в память целиком. Обычно это фото до пары мегабайт (клиент их сжимает),
+ * а картинки больше 25 МБ читаем по одной: 100 МБ × несколько сразу серверу с 1 ГБ памяти не по силам
+ */
+const BIG_IMAGE = 25 * MB
+let bigImages: Promise<unknown> = Promise.resolve()
+function oneBigImageAtATime<T>(job: () => Promise<T>): Promise<T> {
+  const run = bigImages.then(job, job)
+  bigImages = run.catch(() => {})
+  return run
+}
+
+/** Сколько места на диске оставляем всегда: база (db.json) должна сохраняться, даже если файлами завалили всё */
+const KEEP_FREE = 1024 * MB
+
+async function freeSpace() {
+  try {
+    mkdirSync(UPLOAD_DIR, { recursive: true })
+    const fs = await statfs(UPLOAD_DIR)
+    return fs.bavail * fs.bsize
+  } catch {
+    return Infinity
+  }
+}
 const inflight = new Map<string, number>()
 let inflightTotal = 0
 
@@ -290,10 +315,14 @@ function refuse(req: Request, res: Response, code: number, error: string, retryA
   req.on('error', () => res.destroy())
 }
 
-function admit(req: Request, res: Response, next: NextFunction) {
+async function admit(req: Request, res: Response, next: NextFunction) {
   const { user } = req as AuthedRequest
   const declared = Number(req.headers['content-length'])
   if (declared > MAX_BYTES) return refuse(req, res, 413, `Файл слишком большой — максимум ${mb(MAX_BYTES)}`)
+  if ((await freeSpace()) - (declared > 0 ? declared : MAX_BYTES) < KEEP_FREE) {
+    console.error('upload: на диске меньше', mb(KEEP_FREE), '— файлы не принимаю')
+    return refuse(req, res, 507, 'На сервере кончилось место для файлов — напиши админу')
+  }
   const wait = uploadsPerUser.retryAfter(user.id)
   if (wait) return refuse(req, res, 429, `Слишком много файлов подряд — попробуй ${waitText(wait)}`, wait)
   if ((inflight.get(user.id) ?? 0) >= INFLIGHT_PER_USER || inflightTotal >= INFLIGHT_TOTAL) {
@@ -326,7 +355,7 @@ function admit(req: Request, res: Response, next: NextFunction) {
 const HEAD_BYTES = 8192
 
 /**
- * Тело пишем сразу на диск (во временный файл), а не держим в памяти: 25 МБ × несколько загрузок
+ * Тело пишем сразу на диск (во временный файл), а не держим в памяти: 100 МБ × несколько загрузок
  * на сервере с 1 ГБ памяти — уже опасно. Считаем байты по пути и обрываем всё, что длиннее лимита
  */
 async function saveBody(req: Request, path: string) {
@@ -369,16 +398,21 @@ async function receive(req: Request, res: Response) {
     let type = sniff(head) ?? GENERIC
     let dim: Size | undefined
     if (type.kind === 'image') {
-      // картинку читаем целиком (до 25 МБ, и не больше INFLIGHT_TOTAL сразу): вырезаем EXIF/GPS и узнаём размер
-      let body: Buffer = await readFile(tmp)
-      const clean = stripImage(body, type.ext)
-      if (clean) {
-        body = clean
-        size = body.length
-        quota.size = size
-        await writeFile(tmp, body)
+      // картинку читаем целиком (большие — по одной, см. BIG_IMAGE): вырезаем EXIF/GPS и узнаём размер
+      const image = type
+      const read = async () => {
+        let body: Buffer = await readFile(tmp)
+        const clean = stripImage(body, image.ext)
+        if (clean) {
+          body = clean
+          await writeFile(tmp, body)
+        }
+        return { size: body.length, dim: imageSize(body, image.ext) }
       }
-      dim = imageSize(body, type.ext)
+      const done = size > BIG_IMAGE ? await oneBigImageAtATime(read) : await read()
+      size = done.size
+      quota.size = size
+      dim = done.dim
       // неизмеримая или гигантская картинка — только скачать
       if (!dim || dim.width > MAX_SIDE || dim.height > MAX_SIDE || dim.width * dim.height > MAX_PIXELS) {
         type = { ...type, kind: 'file' }

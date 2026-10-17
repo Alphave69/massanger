@@ -111,8 +111,8 @@ All limits are in-memory sliding windows and reset when the server restarts.
 | Code e-mails per IP (register, reset, e-mail change) | 10 per hour |
 | Messages per user (`message:send`) | 5 per 4 s, then a 2 s pause; repeated within 30 s — 3, 5, 8, up to 10 s |
 | Reactions / edits / forwards per user | 12 per 4 s / 6 per 5 s / 5 per 5 s, then a short pause |
-| File uploads per user | 60 per 10 min, 500 MB per day (`UPLOAD_DAILY_MB`); at most 3 at the same time (8 for the whole server) |
-| Size of one file | 25 MB (`UPLOAD_MAX_MB`); avatar 2 MB and 1024×1024 px, banner 5 MB and 1920×640 px |
+| File uploads per user | 60 per 10 min, 1000 MB per day (`UPLOAD_DAILY_MB`); at most 3 at the same time (8 for the whole server) |
+| Size of one file | 100 MB (`UPLOAD_MAX_MB`); avatar 2 MB and 1024×1024 px, banner 5 MB and 1920×640 px |
 
 Requests over a limit get HTTP 429 with `Retry-After` (for the daily upload quota: when the oldest upload of the last 24 hours stops counting). Messages over the limit are not delivered: the socket ack is `{ error, code: "slow_down", retryAfter }` (seconds; `retryAfterMs` is exact), and the client shows a warning with a countdown above the composer.
 
@@ -135,6 +135,8 @@ The app runs behind Caddy on the same machine. Express uses `trust proxy = loopb
 
 - Uploads go to `POST /api/uploads` (login required) and are stored in `server/data/uploads/` under a random 128-bit id. The file name the user picked is kept only as metadata.
 - The body is streamed to a temporary file on disk (never buffered whole in memory). The daily quota is reserved from `Content-Length` before reading, so parallel uploads cannot exceed it.
+- Images are read into memory once to strip metadata; images over 25 MB are processed one at a time, so a 1 GB server is not overrun by several large ones at once.
+- Uploads are refused with 507 when less than 1 GB of disk would be left, so the database can always be saved. Node waits up to 60 minutes for a request body (instead of the default 5), so a 100 MB file gets through a slow connection.
 - The type is detected from the file's first bytes (magic numbers), not from its name or `Content-Type`. A text file renamed to `.png` is stored and served as a generic file. MP3 needs a valid MPEG frame header (and a second frame where the file is long enough), so UTF-16 text with a BOM is not mistaken for audio.
 - Images larger than 8192 px on a side or 16.7 MP (4096×4096) are served only as downloads, because every viewer's browser would have to decode them.
 - Metadata is removed on the server, for every client: JPEG loses EXIF/XMP (APP1), IPTC (APP13), comments and anything after the image (MPF secondary images, «motion photo» videos); only the EXIF orientation is written back. PNG loses `eXIf`, `tEXt`, `iTXt`, `zTXt`, `tIME`. WebP loses its `EXIF` and `XMP ` chunks. In MP4/MOV/M4A the `udta` and `meta` boxes inside `moov` and each track (Android `©xyz`, iPhone `com.apple.quicktime.location.ISO6709`, camera model) and the top-level XMP `uuid` box are renamed to `free` and zeroed in place, so sample offsets stay valid. **Not stripped:** GIF comments, MP3 ID3 tags, WebM/Ogg/WAV tags and files served only as downloads (HEIC, PDF, ZIP, etc.).

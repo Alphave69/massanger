@@ -7,7 +7,7 @@ import { getToken, type Attachment, type AttachmentKind, type Message, type Uplo
 
 const MB = 1024 * 1024
 
-let limits: UploadLimits = { maxBytes: 25 * MB, avatarMaxBytes: 2 * MB, bannerMaxBytes: 5 * MB }
+let limits: UploadLimits = { maxBytes: 100 * MB, avatarMaxBytes: 2 * MB, bannerMaxBytes: 5 * MB }
 
 /** Лимиты с сервера (приходят вместе с /api/state) */
 export function setUploadLimits(next: Partial<UploadLimits> | undefined) {
