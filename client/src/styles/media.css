@@ -348,9 +348,25 @@
 }
 
 .media-tile.is-loading {
-  background: linear-gradient(90deg, rgba(128, 128, 128, 0.14) 0%, rgba(128, 128, 128, 0.26) 50%, rgba(128, 128, 128, 0.14) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
+  background: rgba(128, 128, 128, 0.14);
+}
+
+/* Блик едет сдвигом (transform) и не бесконечно: картинки, ждущие прокрутки (loading=lazy), иначе
+   «грузятся» всё время и держат процессор телефона занятым; дольше ~8 с — просто серая заглушка */
+.media-tile.is-loading::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(128, 128, 128, 0.12) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: media-shimmer 1.4s linear 6 forwards;
+  pointer-events: none;
+}
+
+@keyframes media-shimmer {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .media-tile.is-loading img {
