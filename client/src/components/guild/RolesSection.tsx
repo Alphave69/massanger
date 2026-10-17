@@ -14,7 +14,7 @@ const ROLE_LIMIT = 50
 const PEOPLE: [string, string, string] = ['человек', 'человека', 'человек']
 
 type Tab = 'look' | 'perms' | 'members'
-type Draft = Partial<Pick<Role, 'name' | 'color' | 'hoist' | 'permissions'>>
+type Draft = Partial<Pick<Role, 'name' | 'color' | 'hoist' | 'mentionable' | 'permissions'>>
 
 const samePerms = (a: Permission[], b: Permission[]) => a.length === b.length && a.every((p) => b.includes(p))
 
@@ -147,6 +147,7 @@ function RoleEditor({ guild, role, tab, onTab, onDirty, nag, onDeleted }: Editor
   if (draft.name !== undefined && draft.name.trim() !== role.name) changed.name = draft.name.trim()
   if (draft.color !== undefined && draft.color !== role.color) changed.color = draft.color
   if (draft.hoist !== undefined && draft.hoist !== role.hoist) changed.hoist = draft.hoist
+  if (draft.mentionable !== undefined && draft.mentionable !== Boolean(role.mentionable)) changed.mentionable = draft.mentionable
   if (draft.permissions && !samePerms(draft.permissions, role.permissions)) changed.permissions = draft.permissions
   const dirty = Object.keys(changed).length > 0
   const nameError = view.name.trim().length === 0 ? 'Название не может быть пустым' : null
@@ -393,6 +394,13 @@ function LookTab({ view, disabled, nameError, onChange }: { view: Role; disabled
         checked={view.hoist}
         disabled={disabled}
         onChange={(hoist) => onChange({ hoist })}
+      />
+      <Toggle
+        label="Можно упоминать"
+        hint={`Любой участник может позвать всех с этой ролью через @${view.name.trim() || 'роль'}. Без этого — только те, кто может упоминать всех или управляет ролями.`}
+        checked={Boolean(view.mentionable)}
+        disabled={disabled}
+        onChange={(mentionable) => onChange({ mentionable })}
       />
     </div>
   )

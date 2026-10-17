@@ -116,8 +116,10 @@ export function mentionables(st: ChatState, channelId: string): Suggestion[] {
     for (const user of guild.members) {
       if (memberCan(guild, channel, user.id, 'VIEW_CHANNEL')) out.push({ kind: 'user', user, label: `@${user.username}`, token: `<@${user.id}>` })
     }
+    // роли без «Можно упоминать» зовут только те, кто может звать всех или управляет ролями (так же решает сервер)
+    const anyRole = can(guild, 'MENTION_EVERYONE', channelId) || can(guild, 'MANAGE_ROLES')
     for (const role of guild.roles ?? []) {
-      if (role.id !== guild.id) out.push({ kind: 'role', role, label: `@${role.name}`, token: `<@&${role.id}>` })
+      if (role.id !== guild.id && (role.mentionable || anyRole)) out.push({ kind: 'role', role, label: `@${role.name}`, token: `<@&${role.id}>` })
     }
     if (can(guild, 'MENTION_EVERYONE', channelId)) {
       out.push({ kind: 'mass', which: 'everyone', label: '@everyone', token: '@everyone' })

@@ -1,5 +1,5 @@
 import * as store from './store.js'
-import { findRole, hasChannelPermission, isEveryone } from './permissions.js'
+import { findRole, hasChannelPermission, hasGuildPermission, isEveryone } from './permissions.js'
 
 /**
  * Упоминания в тексте сообщения — как в Discord:
@@ -42,10 +42,16 @@ export function parseMentions(raw: string, access: store.ChannelAccess, authorId
   // роли и «всех сразу» — только на серверах
   if (access.kind === 'guild') {
     const { guild, channel } = access
+    // Роль, которую не отметили «Можно упоминать», зовут только те, кто может звать всех или управляет ролями:
+    // иначе роль «есть у всех» работала бы как @everyone без права на это
+    let mayPingAny: boolean | undefined
+    const mayPing = (role: store.Role) =>
+      role.mentionable ||
+      (mayPingAny ??= hasChannelPermission(guild, channel, authorId, 'MENTION_EVERYONE') || hasGuildPermission(guild, authorId, 'MANAGE_ROLES'))
     roles = uniq(ROLE_TOKEN, content)
       .filter((id) => {
         const role = findRole(guild, id)
-        return role && !isEveryone(guild, role)
+        return role && !isEveryone(guild, role) && mayPing(role)
       })
       .slice(0, MAX_MENTIONS)
     const mass = new Set([...content.matchAll(MASS_TOKEN)].map((m) => m[2]))

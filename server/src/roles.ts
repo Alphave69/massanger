@@ -45,12 +45,12 @@ function permsFrom(raw: unknown, only: (p: unknown) => p is Permission = isPermi
   return permList(raw.filter(only))
 }
 
-type RoleFields = Partial<Pick<store.Role, 'name' | 'color' | 'hoist' | 'permissions'>>
+type RoleFields = Partial<Pick<store.Role, 'name' | 'color' | 'hoist' | 'mentionable' | 'permissions'>>
 
 /** Поля роли из тела запроса; строка — текст ошибки */
 function roleFields(body: Record<string, unknown>): RoleFields | string {
   const out: RoleFields = {}
-  const { name, color, hoist, permissions } = body
+  const { name, color, hoist, mentionable, permissions } = body
   if (name !== undefined) {
     const clean = typeof name === 'string' ? name.trim().replace(/\s+/g, ' ').slice(0, 32) : ''
     if (!clean) return 'Укажи название роли'
@@ -63,6 +63,10 @@ function roleFields(body: Record<string, unknown>): RoleFields | string {
   if (hoist !== undefined) {
     if (typeof hoist !== 'boolean') return 'Неверная настройка «Показывать отдельно»'
     out.hoist = hoist
+  }
+  if (mentionable !== undefined) {
+    if (typeof mentionable !== 'boolean') return 'Неверная настройка «Можно упоминать»'
+    out.mentionable = mentionable
   }
   if (permissions !== undefined) {
     const perms = permsFrom(permissions)
@@ -123,6 +127,7 @@ export function registerRoleRoutes(app: Express, { voice, fail, emitGuild }: Dep
       name: fields.name ?? DEFAULT_NAME,
       color: fields.color ?? null,
       hoist: fields.hoist ?? false,
+      mentionable: fields.mentionable ?? false,
       permissions: fields.permissions ?? [],
       position,
     }
@@ -149,6 +154,7 @@ export function registerRoleRoutes(app: Express, { voice, fail, emitGuild }: Dep
         (fields.name !== undefined && fields.name !== role.name) ||
         (fields.color !== undefined && fields.color !== role.color) ||
         (fields.hoist !== undefined && fields.hoist !== role.hoist) ||
+        (fields.mentionable !== undefined && fields.mentionable !== Boolean(role.mentionable)) ||
         move !== undefined
       if (other) return fail(res, 400, 'У @everyone можно менять только права')
     }
@@ -171,6 +177,7 @@ export function registerRoleRoutes(app: Express, { voice, fail, emitGuild }: Dep
       if (fields.name !== undefined) role.name = fields.name
       if (fields.color !== undefined) role.color = fields.color
       if (fields.hoist !== undefined) role.hoist = fields.hoist
+      if (fields.mentionable !== undefined) role.mentionable = fields.mentionable
     }
     if (fields.permissions) role.permissions = fields.permissions
     changed(guild)

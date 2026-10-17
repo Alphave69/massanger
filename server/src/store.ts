@@ -113,6 +113,8 @@ export interface Role {
   color: string | null
   /** Показывать участников с этой ролью отдельной группой в списке */
   hoist: boolean
+  /** Позвать всех с этой ролью (<@&id>) может любой участник; иначе — только с MENTION_EVERYONE или MANAGE_ROLES */
+  mentionable?: boolean
   permissions: Permission[]
   /** Чем больше, тем выше роль (у @everyone — 0) */
   position: number

@@ -133,6 +133,8 @@ export interface Role {
   color: string | null
   /** Показывать отдельной группой в списке участников */
   hoist: boolean
+  /** Позвать роль может любой участник (иначе — с правом упоминать всех или управлять ролями) */
+  mentionable?: boolean
   permissions: Permission[]
   /** Чем больше, тем выше; у @everyone (id = id сервера) — 0 */
   position: number
@@ -424,7 +426,7 @@ export const api = {
   deleteMessage: (messageId: string) => request<{ ok: true }>(`/messages/${messageId}`, { method: 'DELETE' }),
 
   // --- роли ---
-  createRole: (guildId: string, role: Partial<Pick<Role, 'name' | 'color' | 'hoist' | 'permissions'>>) =>
+  createRole: (guildId: string, role: Partial<Pick<Role, 'name' | 'color' | 'hoist' | 'mentionable' | 'permissions'>>) =>
     request<{ guild: Guild; role: Role }>(`/guilds/${guildId}/roles`, { method: 'POST', body: role }),
   /** move: -1 — выше, 1 — ниже */
   updateRole: (guildId: string, roleId: string, patch: Partial<Pick<Role, 'name' | 'color' | 'hoist' | 'permissions'>> & { move?: -1 | 1 }) =>
