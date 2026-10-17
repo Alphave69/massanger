@@ -62,8 +62,39 @@ interface UploadOptions {
   mediaSize?: { width: number; height: number } | null
 }
 
+/** Одновременно грузим не больше двух файлов: сервер принимает от человека до трёх сразу, остальные ждут очереди */
+const PARALLEL = 2
+let running = 0
+const waiting: (() => void)[] = []
+
+/** Сервер занят (много загрузок сразу, например из второй вкладки) — подождать и повторить */
+class BusyError extends Error {
+  constructor(readonly waitMs: number) {
+    super('busy')
+  }
+}
+
 /** Загрузить файл на сервер; ответ — готовое вложение (его id передают с сообщением) */
-export function uploadFile(blob: Blob, name: string, { onProgress, signal, mediaSize }: UploadOptions = {}): Promise<Attachment> {
+export async function uploadFile(blob: Blob, name: string, options: UploadOptions = {}): Promise<Attachment> {
+  while (running >= PARALLEL) await new Promise<void>((r) => waiting.push(r))
+  running++
+  try {
+    for (let attempt = 0; ; attempt++) {
+      if (options.signal?.aborted) throw new UploadError('Отменено')
+      try {
+        return await sendFile(blob, name, options)
+      } catch (err) {
+        if (!(err instanceof BusyError) || attempt >= 6) throw err instanceof BusyError ? new UploadError('Сервер занят — попробуй ещё раз') : err
+        await new Promise((r) => window.setTimeout(r, err.waitMs))
+      }
+    }
+  } finally {
+    running--
+    waiting.shift()?.()
+  }
+}
+
+function sendFile(blob: Blob, name: string, { onProgress, signal, mediaSize }: UploadOptions): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new UploadError('Отменено'))
     const xhr = new XMLHttpRequest()
@@ -83,6 +114,9 @@ export function uploadFile(blob: Blob, name: string, { onProgress, signal, media
       } catch {
         // не JSON — значит, ответил не наш сервер (прокси и т. п.)
       }
+      // короткое «подожди» (а не суточный лимит) — повторим сами
+      const wait = Number(xhr.getResponseHeader('Retry-After'))
+      if (xhr.status === 429 && wait > 0 && wait <= 10) return reject(new BusyError(wait * 1000))
       if (xhr.status >= 200 && xhr.status < 300 && data.upload) resolve(data.upload)
       else reject(new UploadError(data.error ?? (xhr.status === 413 ? 'Файл слишком большой' : 'Не получилось загрузить')))
     }
