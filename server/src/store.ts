@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { canView, DEFAULT_EVERYONE, isPermission, type Permission } from './permissions.js'
@@ -67,6 +67,12 @@ export interface User {
   eggs: Record<string, number>
   /** Смещение часового пояса в минутах (как Date.getTimezoneOffset) — для «Совы» и т.п.; null — неизвестно */
   tz: number | null
+  /** Последняя сессия в голосе: начало «подряд» и когда его видели в голосе (для «Марафона» после обрыва) */
+  voiceSession?: { start: number; seen: number } | null
+  /** Значки, «праздник» которых человек ещё не видел (получил, пока приложение было закрыто или спрятано) */
+  unseenBadges?: string[]
+  /** Автоматические значки, которые забрал админ, — сами больше не выдаются */
+  revokedBadges?: string[]
 
   // --- админка ---
   /** «Галочка» у имени — подтверждённый человек */
@@ -319,11 +325,22 @@ export const persist = () => save()
 let saveTimer: NodeJS.Timeout | null = null
 function save() {
   if (saveTimer) return
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    mkdirSync(dirname(DATA_FILE), { recursive: true })
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2))
-  }, 200)
+  saveTimer = setTimeout(writeNow, 200)
+}
+
+/** Записать базу сразу. Сначала во временный файл, потом подменить: оборванная запись не испортит db.json */
+function writeNow() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  mkdirSync(dirname(DATA_FILE), { recursive: true })
+  const tmp = `${DATA_FILE}.tmp`
+  writeFileSync(tmp, JSON.stringify(data, null, 2))
+  renameSync(tmp, DATA_FILE)
+}
+
+/** Сервер останавливается: несохранённое (ждущее 200 мс) — на диск прямо сейчас */
+export const flushNow = () => {
+  if (saveTimer) writeNow()
 }
 
 // Права «Прикреплять файлы» раньше не было: один раз выдаём его всем ролям, которые могут писать,

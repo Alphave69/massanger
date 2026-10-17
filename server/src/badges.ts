@@ -259,11 +259,10 @@ export function createBadges(io: Server, changed: (user: store.User) => void) {
 
     /** Голос: зашёл, посидел (секунды), начал звонок, включил камеру / экран */
     onVoiceJoin: (userId: string) => withUser(userId, (u) => award(u, 'first-voice')),
-    onVoiceSession: (userId: string, seconds: number) =>
+    onVoiceTime: (userId: string, added: number, session: number) =>
       withUser(userId, (u) => {
-        if (seconds <= 0) return
-        u.stats.voiceSeconds += seconds
-        u.stats.longestVoice = Math.max(u.stats.longestVoice, seconds)
+        u.stats.voiceSeconds += Math.max(0, added)
+        u.stats.longestVoice = Math.max(u.stats.longestVoice, session)
         store.persist()
         sync(u)
       }),

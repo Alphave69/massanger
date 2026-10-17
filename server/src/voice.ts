@@ -36,11 +36,19 @@ interface Member extends VoiceMemberState {
   socketId: string
   /** Заглушён модератором (держится, пока человек не выйдет из комнаты) */
   modMuted: boolean
+  /** Начало «сидения подряд» для «Марафона» (после короткого обрыва связи — прежнее) */
+  sessionStart: number
+  /** До какого момента время в голосе уже засчитано */
+  countedAt: number
 }
 
 type RoomTarget = { kind: 'guild'; guild: store.Guild; channel: store.Channel } | { kind: 'dm'; dm: store.Dm }
 
 const RING_TIMEOUT = 30_000
+/** Время в голосе засчитываем раз в минуту, а не только при выходе: перезапуск сервера его не съест */
+const VOICE_TICK = 60_000
+/** Вернулся в голос за это время (обрыв связи, перезапуск сервера) — «подряд» не прерывается */
+export const VOICE_GRACE = 3 * 60_000
 
 /** STUN — чтобы найти друг друга через домашние роутеры; TURN (если задан в .env) — для сложных сетей */
 function iceServers() {
@@ -72,7 +80,8 @@ interface Options {
   /** Счётчики для значков: зашёл в голос, посидел (секунды), начал звонок, включил камеру / экран */
   stats: {
     onVoiceJoin: (userId: string) => void
-    onVoiceSession: (userId: string, seconds: number) => void
+    /** added — сколько секунд добавить к общему времени, session — сколько длится «подряд» сейчас */
+    onVoiceTime: (userId: string, added: number, session: number) => void
     onCall: (userId: string) => void
     onMedia: (userId: string, kind: 'video' | 'screen') => void
   }
@@ -133,7 +142,7 @@ export function createVoice(io: Server, opts: Options) {
   const audience = (t: RoomTarget) => (t.kind === 'guild' ? t.guild.memberIds.filter((id) => canSee(t, id)) : t.dm.memberIds)
 
   const publicMembers = (roomId: string): VoiceMemberState[] =>
-    [...(rooms.get(roomId)?.values() ?? [])].map(({ socketId: _socket, modMuted: _mod, ...m }) => m)
+    [...(rooms.get(roomId)?.values() ?? [])].map(({ socketId: _socket, modMuted: _mod, sessionStart: _start, countedAt: _counted, ...m }) => m)
 
   function broadcast(roomId: string, t = target(roomId)) {
     const ids = t ? audience(t) : []
@@ -210,6 +219,28 @@ export function createVoice(io: Server, opts: Options) {
     }
   }
 
+  // --- время в голосе (для значков) ---
+
+  /** Засчитать время с прошлого раза и запомнить сессию в профиле (переживёт обрыв и перезапуск) */
+  function countTime(member: Member, now = Date.now()) {
+    const added = Math.max(0, Math.floor((now - member.countedAt) / 1000))
+    member.countedAt += added * 1000
+    const user = store.findUser(member.userId)
+    if (user) user.voiceSession = { start: member.sessionStart, seen: now }
+    opts.stats.onVoiceTime(member.userId, added, Math.max(0, Math.floor((now - member.sessionStart) / 1000)))
+  }
+
+  /** Начало «подряд»: если человек был в голосе совсем недавно — продолжаем прежнюю сессию */
+  function sessionStartFor(userId: string, now: number) {
+    const last = store.findUser(userId)?.voiceSession
+    return last && now - last.seen <= VOICE_GRACE && last.start <= now ? last.start : now
+  }
+
+  const tick = setInterval(() => {
+    for (const room of rooms.values()) for (const member of room.values()) countTime(member)
+  }, VOICE_TICK)
+  tick.unref()
+
   // --- вход и выход ---
 
   function leave(userId: string) {
@@ -221,7 +252,7 @@ export function createVoice(io: Server, opts: Options) {
     userRoom.delete(userId)
     if (member) {
       io.sockets.sockets.get(member.socketId)?.leave(`voice:${roomId}`)
-      opts.stats.onVoiceSession(userId, Math.round((Date.now() - member.joinedAt) / 1000))
+      countTime(member)
     }
 
     const t = target(roomId)
@@ -269,6 +300,7 @@ export function createVoice(io: Server, opts: Options) {
       const wasEmpty = !room || room.size === 0
       if (!room) rooms.set(roomId, (room = new Map()))
       const others = publicMembers(roomId)
+      const now = Date.now()
       const member: Member = {
         userId,
         socketId: socket.id,
@@ -280,7 +312,9 @@ export function createVoice(io: Server, opts: Options) {
         screen: false,
         cameraStream: null,
         screenStream: null,
-        joinedAt: Date.now(),
+        joinedAt: now,
+        sessionStart: sessionStartFor(userId, now),
+        countedAt: now,
       }
       applyPerms(member, perms)
       room.set(userId, member)
@@ -415,6 +449,13 @@ export function createVoice(io: Server, opts: Options) {
 
     /** В какой комнате сейчас сидит человек (undefined — не в голосе) */
     roomOf: (userId: string) => userRoom.get(userId),
+
+    /** Сервер останавливается: засчитать всем время в голосе до этой секунды */
+    flushTime() {
+      clearInterval(tick)
+      const now = Date.now()
+      for (const room of rooms.values()) for (const member of room.values()) countTime(member, now)
+    },
 
     /** Сколько людей сейчас в голосе (для админки) */
     inVoiceCount: () => userRoom.size,

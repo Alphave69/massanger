@@ -698,6 +698,40 @@ http.on('error', (err: NodeJS.ErrnoException) => {
   process.exit(1)
 })
 
+// ============ остановка ============
+
+/**
+ * systemctl restart / Ctrl+C: засчитать время в голосе, записать базу сразу (а не через 200 мс),
+ * закрыть сокеты и HTTP — и выйти с кодом 0 (иначе systemd считает каждую перезагрузку сбоем)
+ */
+let stopping = false
+function shutdown(signal: NodeJS.Signals) {
+  if (stopping) return
+  stopping = true
+  console.log(`  ⏹  ${signal}: сохраняю данные и останавливаюсь`)
+  try {
+    voice.flushTime()
+  } catch (err) {
+    console.error('voice flush:', err)
+  }
+  const exit = () => {
+    try {
+      store.flushNow()
+    } catch (err) {
+      console.error('save on exit:', err)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+  store.flushNow()
+  // io.close закрывает и HTTP-сервер; висящие keep-alive соединения рвём сами
+  io.close(() => exit())
+  http.closeAllConnections()
+  setTimeout(exit, 2000)
+}
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
+
 http.listen(PORT, () => {
   const url = existsSync(clientDist) ? `http://localhost:${PORT}` : 'http://localhost:5173'
   console.log(`Nuntius запущен → открой ${url}`)
