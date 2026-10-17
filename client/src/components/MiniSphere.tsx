@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { uiZoom } from '../lib/settings'
+import { isPhoneDevice, uiZoom } from '../lib/settings'
 
 interface Props {
   size?: number
@@ -51,11 +51,22 @@ export function MiniSphere({ size = 28, dots = 90, color, className }: Props) {
 
     let fill = ''
     let frameNo = 0
-    const draw = () => {
+    // не видно (свёрнутый список, за краем экрана) — не рисуем; на телефоне ~30 кадров вместо 60
+    let visible = true
+    const io = typeof IntersectionObserver === 'function' ? new IntersectionObserver(([e]) => (visible = e.isIntersecting)) : null
+    io?.observe(canvas)
+    const gap = isPhoneDevice() ? 32 : 0
+    let last = 0
+    const draw = (now: number) => {
+      if (!visible || now - last < gap) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
+      last = now
       // цвет берём из CSS (currentColor), но не каждый кадр — это дорого
       if (frameNo++ % 30 === 0) fill = color ?? getComputedStyle(canvas).color
       speed += ((hover ? 0.05 : reduce ? 0.003 : 0.012) - speed) * 0.08
-      rot += speed
+      rot += speed * (gap ? 2 : 1) // при 30 кадрах — тот же темп вращения
       const cs = Math.cos(rot)
       const sn = Math.sin(rot)
       ctx.clearRect(0, 0, size, size)
@@ -77,6 +88,7 @@ export function MiniSphere({ size = 28, dots = 90, color, className }: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      io?.disconnect()
       host.removeEventListener('pointerenter', enter)
       host.removeEventListener('pointerleave', leave)
     }

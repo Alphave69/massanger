@@ -1232,3 +1232,21 @@
     transform: translateY(-24px) scale(0.96);
   }
 }
+
+/* Телефон: бесконечные анимации с тенью перерисовываются каждый кадр и держат процессор занятым —
+   «в сети» мигает только прозрачностью (это делает видеокарта), значок в начале канала не качается */
+@media (max-width: 760px), (pointer: coarse) {
+  .live-dot {
+    animation-name: live-fade;
+  }
+
+  .welcome__hash {
+    animation: none;
+  }
+}
+
+@keyframes live-fade {
+  50% {
+    opacity: 0.35;
+  }
+}
