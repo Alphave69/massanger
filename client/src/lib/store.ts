@@ -146,9 +146,12 @@ export const isDmChannel = (st: ChatState, channelId: string) => st.dms.some((d)
 // ============ действия ============
 
 let toastSeq = 0
+/** Каналы, чья загруженная история могла устареть (было переподключение) — перезагрузим при открытии */
+const staleChannels = new Set<string>()
 
 export const chat = {
   reset() {
+    staleChannels.clear()
     set(initial, true)
   },
 
@@ -303,6 +306,26 @@ export const chat = {
 
   clearMessages() {
     set({ messages: {} })
+  },
+
+  /** После переподключения: загруженное могло устареть — помечаем, а не стираем (чат не падает в серые заглушки) */
+  markMessagesStale() {
+    for (const id of Object.keys(get().messages)) staleChannels.add(id)
+  },
+
+  isStale(channelId: string) {
+    return staleChannels.has(channelId)
+  },
+
+  /** Свежая история с сервера вместо прежней; пришедшее по сокету, пока она грузилась, сохраняем */
+  replaceMessages(channelId: string, list: Message[]) {
+    staleChannels.delete(channelId)
+    set((st) => {
+      const known = new Set(list.map((m) => m.id))
+      const last = list[list.length - 1]?.createdAt ?? 0
+      const extra = (st.messages[channelId] ?? []).filter((m) => !known.has(m.id) && m.createdAt >= last)
+      return { messages: { ...st.messages, [channelId]: extra.length ? [...list, ...extra] : list } }
+    })
   },
 
   setMessages(channelId: string, list: Message[]) {

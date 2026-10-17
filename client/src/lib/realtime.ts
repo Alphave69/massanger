@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 import { api, getToken, SYSTEM_AUTHOR, type DmView, type FriendEntry, type Guild, type Me, type Message, type Presence, type User } from './api'
-import { chat, dmTitle, isDmChannel, useChat, type View } from './store'
+import { activeChannelId, chat, dmTitle, isDmChannel, useChat, type View } from './store'
 import { attachVoice, initVoice } from './voice'
 import { blip, desktopNotify, pulseSphere } from './fx'
 import { useSettings } from './settings'
@@ -38,6 +38,16 @@ function notify(title: string, text: string, extra: { userId?: string; action?: 
   )
 }
 
+/** Перезагрузить историю открытого канала (после переподключения); не вышло — ещё раз через 3 с, потом — при открытии */
+function refreshOpenChannel(retry = true) {
+  const channelId = activeChannelId(useChat.getState())
+  if (!channelId || !useChat.getState().messages[channelId]) return
+  api
+    .messages(channelId)
+    .then(({ messages }) => chat.replaceMessages(channelId, messages))
+    .catch(() => retry && window.setTimeout(() => refreshOpenChannel(false), 3000))
+}
+
 const dmWith = (userId: string) => useChat.getState().dms.find((d) => d.kind === 'dm' && d.userId === userId)?.id
 
 export function connectRealtime(onUnauthorized: () => void) {
@@ -64,7 +74,9 @@ export function connectRealtime(onUnauthorized: () => void) {
         .then((state) => {
           chat.init(state)
           initVoice(state.voice, state.rings)
-          chat.clearMessages()
+          // историю не стираем: открытый чат тихо обновляем, остальные — при открытии
+          chat.markMessagesStale()
+          refreshOpenChannel()
           onUnseenBadges(state.badgesUnseen)
         })
         .catch(() => {})

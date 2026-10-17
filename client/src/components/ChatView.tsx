@@ -95,14 +95,47 @@ export function ChatView() {
 
   const channel = guild?.channels.find((c) => c.id === channelId)
 
-  // История канала — при первом открытии
+  // История канала — при первом открытии (и если после переподключения она могла устареть).
+  // Не загрузилась — повторяем сами (2, 4, 8, потом каждые 15 с; сразу — когда вернулась связь)
+  const loaded = messages !== undefined
+  const [historyFailed, setHistoryFailed] = useState(false)
+  const [historyTry, setHistoryTry] = useState(0)
   useEffect(() => {
-    if (!channelId || messages) return
-    api
-      .messages(channelId)
-      .then(({ messages: list }) => chat.setMessages(channelId, list))
-      .catch(() => chat.toast({ title: 'Ошибка', text: 'Не удалось загрузить сообщения' }))
-  }, [channelId, messages])
+    setHistoryFailed(false)
+    if (!channelId || (loaded && !chat.isStale(channelId))) return
+    let alive = true
+    let timer = 0
+    let fails = 0
+    const load = () => {
+      timer = 0
+      api
+        .messages(channelId)
+        .then(({ messages: list }) => {
+          if (!alive) return
+          chat.replaceMessages(channelId, list)
+          setHistoryFailed(false)
+        })
+        .catch(() => {
+          if (!alive) return
+          setHistoryFailed(true)
+          timer = window.setTimeout(load, [2000, 4000, 8000][fails++] ?? 15_000)
+        })
+    }
+    load()
+    const now = () => {
+      if (!timer) return
+      window.clearTimeout(timer)
+      load()
+    }
+    window.addEventListener('online', now)
+    const stop = useChat.subscribe((st, prev) => st.connected && !prev.connected && now())
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+      window.removeEventListener('online', now)
+      stop()
+    }
+  }, [channelId, loaded, historyTry])
 
   // --- прокрутка и анимация только новых сообщений ---
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -293,7 +326,15 @@ export function ChatView() {
           />
         )}
 
-        {messages === undefined && <MessageSkeleton />}
+        {messages === undefined && !historyFailed && <MessageSkeleton />}
+        {messages === undefined && historyFailed && (
+          <div className="chat__retry">
+            <span>Не загрузилось — пробуем ещё раз…</span>
+            <button className="btn btn--ghost" onClick={() => setHistoryTry((n) => n + 1)}>
+              Повторить
+            </button>
+          </div>
+        )}
 
         {groups.map((g) => {
           if (g.authorId === SYSTEM_AUTHOR) {
