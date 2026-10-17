@@ -492,6 +492,8 @@ a.media-file:hover {
 
 .media-file__dl {
   flex: none;
+  /* иконка как текст пузыря — иначе браузерный синий ссылок, в своём пузыре почти не виден */
+  color: inherit;
   width: 32px;
   height: 32px;
   display: grid;

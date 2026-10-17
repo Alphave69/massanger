@@ -576,6 +576,11 @@
   pointer-events: none;
 }
 
+/* у крупной плитки справа три кнопки (⋯, во весь экран, свернуть) — строка не должна под них заезжать */
+.tile--focused .tile__stats {
+  max-width: calc(100% - 130px);
+}
+
 .tile__tools {
   position: absolute;
   top: 8px;
