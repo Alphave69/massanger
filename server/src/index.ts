@@ -647,6 +647,9 @@ app.post('/api/me/eggs', requireAuth, (req, res) => {
 const clientDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../client/dist')
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist))
+  // Файла сборки нет (старая страница после обновления) — честный 404, а не index.html под видом скрипта:
+  // иначе service worker на телефоне запомнил бы страницу вместо скрипта
+  app.use('/assets', (_req, res) => void res.status(404).end())
   // root, а не абсолютный путь: send не отдаёт файлы, если в пути есть папка с точкой (.claude/…)
   app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile('index.html', { root: clientDist }))
 } else {

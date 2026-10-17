@@ -10,7 +10,13 @@ git pull --ff-only
 echo "→ Ставлю зависимости…"
 npm ci --no-audit --no-fund
 echo "→ Собираю интерфейс…"
-npm run build
+# Собираем рядом и подменяем папку разом: пока идёт сборка, сайт раздаёт прежнюю версию целиком
+# (иначе телефон мог получить новую страницу без её скриптов и запомнить ошибку)
+rm -rf client/dist.next client/dist.prev
+(cd client && npx tsc --noEmit && npx vite build --outDir dist.next --emptyOutDir)
+[ -d client/dist ] && mv client/dist client/dist.prev
+mv client/dist.next client/dist
+rm -rf client/dist.prev
 echo "→ Перезапускаю…"
 systemctl restart nuntius
 sleep 2

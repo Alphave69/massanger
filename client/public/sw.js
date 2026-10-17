@@ -5,7 +5,7 @@
 //  - /assets/*: файлы с хешем в имени никогда не меняются — берём из кэша;
 //  - /api и /socket.io и всё чужое — не трогаем вообще, только сеть.
 
-const CACHE = 'nuntius-v1'
+const CACHE = 'nuntius-v2'
 const SHELL = '/'
 const MAX_ASSETS = 80
 
@@ -82,7 +82,7 @@ async function saveShell(res) {
     [...files].map(async (file) => {
       if (await cache.match(file)) return
       const got = await fetch(file)
-      if (got.status === 200) await cache.put(file, got)
+      if (got.status === 200 && !(got.headers.get('content-type') || '').includes('text/html')) await cache.put(file, got)
     }).map((p) => p.catch(() => {})),
   )
 }
@@ -92,7 +92,8 @@ async function cacheFirst(req) {
   const hit = await cache.match(req)
   if (hit) return hit
   const res = await fetch(req)
-  if (res.status === 200 && res.type === 'basic') {
+  // страница вместо файла сборки (старый сервер отдаёт index.html на всё) в кэш не кладём — иначе белый экран навсегда
+  if (res.status === 200 && res.type === 'basic' && !(res.headers.get('content-type') || '').includes('text/html')) {
     await cache.put(req, res.clone()).catch(() => {})
     trimAssets(cache)
   }
