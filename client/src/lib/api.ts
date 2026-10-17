@@ -348,8 +348,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Сколько ждать ответа: на мобильной сети TCP бывает жив, а ответа нет — без срока запрос висел бы минутами */
+const HEADERS_MS = 15_000
+const BODY_MS = 45_000
+
 async function request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const token = getToken()
+  // AbortController + setTimeout, а не AbortSignal.timeout — его нет в iOS 15
+  const ctrl = new AbortController()
+  let expired = false
+  const expire = () => {
+    expired = true
+    ctrl.abort()
+  }
+  let timer = window.setTimeout(expire, HEADERS_MS)
   let res: Response
   try {
     res = await fetch(`/api${path}`, {
@@ -359,11 +371,18 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: ctrl.signal,
     })
   } catch {
-    throw new ApiError('Сервер недоступен', 0)
+    window.clearTimeout(timer)
+    throw new ApiError(expired ? 'Сервер не ответил' : 'Сервер недоступен', 0)
   }
+  // заголовки пришли — тело (например, всё состояние на медленном 3G) может идти дольше
+  window.clearTimeout(timer)
+  timer = window.setTimeout(expire, BODY_MS)
   const data = await res.json().catch(() => ({}))
+  window.clearTimeout(timer)
+  if (expired) throw new ApiError('Сервер не ответил', 0)
   if (!res.ok) throw new ApiError(data.error ?? 'Что-то пошло не так', res.status)
   return data as T
 }

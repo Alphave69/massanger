@@ -113,6 +113,7 @@ export function Shell({ onLogout }: Props) {
   const viewGuild = useChat((s) => (s.view.kind === 'guild' ? s.guilds.find((g) => g.id === (s.view as { guildId: string }).guildId) : undefined))
   const totalUnread = useChat((s) => Object.values(s.unread).reduce((a, b) => a + b, 0))
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)])
+  const [stateFailed, setStateFailed] = useState(false)
   const shellRef = useRef<HTMLDivElement>(null)
 
   // Телефон: свайпы — чат ↔ список, панель справа
@@ -120,21 +121,46 @@ export function Shell({ onLogout }: Props) {
 
   useEffect(() => {
     let alive = true
-    api
-      .state()
-      .then((state) => {
-        if (!alive) return
-        chat.init(state)
-        initVoice(state.voice, state.rings)
-        setUploadLimits(state.uploads)
-        onUnseenBadges(state.badgesUnseen)
-      })
-      .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) onLogout()
-      })
+    let retry = 0
+    let tries = 0
+    const load = () => {
+      retry = 0
+      api
+        .state()
+        .then((state) => {
+          if (!alive) return
+          chat.init(state)
+          initVoice(state.voice, state.rings)
+          setUploadLimits(state.uploads)
+          onUnseenBadges(state.badgesUnseen)
+          setStateFailed(false)
+        })
+        .catch((err) => {
+          if (!alive) return
+          if (err instanceof ApiError && err.status === 401) {
+            onLogout()
+            return
+          }
+          // Обрыв, 502 пока сервер перезапускается, «висящий» ответ — не застываем на заставке, а пробуем ещё
+          // (состояние могло уже прийти при переподключении сокета — тогда хватит)
+          if (useChat.getState().ready) return
+          setStateFailed(true)
+          retry = window.setTimeout(load, [1000, 2000, 4000, 8000][tries++] ?? 10_000)
+        })
+    }
+    load()
+    // сеть вернулась — не ждём конца паузы
+    const onOnline = () => {
+      if (!retry) return
+      window.clearTimeout(retry)
+      load()
+    }
+    window.addEventListener('online', onOnline)
     const stop = connectRealtime(onLogout)
     return () => {
       alive = false
+      window.clearTimeout(retry)
+      window.removeEventListener('online', onOnline)
       resetVoice() // выход из аккаунта — выходим и из голоса
       stop()
       chat.reset()
@@ -212,6 +238,11 @@ export function Shell({ onLogout }: Props) {
             <i>{quote[0]}</i>
             <span>{quote[1]}</span>
           </p>
+          {stateFailed && (
+            <p className="splash__quote">
+              <span>Нет связи с сервером — пробуем ещё раз…</span>
+            </p>
+          )}
         </div>
       </div>
     )
