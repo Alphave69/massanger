@@ -34,7 +34,7 @@ function Parts({ parts, renderText }: { parts: RichPart[]; renderText?: (text: s
     <>
       {parts.map((p, i) => {
         if (p.kind === 'link') {
-          const short = shortLink(p.text)
+          const short = shortLink(p.label)
           return (
             <a
               key={i}
@@ -42,7 +42,7 @@ function Parts({ parts, renderText }: { parts: RichPart[]; renderText?: (text: s
               href={p.href}
               target="_blank"
               rel="noopener noreferrer"
-              title={short !== p.text ? p.text : undefined}
+              title={short !== p.label ? p.label : undefined}
               // клик по ссылке — только переход, без меню сообщения и прочего
               onClick={(e) => e.stopPropagation()}
             >

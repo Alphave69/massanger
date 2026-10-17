@@ -7,7 +7,8 @@
 
 export type RichPart =
   | { kind: 'text'; text: string }
-  | { kind: 'link'; href: string; text: string }
+  /** text — как в сообщении, label — что показать (домен-«двойник» — в виде xn--…) */
+  | { kind: 'link'; href: string; text: string; label: string }
   /** raw — как было в тексте (с обратными кавычками), text — что показать */
   | { kind: 'code'; text: string; raw: string; block: boolean }
 
@@ -53,15 +54,46 @@ function trimTail(url: string): string {
   }
 }
 
-/** Ссылка безопасна: только http/https и с настоящим адресом */
+/**
+ * Ссылка безопасна: только http/https и с настоящим адресом. С «логином» в адресе (https://nuntius.site@evil.org) —
+ * не ссылка: на вид ведёт на один сайт, а открывает другой
+ */
 function safeHref(href: string): string | null {
   try {
     const u = new URL(href)
-    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname) return null
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.username || u.password) return null
     return u.href
   } catch {
     return null
   }
+}
+
+/** Где в тексте ссылки хост (с портом): после «схема://» и до / ? # */
+function hostSpan(text: string): [number, number] {
+  const start = /^[a-z][a-z\d+.-]*:\/\//i.exec(text)?.[0].length ?? 0
+  const end = text.slice(start).search(/[/?#]/)
+  return [start, end < 0 ? text.length : start + end]
+}
+
+const SCRIPTS = [/\p{Script=Latin}/u, /\p{Script=Cyrillic}/u, /\p{Script=Greek}/u]
+/** Кириллица, которая выглядит как латиница */
+const LOOKALIKE = /^[аеорсухіјѕһԁӏԛԝ\d-]+$/u
+
+/**
+ * Домен-«двойник»: в одной части смешаны алфавиты (аpple.com с русской «а») или она целиком из «латинских» русских
+ * букв при латинской зоне (асе.com). Обычные русские домены (пример.рф, яндекс.рус) показываем как есть
+ */
+function deceptiveHost(host: string) {
+  const labels = host.toLowerCase().split('.')
+  const latinZone = /^[a-z]+$/.test(labels[labels.length - 1] ?? '')
+  return labels.some((l) => /[^\x00-\x7f]/.test(l) && (SCRIPTS.filter((re) => re.test(l)).length > 1 || (latinZone && LOOKALIKE.test(l))))
+}
+
+/** Что показать вместо ссылки: домен-«двойник» — в настоящем виде (xn--…), остальное — как написано */
+function linkLabel(text: string, href: string) {
+  const [from, to] = hostSpan(text)
+  if (!deceptiveHost(text.slice(from, to))) return text
+  return text.slice(0, from) + new URL(href).host + text.slice(to)
 }
 
 /** Найти ссылки в обычном тексте (без кода) */
@@ -91,7 +123,7 @@ export function splitLinks(text: string): RichPart[] {
     }
     if (!href || !raw) continue
     if (at > last) out.push({ kind: 'text', text: text.slice(last, at) })
-    out.push({ kind: 'link', href, text: raw })
+    out.push({ kind: 'link', href, text: raw, label: linkLabel(raw, href) })
     last = at + raw.length
   }
   if (!out.length) return [{ kind: 'text', text }]
@@ -134,9 +166,12 @@ export function richParts(content: string): RichPart[] {
 /** Как текст выглядел в исходнике — чтобы собрать его обратно */
 export const rawOf = (p: RichPart) => (p.kind === 'code' ? p.raw : p.text)
 
-/** Длинную ссылку показываем короче: начало…конец (целиком — в подсказке) */
+/** Длинную ссылку показываем короче: начало…конец (целиком — в подсказке). Сайт (хост) не режем никогда */
 export function shortLink(text: string, max = 64): string {
   if (text.length <= max) return text
   const tail = 16
-  return `${text.slice(0, max - tail - 1)}…${text.slice(-tail)}`
+  const [, hostEnd] = hostSpan(text)
+  const keep = Math.max(hostEnd + 1, max - tail - 1)
+  if (keep + tail + 1 >= text.length) return text
+  return `${text.slice(0, keep)}…${text.slice(-tail)}`
 }
