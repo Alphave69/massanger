@@ -1001,6 +1001,13 @@
   box-shadow: 0 0 32px rgb(var(--glow-rgb) / calc(0.3 * var(--glow-k)));
 }
 
+/* свой пузырь залит акцентом — тем же цветом, что и обычное выделение, поэтому в нём выделение наоборот (иначе его не видно) */
+.mgroup--mine .bubble:not(.bubble--bare, .bubble--editing)::selection,
+.mgroup--mine .bubble:not(.bubble--bare, .bubble--editing) ::selection {
+  background: var(--on-accent);
+  color: var(--accent);
+}
+
 .bubble__text {
   min-width: 0;
   white-space: pre-wrap;
